@@ -798,6 +798,26 @@
               <FileType>5</FileType>
               <FilePath>.\Algorithm\line_track.h</FilePath>
             </File>
+            <File>
+              <FileName>heading_estimator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\heading_estimator.c</FilePath>
+            </File>
+            <File>
+              <FileName>heading_estimator.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\heading_estimator.h</FilePath>
+            </File>
+            <File>
+              <FileName>odometer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\odometer.c</FilePath>
+            </File>
+            <File>
+              <FileName>odometer.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\odometer.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -914,16 +934,6 @@
               <FilePath>.\APP\app_all.h</FilePath>
             </File>
             <File>
-              <FileName>angle_control.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\APP\angle_control.c</FilePath>
-            </File>
-            <File>
-              <FileName>angle_control.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\APP\angle_control.h</FilePath>
-            </File>
-            <File>
               <FileName>motion_action.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\APP\motion_action.c</FilePath>
@@ -932,16 +942,6 @@
               <FileName>motion_action.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\motion_action.h</FilePath>
-            </File>
-            <File>
-              <FileName>odometer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\APP\odometer.c</FilePath>
-            </File>
-            <File>
-              <FileName>odometer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\APP\odometer.h</FilePath>
             </File>
             <File>
               <FileName>line_follow_app.c</FileName>

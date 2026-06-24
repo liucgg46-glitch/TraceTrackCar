@@ -14,7 +14,7 @@
 #include "chassis.h"
 #include "motion_action.h"
 #include "odometer.h"
-#include "angle_control.h"
+#include "heading_estimator.h"
 #include "line_follow_app.h"
 #include "line_detect.h"
 #include "line_track.h"

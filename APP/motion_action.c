@@ -1,6 +1,6 @@
 #include "motion_action.h"
 #include "odometer.h"
-#include "angle_control.h"
+#include "heading_estimator.h"
 #include "chassis.h"
 #include "bsp_common.h"
 
@@ -61,7 +61,7 @@ BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
     if (distance_mm == 0) return BSP_PARAM;
 
     Odometer_Clear();
-    AngleControl_Clear();
+    Heading_Reset();
 
     s_motion.action = MOTION_ACTION_GO_DISTANCE;
     s_motion.state = MOTION_RUNNING;
@@ -87,7 +87,7 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg, int16_t speed_cps)
     if (angle_deg == 0) return BSP_PARAM;
 
     Odometer_Clear();
-    AngleControl_Clear();
+    Heading_Reset();
 
     s_motion.action = MOTION_ACTION_TURN_ANGLE;
     s_motion.state = MOTION_RUNNING;
@@ -124,10 +124,10 @@ void Motion_Update(void)
     }
 
     Odometer_Update();
-    AngleControl_Update();
+    Heading_Update();
 
     s_motion.current_distance_mm = Odometer_GetDistanceMm();
-    s_motion.current_yaw_deg = AngleControl_GetYawDeg();
+    s_motion.current_yaw_deg = Heading_GetYawDeg();
 
     if ((BSP_GET_TICK() - s_motion.start_time_ms) > s_motion.timeout_ms) {
         Motion_SetError();
@@ -147,7 +147,7 @@ void Motion_Update(void)
             break;
 
         case MOTION_ACTION_TURN_ANGLE:
-            err_deg = AngleControl_GetErrorDeg((float)s_motion.target_angle_deg);
+            err_deg = Heading_GetErrorDeg((float)s_motion.target_angle_deg);
             if (Motion_AbsFloat(err_deg) <= MOTION_ANGLE_TOLERANCE_DEG) {
                 Motion_SetDone();
             } else {
