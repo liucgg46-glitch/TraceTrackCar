@@ -31,7 +31,10 @@ void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,
 static void Test_CountPerRev_Print(void);//测试脉冲
 void Test_CountPerRev_Update(void);// 测试一圈的脉冲数{ Test_CountPerRev_Update,10U,  0U },
 
-void Test_MotionCmd_Update(void);//动作库测试
-void Test_MotionCmd_Log(void);
+void Test_MotionCmd_Update(void);//动作库测试 { Test_MotionCmd_Update,  10U,  0U },
+void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
+
+void Test_LineCmd_Update(void);
+void Test_LineCmd_Log(void);//测试函数
 
 #endif

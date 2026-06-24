@@ -3,6 +3,8 @@
 #include "odometer.h"
 #include "angle_control.h"
 #include "motion_action.h"
+#include "sensor_manager.h"
+#include "line_follow_app.h"
 
 void App_Init(void)
 {
@@ -10,4 +12,6 @@ void App_Init(void)
     Odometer_Init();
     AngleControl_Init();
     Motion_Init();
+    SensorManager_Init();
+    LineFollow_Init();
 }

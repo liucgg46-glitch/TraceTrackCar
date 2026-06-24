@@ -778,6 +778,26 @@
               <FileType>5</FileType>
               <FilePath>.\Algorithm\pid.h</FilePath>
             </File>
+            <File>
+              <FileName>line_detect.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\line_detect.c</FilePath>
+            </File>
+            <File>
+              <FileName>line_detect.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\line_detect.h</FilePath>
+            </File>
+            <File>
+              <FileName>line_track.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\line_track.c</FilePath>
+            </File>
+            <File>
+              <FileName>line_track.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\line_track.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -822,6 +842,16 @@
               <FileName>driver_all.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Driver\driver_all.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_gray_4051.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_gray_4051.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_gray_4051.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_gray_4051.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -912,6 +942,26 @@
               <FileName>odometer.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\odometer.h</FilePath>
+            </File>
+            <File>
+              <FileName>line_follow_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\line_follow_app.c</FilePath>
+            </File>
+            <File>
+              <FileName>line_follow_app.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\line_follow_app.h</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\sensor_manager.c</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_manager.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\sensor_manager.h</FilePath>
             </File>
           </Files>
         </Group>

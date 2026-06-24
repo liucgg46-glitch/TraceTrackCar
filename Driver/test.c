@@ -15,6 +15,10 @@
 #include "motion_action.h"
 #include "odometer.h"
 #include "angle_control.h"
+#include "line_follow_app.h"
+#include "line_detect.h"
+#include "line_track.h"
+#include "drv_gray_4051.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -522,3 +526,106 @@ void Test_MotionCmd_Log(void)
     }
 }
 
+//灰度传感器巡线测试
+/*
+ * Part4 灰度循迹测试命令：
+ *   1：启动循迹
+ *   0 / x：停止循迹并停车
+ *   w：把当前 8 路灰度采样记录为白底
+ *   b：把当前 8 路灰度采样记录为黑线
+ *   t：根据白底/黑线记录生成阈值
+ *   d：恢复默认统一阈值 LINE_DETECT_DEFAULT_THRESHOLD
+ *   p：立即打印一次 raw/threshold/mask/error/type/output
+ *
+ * 推荐标定流程：
+ *   1. 让 8 路传感器都对着白底，发送 w；
+ *   2. 让 8 路传感器都压在黑线上，发送 b；
+ *   3. 发送 t 生成阈值；
+ *   4. 发送 p 看 mask 是否合理；
+ *   5. 发送 1 开始循迹。
+ */
+
+static const char *LineTypeName(LineType_t type)
+{
+    switch (type) {
+        case LINE_TYPE_LOST:         return "LOST";
+        case LINE_TYPE_SINGLE:       return "SINGLE";
+        case LINE_TYPE_LEFT_BRANCH:  return "LEFT";
+        case LINE_TYPE_RIGHT_BRANCH: return "RIGHT";
+        case LINE_TYPE_CROSS:        return "CROSS";
+        case LINE_TYPE_FULL_BLACK:   return "FULL";
+        default:                     return "?";
+    }
+}
+
+static void Test_Line_Print(void)
+{
+    LineFollow_Info_t info;
+    uint16_t th[LINE_DETECT_SENSOR_NUM];
+    char buf[320];
+    int n;
+
+    if (LineFollow_GetInfo(&info) != BSP_OK) return;
+    (void)LineDetect_GetThresholdArray(th, LINE_DETECT_SENSOR_NUM);
+
+    n = sprintf(buf,
+                "LINE st=%d type=%s mask=0x%02X cnt=%d err=%d out(v=%d,t=%d)\r\n"
+                "RAW %u %u %u %u %u %u %u %u\r\n"
+                "TH  %u %u %u %u %u %u %u %u\r\n",
+                (int)info.state,
+                LineTypeName(info.detect.type),
+                (unsigned int)info.detect.black_mask,
+                (int)info.detect.black_count,
+                (int)info.detect.error_x1000,
+                (int)info.output.linear_cps,
+                (int)info.output.turn_cps,
+                (unsigned int)info.raw[0], (unsigned int)info.raw[1],
+                (unsigned int)info.raw[2], (unsigned int)info.raw[3],
+                (unsigned int)info.raw[4], (unsigned int)info.raw[5],
+                (unsigned int)info.raw[6], (unsigned int)info.raw[7],
+                (unsigned int)th[0], (unsigned int)th[1],
+                (unsigned int)th[2], (unsigned int)th[3],
+                (unsigned int)th[4], (unsigned int)th[5],
+                (unsigned int)th[6], (unsigned int)th[7]);
+
+    if (n > 0 && n < (int)sizeof(buf)) {
+        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
+    }
+}
+
+void Test_LineCmd_Update(void)
+{
+    uint8_t ch;
+    uint16_t raw[LINE_DETECT_SENSOR_NUM];
+
+    while (BSP_UART_GetChar(UART_PORT1, &ch)) {
+        if (ch == '1') {
+            LineFollow_Start();
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"line follow start\r\n", (uint16_t)(sizeof("line follow start\r\n") - 1U));
+        } else if (ch == '0' || ch == 'x') {
+            LineFollow_Stop();
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"line follow stop\r\n", (uint16_t)(sizeof("line follow stop\r\n") - 1U));
+        } else if (ch == 'w') {
+            (void)Drv_Gray4051_GetFiltArray(raw, LINE_DETECT_SENSOR_NUM);
+            LineDetect_CaptureWhite(raw);
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"capture white ok\r\n", (uint16_t)(sizeof("capture white ok\r\n") - 1U));
+        } else if (ch == 'b') {
+            (void)Drv_Gray4051_GetFiltArray(raw, LINE_DETECT_SENSOR_NUM);
+            LineDetect_CaptureBlack(raw);
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"capture black ok\r\n", (uint16_t)(sizeof("capture black ok\r\n") - 1U));
+        } else if (ch == 't') {
+            LineDetect_MakeThresholdFromWhiteBlack();
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"make threshold ok\r\n", (uint16_t)(sizeof("make threshold ok\r\n") - 1U));
+        } else if (ch == 'd') {
+            LineDetect_SetAllThreshold(LINE_DETECT_DEFAULT_THRESHOLD);
+            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"default threshold\r\n", (uint16_t)(sizeof("default threshold\r\n") - 1U));
+        } else if (ch == 'p') {
+            Test_Line_Print();
+        }
+    }
+}
+
+void Test_LineCmd_Log(void)
+{
+    Test_Line_Print();
+}
