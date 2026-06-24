@@ -19,6 +19,7 @@
 #include "line_detect.h"
 #include "line_track.h"
 #include "drv_gray_4051.h"
+#include "drv_lcd_tft.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -220,13 +221,14 @@ void Test_I2C_Scan(void)
 
 //spi测试
 /* 按你的实际 GPIO 通道改 */
-#define LCD_CS_LOW()     BSP_GPIO_Write(BSP_GPIO_CH2, 0)
-#define LCD_CS_HIGH()    BSP_GPIO_Write(BSP_GPIO_CH2, 1)
+#if 0
+#define LCD_CS_LOW()     BSP_GPIO_Write(BSP_GPIO_LCD_CS, 0)
+#define LCD_CS_HIGH()    BSP_GPIO_Write(BSP_GPIO_LCD_CS, 1)
 
-#define LCD_DC_CMD()     BSP_GPIO_Write(BSP_GPIO_CH3, 0)
-#define LCD_DC_DATA()    BSP_GPIO_Write(BSP_GPIO_CH3, 1)
+#define LCD_DC_CMD()     BSP_GPIO_Write(BSP_GPIO_LCD_DC, 0)
+#define LCD_DC_DATA()    BSP_GPIO_Write(BSP_GPIO_LCD_DC, 1)
 
-#define LCD_BL_ON()      BSP_GPIO_Write(BSP_GPIO_CH5, 1)
+#define LCD_BL_ON()      BSP_GPIO_Write(BSP_GPIO_LCD_BL, 1)
 
 /* 如果你这个是 1.8寸常见彩屏，通常是 128x160 */
 #define LCD_W            240
@@ -272,8 +274,16 @@ static void LCD_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     LCD_WriteCmd(0x2C);
 }
 
+#endif
+
 void Test_SPI2_LCD(void)
 {
+    Drv_LcdTft_Init();
+    Drv_LcdTft_FillScreen(DRV_LCD_COLOR_RED);
+    Drv_LcdTft_DrawString(20U, 20U, "LCD OK", DRV_LCD_COLOR_WHITE, DRV_LCD_COLOR_RED);
+    return;
+
+#if 0
     uint32_t i;
 
     BSP_SPI_Init(SPI_BUS2);
@@ -305,6 +315,7 @@ void Test_SPI2_LCD(void)
     }
 
     LCD_CS_HIGH();
+#endif
 }
 
 /*

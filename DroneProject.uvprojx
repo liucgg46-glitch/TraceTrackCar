@@ -873,6 +873,31 @@
               <FileType>5</FileType>
               <FilePath>.\Driver\drv_gray_4051.h</FilePath>
             </File>
+            <File>
+              <FileName>drv_lcd_tft.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_lcd_tft.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_lcd_tft.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_lcd_tft.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_lcd_font.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_lcd_font.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_lcd_font.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_lcd_font.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_lcd_image.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_lcd_image.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -962,6 +987,16 @@
               <FileName>sensor_manager.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\sensor_manager.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\lcd_ui.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\lcd_ui.h</FilePath>
             </File>
           </Files>
         </Group>

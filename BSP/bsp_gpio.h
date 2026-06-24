@@ -175,6 +175,25 @@ extern "C" {
 #define BSP_GPIO_CH13_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH13_INIT_LEVEL     0U
 
+/* CH14~CH15: 1.54 inch SPI TFT LCD control pins. */
+#define BSP_GPIO_CH14_ENABLE         1
+#define BSP_GPIO_CH14_PORT           GPIOC
+#define BSP_GPIO_CH14_PIN            GPIO_Pin_10
+#define BSP_GPIO_CH14_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH14_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH14_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH14_SPEED          GPIO_Speed_50MHz
+#define BSP_GPIO_CH14_INIT_LEVEL     1U
+
+#define BSP_GPIO_CH15_ENABLE         1
+#define BSP_GPIO_CH15_PORT           GPIOC
+#define BSP_GPIO_CH15_PIN            GPIO_Pin_11
+#define BSP_GPIO_CH15_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH15_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH15_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH15_SPEED          GPIO_Speed_50MHz
+#define BSP_GPIO_CH15_INIT_LEVEL     0U
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -216,6 +235,12 @@ typedef enum {
 #if BSP_GPIO_CH13_ENABLE
     BSP_GPIO_CH13,
 #endif
+#if BSP_GPIO_CH14_ENABLE
+    BSP_GPIO_CH14,
+#endif
+#if BSP_GPIO_CH15_ENABLE
+    BSP_GPIO_CH15,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -224,6 +249,11 @@ typedef enum {
 #define BSP_GPIO_GRAY_S0   BSP_GPIO_CH11
 #define BSP_GPIO_GRAY_S1   BSP_GPIO_CH12
 #define BSP_GPIO_GRAY_S2   BSP_GPIO_CH13
+
+/* 1.54 inch SPI TFT LCD aliases. */
+#define BSP_GPIO_LCD_CS    BSP_GPIO_CH2
+#define BSP_GPIO_LCD_DC    BSP_GPIO_CH14
+#define BSP_GPIO_LCD_BL    BSP_GPIO_CH15
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

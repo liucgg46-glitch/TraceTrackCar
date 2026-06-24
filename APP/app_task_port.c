@@ -57,6 +57,11 @@ BSP_WEAK void OLED_Update(void)
     /* Part6 由 drv_oled/debug_menu 覆盖：显示状态、参数、传感器数据。 */
 }
 
+BSP_WEAK void LcdUi_Update(void)
+{
+    /* Part4+ 由 lcd_ui.c 覆盖：TFT LCD 页面刷新。 */
+}
+
 BSP_WEAK void Log_Update(void)
 {
     /* Part6 由 log.c 覆盖：串口周期日志。 */
