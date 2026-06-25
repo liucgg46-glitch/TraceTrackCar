@@ -44,7 +44,7 @@ uint8_t Route_IsStableSingleLine(const LineDetect_Result_t *line)
 
     cnt = Route_CountBlackBits(line->black_mask);
 
-    if ((line->type == LINE_TYPE_NORMAL) &&
+    if ((line->type == LINE_TYPE_SINGLE) &&
         (cnt >= 1U) &&
         (cnt <= 4U)) {
         return 1U;
