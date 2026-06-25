@@ -34,8 +34,8 @@ void Test_CountPerRev_Update(void);// 测试一圈的脉冲数{ Test_CountPerRev
 void Test_MotionCmd_Update(void);//动作库测试 { Test_MotionCmd_Update,  10U,  0U },
 void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
 
-void Test_LineCmd_Update(void);
-void Test_LineCmd_Log(void);//测试函数
+void Test_LineCmd_Update(void);// { Test_LineCmd_Update,   10U,   0U },
+void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和校准后的灰度数据，巡线状态等等）{ Test_LineCmd_Log,     200U,   0U }, 
 
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
 
