@@ -6,7 +6,7 @@
 #include "sensor_manager.h"
 #include "line_follow_app.h"
 #include "lcd_ui.h"
-#include "oled_ui.h"
+// #include "oled_ui.h"
 
 void App_Init(void)
 {
@@ -16,6 +16,7 @@ void App_Init(void)
     Motion_Init();
     SensorManager_Init();
     LineFollow_Init();
-    LcdUi_ShowBoot();
-    OledUi_ShowBoot();
+
+    LcdUi_Init();
+    // OledUi_Init();
 }

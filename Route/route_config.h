@@ -1,0 +1,10 @@
+
+#ifndef __ROUTE_CONFIG_H
+#define __ROUTE_CONFIG_H
+
+#define ROUTE_PROFILE_BASIC      0
+#define ROUTE_PROFILE_HJDUINO    1
+
+#define ROUTE_PROFILE_SELECT     ROUTE_PROFILE_BASIC
+
+#endif
