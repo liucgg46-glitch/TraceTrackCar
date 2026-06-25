@@ -5,8 +5,6 @@
 #include "app_task_port.h"
 #include "motion_action.h"
 #include "test.h"
-#include "lcd_ui.h"
-//#include "oled_ui.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,17 +37,11 @@ Task_t task_list[] = {                                                          
     { Encoder_Update,        10U,   0U },  \
     { LineTrack_Update,      10U,   0U },  \
     { Chassis_Update,        10U,   0U },  \
-    { LcdUi_Update,         20U,   0U },  \
+    { Test_LineCmd_Update,   10U,   0U },  \
     { Test_LineCmd_Log,     200U,   0U },  \
+                                            \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
-
-
-
-
-
-
-
 
 
 //    { Encoder_Update,         10U,   0U },  /* B：编码器速度更新 */                 \
