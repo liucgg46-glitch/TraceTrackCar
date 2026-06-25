@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 #define LCD_UI_ENABLE                1U
-#define LCD_UI_UPDATE_PERIOD_MS      200U
+#define LCD_UI_UPDATE_PERIOD_MS      50U
 
 void LcdUi_Init(void);
 void LcdUi_Update(void);
