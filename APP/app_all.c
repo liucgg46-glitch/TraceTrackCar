@@ -19,4 +19,5 @@ void App_Init(void)
 
     LcdUi_Init();
     // OledUi_Init();
+	  LineFollow_Start();
 }
