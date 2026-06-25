@@ -14,4 +14,7 @@ void App_Init(void)
     Motion_Init();
     SensorManager_Init();
     LineFollow_Init();
+	
+    /* 上电后自动进入循迹，不再需要串口发送 '1' */
+    LineFollow_Start();
 }

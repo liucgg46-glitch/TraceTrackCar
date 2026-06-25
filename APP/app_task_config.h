@@ -31,17 +31,15 @@ extern "C" {
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
-	{ Test_GPIO_Toggle,       10U,   0U },                                          \
-    { AppTask_BSP_Background,  1U,   0U },  /* B：BSP 后台维护 */                   \
-    { Sensor_Update,          1U,   0U },  \
-    { Encoder_Update,        10U,   0U },  \
-    { LineTrack_Update,      10U,   0U },  \
-    { Chassis_Update,        10U,   0U },  \
-    { Test_LineCmd_Update,   10U,   0U },  \
-    { Test_LineCmd_Log,     200U,   0U },  \
+    { Test_GPIO_Toggle,       10U,   0U },                                          \
+    { AppTask_BSP_Background,  1U,   0U },                                          \
+    { Encoder_Update,        10U,   0U },                                          \
+    { Sensor_Update,         10U,   0U },                                          \
+    { LineTrack_Update,      10U,   0U },                                          \
+    { Chassis_Update,        10U,   0U },                                          \
+    { Log_Update,           200U,   0U },                                          \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
-
 
 //    { Encoder_Update,         10U,   0U },  /* B：编码器速度更新 */                 \
 //    { Sensor_Update,          10U,   0U },  /* C：传感器统一更新 */                 \

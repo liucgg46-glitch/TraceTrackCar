@@ -3,6 +3,7 @@
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
+#include "route_manager.h"
 
 static LineFollow_Info_t s_lf;
 
@@ -17,6 +18,7 @@ void LineFollow_Init(void)
 
     LineDetect_Init();
     LineTrack_Init();
+		RouteManager_Init();
 }
 
 void LineFollow_Start(void)
@@ -43,7 +45,7 @@ void LineFollow_Update(void)
     res = LineDetect_GetResultPtr();
     s_lf.detect = *res;
 
-    LineTrack_Compute(res, &s_lf.output);
+   RouteManager_Update(res, &s_lf.output);
 
     if (s_lf.state == LINE_FOLLOW_RUN) {
         if (s_lf.output.valid) {
