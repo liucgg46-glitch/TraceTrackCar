@@ -206,10 +206,6 @@ void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out)
 
 error = s_error_filt;
 
-if ((error > -80) && (error < 80)) {
-    error = 0;
-}
-
    if ((error > -80) && (error < 80)) {
     error = 0;
      }

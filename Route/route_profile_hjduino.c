@@ -30,31 +30,20 @@ void HJduinoRoute_Reset(void)
 
 static uint8_t HJduinoRoute_IsLoopEntry(const LineDetect_Result_t *line)
 {
+//	右分支：可以认为是入口
+//交叉 + 右侧有线：才认为是入口
+//单纯 CROSS / FULL_BLACK 不直接认为入口
+//单纯 0xC0 也不直接认为入口
     if (line == 0) {
         return 0U;
     }
 
-    /*
-     * 环岛入口相当于右转进入。
-     * 先用右分支 / 交叉 / 右侧边缘作为入口判断。
-     */
     if (line->type == LINE_TYPE_RIGHT_BRANCH) {
         return 1U;
     }
 
-    if (line->type == LINE_TYPE_CROSS) {
-        return 1U;
-    }
-
-    if (line->type == LINE_TYPE_FULL_BLACK) {
-        return 1U;
-    }
-
-    /*
-     * 右侧 6/7 路看到线，也认为可能到达右侧入口。
-     * 如果实车发现左右反了，再改成 0x03U。
-     */
-    if ((line->black_mask & 0xC0U) != 0U) {
+    if ((line->type == LINE_TYPE_CROSS) &&
+        ((line->black_mask & 0xC0U) != 0U)) {
         return 1U;
     }
 
