@@ -640,3 +640,104 @@ void Test_LineCmd_Log(void)
 {
     Test_Line_Print();
 }
+
+void Test_LCD_Ascii_Update(void)
+{
+    static uint8_t step = 0;
+    static uint32_t last_ms = 0;
+
+    if (Drv_LcdTft_IsReady() == 0U) {
+        return;
+    }
+
+    if (BSP_TimeElapsed(&last_ms, 1000U) == 0U) {
+        return;
+    }
+
+    switch (step) {
+        case 0:
+            Drv_LcdTft_FillScreen(DRV_LCD_COLOR_RED);
+            Drv_LcdTft_DrawString(20, 110, "RED SCREEN", DRV_LCD_COLOR_WHITE, DRV_LCD_COLOR_RED);
+            break;
+
+        case 1:
+            Drv_LcdTft_FillScreen(DRV_LCD_COLOR_GREEN);
+            Drv_LcdTft_DrawString(20, 110, "GREEN SCREEN", DRV_LCD_COLOR_BLACK, DRV_LCD_COLOR_GREEN);
+            break;
+
+        case 2:
+            Drv_LcdTft_FillScreen(DRV_LCD_COLOR_BLUE);
+            Drv_LcdTft_DrawString(20, 110, "BLUE SCREEN", DRV_LCD_COLOR_WHITE, DRV_LCD_COLOR_BLUE);
+            break;
+
+        case 3:
+            Drv_LcdTft_FillScreen(DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawRect(4, 4, 232, 232, DRV_LCD_COLOR_WHITE);
+
+            Drv_LcdTft_DrawString(12, 16,
+                                  "LCD ASCII TEST",
+                                  DRV_LCD_COLOR_YELLOW,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 40,
+                                  "0123456789",
+                                  DRV_LCD_COLOR_WHITE,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 58,
+                                  "ABCDEFGHIJKLM",
+                                  DRV_LCD_COLOR_GREEN,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 76,
+                                  "NOPQRSTUVWXYZ",
+                                  DRV_LCD_COLOR_GREEN,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 94,
+                                  "abcdefghijklm",
+                                  DRV_LCD_COLOR_CYAN,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 112,
+                                  "nopqrstuvwxyz",
+                                  DRV_LCD_COLOR_CYAN,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 130,
+                                  "- _ : . / + %",
+                                  DRV_LCD_COLOR_MAGENTA,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 154,
+                                  "MODE:LINE",
+                                  DRV_LCD_COLOR_WHITE,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 172,
+                                  "MASK:0x18",
+                                  DRV_LCD_COLOR_WHITE,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 190,
+                                  "ERR:-120",
+                                  DRV_LCD_COLOR_WHITE,
+                                  DRV_LCD_COLOR_BLACK);
+
+            Drv_LcdTft_DrawString(12, 208,
+                                  "SPD:1500CPS",
+                                  DRV_LCD_COLOR_WHITE,
+                                  DRV_LCD_COLOR_BLACK);
+            break;
+
+        default:
+            step = 0;
+            return;
+    }
+
+    step++;
+    if (step > 3) {
+        step = 3;   /* 停在 ASCII 测试页面，不再循环刷屏 */
+    }
+}

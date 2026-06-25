@@ -37,4 +37,6 @@ void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
 void Test_LineCmd_Update(void);
 void Test_LineCmd_Log(void);//测试函数
 
+void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
+
 #endif

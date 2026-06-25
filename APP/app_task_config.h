@@ -41,6 +41,7 @@ Task_t task_list[] = {                                                          
     { Test_LineCmd_Update,   10U,   0U },  \
     { LcdUi_Update,         200U,   0U },  \
     { Test_LineCmd_Log,     200U,   0U },  \
+	{ Test_LCD_Ascii_Update, 50U, 0U }, \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 
