@@ -26,26 +26,29 @@ static int16_t AbsI16(int16_t x)
     return (x >= 0) ? x : (int16_t)(-x);
 }
 
-/* 根据偏差自动降速：直线快，弯道慢 */
 static int16_t LineTrack_GetAdaptiveSpeed(int16_t error)
 {
     int16_t abs_err = AbsI16(error);
     int32_t speed;
 
-    if (abs_err < 300) {
-        speed = s_cfg.base_speed_cps;                       /* 直线：1800 */
-    } else if (abs_err < 700) {
-        speed = (int32_t)s_cfg.base_speed_cps * 85 / 100;    /* 小弯：1530 */
-    } else if (abs_err < 1100) {
-        speed = (int32_t)s_cfg.base_speed_cps * 65 / 100;    /* 中弯：1170 */
-    } else if (abs_err < 1600) {
-        speed = (int32_t)s_cfg.base_speed_cps * 45 / 100;    /* 大弯：810 */
-    } else {
-        speed = (int32_t)s_cfg.base_speed_cps * 35 / 100;    /* 快丢线：630 */
+    /*
+     * base = 3000 时：
+     * abs_err = 0     -> 3000
+     * abs_err = 300   -> 2730
+     * abs_err = 600   -> 2460
+     * abs_err = 1000  -> 2100
+     * abs_err = 1500  -> 1650
+     * abs_err = 2000  -> 1200
+     * abs_err = 2500  -> 750，随后被限到 850
+     */
+    speed = (int32_t)s_cfg.base_speed_cps - ((int32_t)abs_err * 90 / 100);
+
+    if (speed > s_cfg.base_speed_cps) {
+        speed = s_cfg.base_speed_cps;
     }
 
-    if (speed < 500) {
-        speed = 500;
+    if (speed < 850) {
+        speed = 850;
     }
 
     return (int16_t)speed;
@@ -199,9 +202,13 @@ void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out)
     /* 6. 普通单线 PD 循迹 */
 
     /* error 一阶低通滤波，减少灰度跳变导致的顿挫 */
-   s_error_filt = (int16_t)((3 * (int32_t)s_error_filt + line->error_x1000) / 4);
+  s_error_filt = (int16_t)((3 * (int32_t)s_error_filt + line->error_x1000) / 4);
 
-   error = s_error_filt;
+error = s_error_filt;
+
+if ((error > -80) && (error < 80)) {
+    error = 0;
+}
 
    if ((error > -80) && (error < 80)) {
     error = 0;
@@ -221,7 +228,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out)
 
     /* 每 10ms 限制变化量，让输出更丝滑 */
     out->linear_cps = LineTrack_RampI16(s_last_linear_cmd, target_linear, 100);
-    out->turn_cps   = LineTrack_RampI16(s_last_turn_cmd,   target_turn,   200);
+    out->turn_cps   = LineTrack_RampI16(s_last_turn_cmd,   target_turn,   140);
 
     s_last_linear_cmd = out->linear_cps;
     s_last_turn_cmd   = out->turn_cps;

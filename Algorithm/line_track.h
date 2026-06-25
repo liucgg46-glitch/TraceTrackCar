@@ -27,13 +27,13 @@ extern "C" {
  * 调高：车整体跑得更快，但弯道更容易冲出线
  * 调低：车更稳，但速度慢
  */
-#define LINE_TRACK_BASE_SPEED_CPS        1800
+#define LINE_TRACK_BASE_SPEED_CPS        3000
 
 /* 检测到路口、分支、十字时的前进速度，单位 cps
  * 调高：过路口更快，但容易冲过路口、错过判断
  * 调低：路口更稳，方便识别，但整体节奏变慢
  */
-#define LINE_TRACK_CROSS_SPEED_CPS       600
+#define LINE_TRACK_CROSS_SPEED_CPS       800
 
 /* 丢线时的前进速度，单位 cps
  * 一般建议为 0，表示丢线后不继续往前冲
@@ -46,13 +46,13 @@ extern "C" {
  * 调高：丢线后转得更快，找线更积极，但容易来回扫过头
  * 调低：找线更慢，更稳，但恢复速度慢
  */
-#define LINE_TRACK_SEARCH_TURN_CPS       300
+#define LINE_TRACK_SEARCH_TURN_CPS       400
 
 /* 循迹最大转向速度限制，单位 cps
  * 调高：最大修正能力更强，高速时更能拐回来，但容易急摆
  * 调低：转向更柔和，但速度快时可能转不过来
  */
-#define LINE_TRACK_TURN_MAX_CPS          650
+#define LINE_TRACK_TURN_MAX_CPS          900
 
 
 /*==================== 循迹 PD 参数 ====================*/
@@ -67,7 +67,7 @@ extern "C" {
  * 调高：可以减少左右振荡，让车更稳，但太高会反应迟钝、抖动或噪声敏感
  * 调低：车反应更直接，但高速时更容易来回摆
  */
-#define LINE_TRACK_KD                    0.12f
+#define LINE_TRACK_KD                    0.14f
 
 /* 路口是否减速。比赛任务层后续会根据路口类型决定转弯/直行。 */
 #define LINE_TRACK_SLOW_ON_CROSS         0U
