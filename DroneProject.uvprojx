@@ -898,6 +898,36 @@
               <FileType>5</FileType>
               <FilePath>.\Driver\drv_lcd_image.h</FilePath>
             </File>
+            <File>
+              <FileName>drv_oled_i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_oled_i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_oled_i2c.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_oled_i2c.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_oled_font.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_oled_font.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_oled_font.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_oled_font.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_oled_image.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_oled_image.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_oled_image.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_oled_image.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -997,6 +1027,16 @@
               <FileName>lcd_ui.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\lcd_ui.h</FilePath>
+            </File>
+            <File>
+              <FileName>oled_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\oled_ui.c</FilePath>
+            </File>
+            <File>
+              <FileName>oled_ui.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\oled_ui.h</FilePath>
             </File>
           </Files>
         </Group>
