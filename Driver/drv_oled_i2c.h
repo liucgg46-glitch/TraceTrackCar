@@ -10,8 +10,10 @@ extern "C" {
 #endif
 
 /* Hardware config: 4-pin SSD1306 OLED on I2C1 PB8/PB9. */
+#define DRV_OLED_I2C_ENABLE          1U
 #define DRV_OLED_I2C_BUS             I2C_BUS1
 #define DRV_OLED_I2C_ADDR_7BIT       0x3CU
+#define DRV_OLED_I2C_ADDR_ALT_7BIT   0x3DU
 #define DRV_OLED_WIDTH               128U
 #define DRV_OLED_HEIGHT              64U
 #define DRV_OLED_PAGE_NUM            (DRV_OLED_HEIGHT / 8U)
@@ -20,12 +22,16 @@ extern "C" {
 
 void        Drv_OledI2c_Init(void);
 uint8_t     Drv_OledI2c_IsReady(void);
-void        Drv_OledI2c_DisplayOn(uint8_t on);
+BSP_Status_t Drv_OledI2c_GetLastStatus(void);
+uint8_t     Drv_OledI2c_GetAsyncState(void);
+uint16_t    Drv_OledI2c_GetErrorCount(void);
 
 void        Drv_OledI2c_Clear(void);
 void        Drv_OledI2c_Fill(uint8_t color);
 void        Drv_OledI2c_Flush(void);
 void        Drv_OledI2c_FlushPage(uint8_t page);
+void        Drv_OledI2c_Task(void);
+uint8_t     Drv_OledI2c_IsBusy(void);
 
 void        Drv_OledI2c_DrawPixel(uint8_t x, uint8_t y, uint8_t color);
 void        Drv_OledI2c_FillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t color);

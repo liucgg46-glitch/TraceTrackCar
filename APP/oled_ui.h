@@ -9,6 +9,7 @@ extern "C" {
 
 #define OLED_UI_ENABLE               1U
 #define OLED_UI_UPDATE_PERIOD_MS     500U
+#define OLED_UI_BOOT_HOLD_MS         1000U
 
 void OledUi_Init(void);
 void OledUi_ShowBoot(void);

@@ -38,6 +38,7 @@ extern "C" {
 #define I2C_BLOCK_TIMEOUT          3000UL  /* 阻塞 API 单次等待超时（循环计数） */
 #define I2C_ASYNC_TIMEOUT_MS       20U     /* 非阻塞传输软件看门狗超时（毫秒） */
 #define I2C_TX_COPY_BUF_LEN        32U     /* 每个通道内部 TX 拷贝缓冲区大小 */
+#define I2C_ASYNC_TX_IRQ_MAX_LEN   I2C_TX_COPY_BUF_LEN
 
 /* ===========================================================================
  * 通道配置区：每一路 I2C 总线一个配置块。
@@ -161,6 +162,18 @@ typedef enum {
  */
 typedef void (*I2C_Callback_t)(I2C_Bus_t bus, int result);
 
+typedef struct {
+    uint8_t state;
+    uint8_t dev_addr;
+    uint16_t tx_len;
+    uint16_t tx_pos;
+    uint16_t rx_len;
+    uint8_t need_read;
+    uint16_t sr1;
+    uint16_t sr2;
+    uint32_t start_tick;
+} BSP_I2C_Debug_t;
+
 /* ===========================================================================
  * 公共 API：统一加 BSP_ 前缀，避免和 StdPeriph 库自己的 I2C_Init() 等函数
  * 重名（StdPeriph 占用了 "I2C_*" 这个命名空间）。第一个参数都是 I2C_Bus_t，
@@ -210,6 +223,7 @@ BSP_Status_t BSP_I2C_MasterWriteRead_DMA_Async(I2C_Bus_t bus, uint8_t dev_addr,
                                                I2C_Callback_t callback);
 
 uint8_t BSP_I2C_IsBusy(I2C_Bus_t bus);
+BSP_Status_t BSP_I2C_GetDebug(I2C_Bus_t bus, BSP_I2C_Debug_t *debug);
 
 /* 建议 1ms~5ms 调一次，处理异步超时保护和 BUSY 卡死自恢复 */
 void BSP_I2C_Task(I2C_Bus_t bus);

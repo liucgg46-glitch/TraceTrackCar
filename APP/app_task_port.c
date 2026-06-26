@@ -2,6 +2,7 @@
 #include "bsp_all.h"
 #include "bsp_encoder.h"
 #include "bsp_key.h"
+#include "driver_all.h"
 
 /*
  * Part1 默认弱实现。
@@ -13,6 +14,9 @@ BSP_WEAK void AppTask_BSP_Background(void)
 {
     /* UART DMA 搬运、I2C/SPI 异步超时恢复等后台维护。 */
     BSP_TaskAll();
+
+    /* Driver 层非阻塞状态机：LCD SPI DMA / OLED I2C DMA 等。 */
+    Driver_Task();
 }
 
 BSP_WEAK void Encoder_Update(void)
@@ -57,7 +61,7 @@ BSP_WEAK void OLED_Update(void)
     /* Part6 由 drv_oled/debug_menu 覆盖：显示状态、参数、传感器数据。 */
 }
 
-BSP_WEAK void LcdUi_Update(void)
+BSP_WEAK void LCD_Update(void)
 {
     /* Part4+ 由 lcd_ui.c 覆盖：TFT LCD 页面刷新。 */
 }

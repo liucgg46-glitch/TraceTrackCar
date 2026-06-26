@@ -19,8 +19,8 @@ int main(void)
 
     (void)BSP_InitAll(SystemCoreClock);
 	Driver_Init();
-    App_Init();
-	Test_I2C_Scan();
+	App_Init();
+
     Scheduler_Init();
 
     while (1) {

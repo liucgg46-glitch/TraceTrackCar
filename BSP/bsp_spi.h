@@ -110,7 +110,7 @@ extern "C" {
 
 #define SPI_BUS2_CPOL               SPI_CPOL_Low    /* 默认 Mode 0，按实际设备调整 */
 #define SPI_BUS2_CPHA               SPI_CPHA_1Edge
-#define SPI_BUS2_BAUD_PRESCALER     SPI_BaudRatePrescaler_128
+#define SPI_BUS2_BAUD_PRESCALER     SPI_BaudRatePrescaler_16
 
 #define SPI_BUS2_DMA_RX_STREAM      DMA1_Stream3    /* 参考值，启用前请核实 */
 #define SPI_BUS2_DMA_RX_STREAM_NUM  3

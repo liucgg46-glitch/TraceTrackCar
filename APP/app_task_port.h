@@ -35,7 +35,7 @@ void LineTrack_Update(void);        /* A：循迹控制，10ms */
 void TaskFSM_Update(void);          /* A：总任务状态机，10ms */
 void DebugMenu_Update(void);        /* C：按键/OLED 调参菜单，20ms */
 void OLED_Update(void);             /* C：OLED 页面刷新，100ms */
-void LcdUi_Update(void);             /* C：TFT LCD 页面刷新，建议100~200ms */
+void LCD_Update(void);              /* C：TFT LCD 页面刷新，建议100~200ms */
 void Log_Update(void);              /* C：串口日志输出，200ms */
 
 #ifdef __cplusplus

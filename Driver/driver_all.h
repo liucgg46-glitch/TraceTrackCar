@@ -15,14 +15,14 @@ extern "C" {
  * 当前包含：
  *   - Motor_Init()
  *   - Drv_Encoder_Init()
+ *   - Drv_GraySensor_Init()
+ *   - Drv_LcdTft_Init()
+ *   - Drv_OledI2c_Init()
  *
- * 后续 Part4/Part5 可继续加入：
- *   - Drv_Gray4051_Init()
- *   - Drv_IMU_Init()
- *   - Drv_ToF_Init()
- *   - VisionProtocol_Init()
+ * Driver_Task() 必须被 1ms 左右后台任务周期调用，用于推进非阻塞 LCD/OLED DMA 状态机。
  */
 void Driver_Init(void);
+void Driver_Task(void);
 
 #ifdef __cplusplus
 }

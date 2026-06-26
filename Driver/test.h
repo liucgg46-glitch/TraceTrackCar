@@ -39,4 +39,6 @@ void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和�
 
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
 
+void Test_AsyncDisplay_Update(void);//
+
 #endif

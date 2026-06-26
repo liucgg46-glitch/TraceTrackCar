@@ -1,7 +1,7 @@
 #include "driver_all.h"
 #include "drv_motor.h"
 #include "drv_encoder.h"
-#include "drv_gray_4051.h"
+#include "drv_gray_sensor.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 
@@ -14,10 +14,16 @@ void Driver_Init(void)
     Drv_Encoder_Init();
 
     /* 74HC4051 灰度模块驱动层：只负责 8 路 raw/filt 采样。 */
-    Drv_Gray4051_Init();
+    Drv_GraySensor_Init();
 
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();
 
     /* 后续 Driver 层模块统一从这里继续添加 Init。 */
+}
+
+void Driver_Task(void)
+{
+    Drv_LcdTft_Task();
+    Drv_OledI2c_Task();
 }

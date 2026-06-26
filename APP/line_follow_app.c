@@ -1,5 +1,5 @@
 #include "line_follow_app.h"
-#include "drv_gray_4051.h"
+#include "drv_gray_sensor.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
@@ -34,11 +34,11 @@ void LineFollow_Update(void)
 {
     const LineDetect_Result_t *res;
 
-    if (Drv_Gray4051_IsValid() == 0U) {
+    if (Drv_GraySensor_IsOnline() == 0U) {
         return;
     }
 
-    (void)Drv_Gray4051_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
+    (void)Drv_GraySensor_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
     LineDetect_Update(s_lf.raw);
     res = LineDetect_GetResultPtr();
     s_lf.detect = *res;
