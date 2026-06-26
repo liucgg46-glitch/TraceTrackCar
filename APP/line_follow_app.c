@@ -1,8 +1,10 @@
+
 #include "line_follow_app.h"
 #include "drv_gray_sensor.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
+#include "route_manager.h"
 
 static LineFollow_Info_t s_lf;
 
@@ -17,6 +19,7 @@ void LineFollow_Init(void)
 
     LineDetect_Init();
     LineTrack_Init();
+		RouteManager_Init();
 }
 
 void LineFollow_Start(void)
@@ -41,9 +44,14 @@ void LineFollow_Update(void)
     (void)Drv_GraySensor_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
     LineDetect_Update(s_lf.raw);
     res = LineDetect_GetResultPtr();
-    s_lf.detect = *res;
+       s_lf.detect = *res;
 
-    LineTrack_Compute(res, &s_lf.output);
+    /*
+     * 只通过 RouteManager 输出。
+     * 当前 ROUTE_PROFILE_BASIC 内部会调用 LineTrack_Compute。
+     * 以后切换到 HJduino 状态机，也从这里统一接管。
+     */
+    RouteManager_Update(res, &s_lf.output);
 
     if (s_lf.state == LINE_FOLLOW_RUN) {
         if (s_lf.output.valid) {
@@ -51,9 +59,10 @@ void LineFollow_Update(void)
         } else {
             Chassis_Stop();
         }
-    }
+    
+			}
 }
-
+			
 LineFollow_State_t LineFollow_GetState(void)
 {
     return s_lf.state;

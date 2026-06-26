@@ -12,6 +12,7 @@ typedef enum {
 
 static HJduinoRoute_State_t s_hjd_state;
 static uint16_t s_hjd_cnt;
+static uint16_t s_hjd_run_cnt;
 static uint8_t s_hjd_lap_count;
 
 void HJduinoRoute_Init(void)
@@ -23,15 +24,101 @@ void HJduinoRoute_Reset(void)
 {
     s_hjd_state = HJD_ROUTE_NORMAL_BEFORE_LOOP;
     s_hjd_cnt = 0U;
+    s_hjd_run_cnt = 0U;
     s_hjd_lap_count = 0U;
+}
+
+static uint8_t HJduinoRoute_IsLoopEntry(const LineDetect_Result_t *line)
+{
+//	右分支：可以认为是入口
+//交叉 + 右侧有线：才认为是入口
+//单纯 CROSS / FULL_BLACK 不直接认为入口
+//单纯 0xC0 也不直接认为入口
+    if (line == 0) {
+        return 0U;
+    }
+
+    if (line->type == LINE_TYPE_RIGHT_BRANCH) {
+        return 1U;
+    }
+
+    if ((line->type == LINE_TYPE_CROSS) &&
+        ((line->black_mask & 0xC0U) != 0U)) {
+        return 1U;
+    }
+
+    return 0U;
 }
 
 void HJduinoRoute_Update(const LineDetect_Result_t *line, LineTrack_Output_t *out)
 {
-    /* ????????д???????????????????????????? */
-    (void)s_hjd_state;
-    (void)s_hjd_cnt;
-    (void)s_hjd_lap_count;
+    if ((line == 0) || (out == 0)) {
+        return;
+    }
 
-    LineTrack_Compute(line, out);
+    s_hjd_run_cnt++;
+
+    switch (s_hjd_state) {
+    case HJD_ROUTE_NORMAL_BEFORE_LOOP:
+        /*
+         * 前面直线、波浪、大圆弧都普通循迹。
+         * 这里用时间门限防止刚启动时误判。
+         * 300 表示 300 * 10ms = 3s。
+         */
+        if ((s_hjd_run_cnt > 300U) && HJduinoRoute_IsLoopEntry(line)) {
+            s_hjd_state = HJD_ROUTE_ENTER_LOOP_RIGHT;
+            s_hjd_cnt = 0U;
+
+            out->linear_cps = 550;
+            out->turn_cps = -650;
+							out->valid = 1U;
+            return;
+        }
+
+        LineTrack_Compute(line, out);
+        break;
+
+    case HJD_ROUTE_ENTER_LOOP_RIGHT:
+        /*
+         * 强制右转切入环岛。
+         * 40 表示 400ms。
+         */
+        s_hjd_cnt++;
+
+        out->linear_cps = 450;
+        out->turn_cps = -750;
+        out->valid = 1U;
+
+        if (s_hjd_cnt >= 70U) {
+            s_hjd_state = HJD_ROUTE_IN_LOOP;
+            s_hjd_cnt = 0U;
+        }
+        break;
+
+    case HJD_ROUTE_IN_LOOP:
+        /*
+         * 先进入环岛后继续普通循迹。
+         * 后面再加“出环岛”判断。
+         */
+        LineTrack_Compute(line, out);
+        break;
+
+    case HJD_ROUTE_EXIT_LOOP:
+        LineTrack_Compute(line, out);
+        break;
+
+    case HJD_ROUTE_NORMAL_AFTER_LOOP:
+        LineTrack_Compute(line, out);
+        break;
+
+    case HJD_ROUTE_RIGHT_ANGLE:
+        LineTrack_Compute(line, out);
+        break;
+
+    default:
+        s_hjd_state = HJD_ROUTE_NORMAL_BEFORE_LOOP;
+        s_hjd_cnt = 0U;
+        LineTrack_Compute(line, out);
+        break;
+    }
 }
