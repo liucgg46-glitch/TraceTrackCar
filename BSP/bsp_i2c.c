@@ -191,6 +191,20 @@ static volatile I2C_Runtime_t s_i2c_rt[I2C_BUS_COUNT];
 static uint8_t  s_i2c_tx_copy[I2C_BUS_COUNT][I2C_TX_COPY_BUF_LEN];
 static uint32_t s_i2c_hw_busy_start[I2C_BUS_COUNT];
 
+typedef struct {
+    uint8_t source;
+    uint8_t state;
+    uint8_t dev_addr;
+    uint16_t tx_pos;
+    uint16_t tx_len;
+    uint16_t rx_len;
+    uint16_t sr1;
+    uint16_t sr2;
+    uint32_t count;
+} I2C_ErrorSnapshot_t;
+
+static volatile I2C_ErrorSnapshot_t s_i2c_error[I2C_BUS_COUNT];
+
 /* ==================== 内部工具函数 ==================== */
 static uint8_t I2C_WaitEvent(I2C_TypeDef *periph, uint32_t event)
 {
@@ -225,6 +239,23 @@ static void I2C_DMA_ClearFlags(I2C_Bus_t bus)
 
     DMA_ClearFlag(cfg->dma_rx_stream, cfg->dma_rx_flags_all);
     DMA_ClearFlag(cfg->dma_tx_stream, cfg->dma_tx_flags_all);
+}
+
+static void I2C_RecordError(I2C_Bus_t bus, uint8_t source)
+{
+    const I2C_Cfg_t *cfg = &s_i2c_cfg[bus];
+    volatile I2C_Runtime_t *rt = &s_i2c_rt[bus];
+    volatile I2C_ErrorSnapshot_t *error = &s_i2c_error[bus];
+
+    error->source = source;
+    error->state = (uint8_t)rt->state;
+    error->dev_addr = rt->dev_addr;
+    error->tx_pos = rt->tx_pos;
+    error->tx_len = rt->tx_len;
+    error->rx_len = rt->rx_len;
+    error->sr1 = (uint16_t)cfg->periph->SR1;
+    error->sr2 = (uint16_t)cfg->periph->SR2;
+    error->count++;
 }
 
 static void I2C_StopAndResetPeripheral(I2C_Bus_t bus)
@@ -549,6 +580,7 @@ void BSP_I2C_Init(I2C_Bus_t bus)
     s_i2c_rt[bus].state = I2C_SM_IDLE;
     s_i2c_rt[bus].callback = 0;
     s_i2c_hw_busy_start[bus] = 0;
+    memset((void *)&s_i2c_error[bus], 0, sizeof(s_i2c_error[bus]));
 
     for (volatile uint32_t i = 0; i < 10000; i++) { ; }
 }
@@ -846,6 +878,15 @@ BSP_Status_t BSP_I2C_GetDebug(I2C_Bus_t bus, BSP_I2C_Debug_t *debug)
     debug->sr1 = cfg->periph->SR1;
     debug->sr2 = cfg->periph->SR2;
     debug->start_tick = rt->start_tick;
+    debug->error_source = s_i2c_error[bus].source;
+    debug->error_state = s_i2c_error[bus].state;
+    debug->error_dev_addr = s_i2c_error[bus].dev_addr;
+    debug->error_tx_pos = s_i2c_error[bus].tx_pos;
+    debug->error_tx_len = s_i2c_error[bus].tx_len;
+    debug->error_rx_len = s_i2c_error[bus].rx_len;
+    debug->error_sr1 = s_i2c_error[bus].sr1;
+    debug->error_sr2 = s_i2c_error[bus].sr2;
+    debug->error_count = s_i2c_error[bus].count;
 
     return BSP_OK;
 }
@@ -862,6 +903,7 @@ void BSP_I2C_Task(I2C_Bus_t bus)
         s_i2c_hw_busy_start[bus] = 0;
 
         if ((BSP_GET_TICK() - rt->start_tick) > I2C_ASYNC_TIMEOUT_MS) {
+            I2C_RecordError(bus, 1U);
             I2C_Abort(bus, -2);
         }
 
@@ -931,6 +973,7 @@ void BSP_I2C_EV_ISR(I2C_Bus_t bus)
             }
 
             if (!I2C_ConfigTxDMA(bus, rt->tx_buf, rt->tx_len)) {
+                I2C_RecordError(bus, 5U);
                 I2C_Abort(bus, -1);
                 return;
             }
@@ -979,6 +1022,7 @@ void BSP_I2C_EV_ISR(I2C_Bus_t bus)
                 I2C_ITConfig(cfg->periph, I2C_IT_BUF, ENABLE);
             } else {
                 if (!I2C_ConfigRxDMA(bus, rt->rx_buf, rt->rx_len)) {
+                    I2C_RecordError(bus, 6U);
                     I2C_Abort(bus, -1);
                     return;
                 }
@@ -1030,6 +1074,7 @@ void BSP_I2C_ER_ISR(I2C_Bus_t bus)
     sr1 = cfg->periph->SR1;
 
     if (sr1 & (I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR)) {
+        I2C_RecordError(bus, 2U);
         I2C_ClearITPendingBit(cfg->periph, I2C_IT_BERR | I2C_IT_ARLO |
                                             I2C_IT_AF   | I2C_IT_OVR);
         I2C_Abort(bus, -1);
@@ -1047,6 +1092,7 @@ void BSP_I2C_DMA_RX_ISR(I2C_Bus_t bus)
         DMA_GetITStatus(cfg->dma_rx_stream, cfg->dma_rx_it_dme) != RESET ||
         DMA_GetITStatus(cfg->dma_rx_stream, cfg->dma_rx_it_fe)  != RESET) {
 
+        I2C_RecordError(bus, 3U);
         DMA_ClearITPendingBit(cfg->dma_rx_stream,
                               cfg->dma_rx_it_te | cfg->dma_rx_it_dme | cfg->dma_rx_it_fe);
         I2C_Abort(bus, -1);
@@ -1076,6 +1122,7 @@ void BSP_I2C_DMA_TX_ISR(I2C_Bus_t bus)
         DMA_GetITStatus(cfg->dma_tx_stream, cfg->dma_tx_it_dme) != RESET ||
         DMA_GetITStatus(cfg->dma_tx_stream, cfg->dma_tx_it_fe)  != RESET) {
 
+        I2C_RecordError(bus, 4U);
         DMA_ClearITPendingBit(cfg->dma_tx_stream,
                               cfg->dma_tx_it_te | cfg->dma_tx_it_dme | cfg->dma_tx_it_fe);
         I2C_Abort(bus, -1);

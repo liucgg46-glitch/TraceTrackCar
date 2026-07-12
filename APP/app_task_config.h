@@ -37,9 +37,10 @@ Task_t task_list[] = {                                                          
     { Encoder_Update,        10U,   0U },  \
     { LineTrack_Update,      10U,   0U },  \
     { Chassis_Update,        10U,   0U },  \
+	{ LCD_Update,           200U,  0U },   \
+	{ OLED_Update,           100U,   0U },  /* C：OLED 刷新 */                      \
     { Test_LineCmd_Update,   10U,   0U },  \
     { Test_LineCmd_Log,     200U,   0U },  \
-                                            \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 

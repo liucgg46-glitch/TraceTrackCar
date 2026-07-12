@@ -172,6 +172,17 @@ typedef struct {
     uint16_t sr1;
     uint16_t sr2;
     uint32_t start_tick;
+
+    /* Error snapshot captured before abort/reset. */
+    uint8_t error_source;
+    uint8_t error_state;
+    uint8_t error_dev_addr;
+    uint16_t error_tx_pos;
+    uint16_t error_tx_len;
+    uint16_t error_rx_len;
+    uint16_t error_sr1;
+    uint16_t error_sr2;
+    uint32_t error_count;
 } BSP_I2C_Debug_t;
 
 /* ===========================================================================
