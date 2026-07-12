@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 /* Hardware config: 4-pin SSD1306 OLED on I2C1 PB8/PB9. */
-#define DRV_OLED_I2C_ENABLE          1U
+#define DRV_OLED_I2C_ENABLE          0U
 #define DRV_OLED_I2C_BUS             I2C_BUS1
 #define DRV_OLED_I2C_ADDR_7BIT       0x3CU
 #define DRV_OLED_I2C_ADDR_ALT_7BIT   0x3DU

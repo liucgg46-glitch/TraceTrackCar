@@ -37,6 +37,8 @@ void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
 void Test_LineCmd_Update(void);// { Test_LineCmd_Update,   10U,   0U },
 void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和校准后的灰度数据，巡线状态等等）{ Test_LineCmd_Log,     200U,   0U }, 
 
+void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U, 0U },
+
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
 
 void Test_AsyncDisplay_Update(void);//

@@ -2,6 +2,7 @@
 #include "drv_motor.h"
 #include "drv_encoder.h"
 #include "drv_gray_sensor.h"
+#include "drv_vl53l1x.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 
@@ -13,8 +14,11 @@ void Driver_Init(void)
     /* 四轮编码器映射层。BSP_InitAll() 已经初始化底层 TIM 编码器。 */
     Drv_Encoder_Init();
 
-    /* 74HC4051 灰度模块驱动层：只负责 8 路 raw/filt 采样。 */
+    /* 灰度模块驱动层：根据 drv_gray_sensor.h 选择 4051 或 MCU-I2C。 */
     Drv_GraySensor_Init();
+
+    /* VL53L1X ToF：只初始化状态机，I2C 配置由 Sensor_Update() 分步推进。 */
+    Drv_VL53L1X_Init();
 
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();

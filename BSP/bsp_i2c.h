@@ -85,7 +85,7 @@ extern "C" {
  */
 #define I2C_BUS2_ENABLE             0
 #define I2C_BUS2_PERIPH             I2C2
-#define I2C_BUS2_PERIPH_CLOCK_FN    RCC_APB1PeriphClockCmd  /* I2C2 也挂在 APB1 上 */
+#define I2C_BUS2_PERIPH_CLOCK_FN    RCC_APB1PeriphClockCmd
 #define I2C_BUS2_PERIPH_CLOCK_MASK  RCC_APB1Periph_I2C2
 #define I2C_BUS2_DMA_RCC_MASK       RCC_AHB1Periph_DMA1
 #define I2C_BUS2_CLOCK_HZ           100000UL
@@ -96,19 +96,19 @@ extern "C" {
 #define I2C_BUS2_SDA_PIN            GPIO_Pin_11
 #define I2C_BUS2_SDA_PINSRC         GPIO_PinSource11
 #define I2C_BUS2_AF                 GPIO_AF_I2C2
-#define I2C_BUS2_DMA_RX_STREAM      DMA1_Stream2    /* 参考值，启用前请核实 */
-#define I2C_BUS2_DMA_RX_STREAM_NUM  2               /* 必须和上面 DMA_RX_STREAM 的编号一致 */
-#define I2C_BUS2_DMA_TX_STREAM      DMA1_Stream4    /* 参考值，启用前请核实 */
-#define I2C_BUS2_DMA_TX_STREAM_NUM  4               /* 必须和上面 DMA_TX_STREAM 的编号一致 */
-#define I2C_BUS2_DMA_CHANNEL        DMA_Channel_7   /* 参考值，启用前请核实 */
+#define I2C_BUS2_DMA_RX_STREAM      DMA1_Stream2
+#define I2C_BUS2_DMA_RX_STREAM_NUM  2U
+#define I2C_BUS2_DMA_TX_STREAM      DMA1_Stream7
+#define I2C_BUS2_DMA_TX_STREAM_NUM  7U
+#define I2C_BUS2_DMA_CHANNEL        DMA_Channel_7
 #define I2C_BUS2_EV_IRQn            I2C2_EV_IRQn
 #define I2C_BUS2_ER_IRQn            I2C2_ER_IRQn
-#define I2C_BUS2_DMA_RX_IRQn        DMA1_Stream2_IRQn
-#define I2C_BUS2_DMA_TX_IRQn        DMA1_Stream4_IRQn
 #define I2C_BUS2_EV_IRQ_HANDLER     I2C2_EV_IRQHandler
 #define I2C_BUS2_ER_IRQ_HANDLER     I2C2_ER_IRQHandler
+#define I2C_BUS2_DMA_RX_IRQn        DMA1_Stream2_IRQn
+#define I2C_BUS2_DMA_TX_IRQn        DMA1_Stream7_IRQn
 #define I2C_BUS2_DMA_RX_IRQ_HANDLER DMA1_Stream2_IRQHandler
-#define I2C_BUS2_DMA_TX_IRQ_HANDLER DMA1_Stream4_IRQHandler
+#define I2C_BUS2_DMA_TX_IRQ_HANDLER DMA1_Stream7_IRQHandler
 
 #define I2C_BUS3_ENABLE             0
 #define I2C_BUS3_PERIPH             I2C3

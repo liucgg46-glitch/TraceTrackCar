@@ -22,6 +22,7 @@
 #include "drv_gray_mcu_i2c.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
+#include "drv_vl53l1x.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -661,15 +662,92 @@ void Test_LineCmd_Update(void)
             Test_Line_PrintThreshold();
         } else if (ch == 'p') {
             Test_Line_Print();
-        }else if (ch == 'k') {
-			Test_I2C1_Scan_Print();
-		}
+        } else if (ch == 'k') {
+            Test_I2C1_Scan_Print();
+        }
     }
 }
 
 void Test_LineCmd_Log(void)
 {
     Test_Line_Print();
+}
+
+
+/*
+ * VL53L1X independent log test.
+ * The ranging state machine is advanced by Sensor_Update(); this function
+ * only reads the current driver snapshot and prints it through USART1.
+ * Suggested scheduler entry:
+ *   { Test_VL53L1X_Update, 200U, 0U },
+ */
+static const char *Test_VL53L1X_StateName(Drv_VL53L1X_State_t state)
+{
+    switch (state) {
+        case DRV_VL53L1X_STATE_DISABLED:               return "DISABLED";
+        case DRV_VL53L1X_STATE_XSHUT_LOW:              return "XSHUT_LOW";
+        case DRV_VL53L1X_STATE_POWER_ON_WAIT:          return "POWER_WAIT";
+        case DRV_VL53L1X_STATE_BOOT_CHECK:             return "BOOT";
+        case DRV_VL53L1X_STATE_SENSOR_INIT:            return "INIT";
+        case DRV_VL53L1X_STATE_SET_DISTANCE_MODE:      return "SET_MODE";
+        case DRV_VL53L1X_STATE_SET_TIMING_BUDGET:      return "SET_TB";
+        case DRV_VL53L1X_STATE_SET_INTER_MEASUREMENT:  return "SET_IM";
+        case DRV_VL53L1X_STATE_SET_INTERRUPT_POLARITY: return "SET_INT";
+        case DRV_VL53L1X_STATE_SET_OFFSET:             return "SET_OFFSET";
+        case DRV_VL53L1X_STATE_SET_XTALK:              return "SET_XTALK";
+        case DRV_VL53L1X_STATE_START_RANGING:          return "START";
+        case DRV_VL53L1X_STATE_CHECK_DATA_READY:       return "RUN";
+        case DRV_VL53L1X_STATE_READ_RESULT:            return "READ";
+        case DRV_VL53L1X_STATE_CLEAR_INTERRUPT:        return "CLEAR";
+        case DRV_VL53L1X_STATE_ERROR_WAIT:             return "ERROR_WAIT";
+        case DRV_VL53L1X_STATE_STOPPED:                return "STOPPED";
+        default:                                        return "?";
+    }
+}
+
+void Test_VL53L1X_Update(void)
+{
+    Drv_VL53L1X_Info_t info;
+    char buf[256];
+    int n;
+
+    if (Drv_VL53L1X_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    n = snprintf(buf,
+                 sizeof(buf),
+                 "TOF en=%u on=%u init=%u run=%u valid=%u new=%u ready=%u "
+                 "st=%s api=%u id=0x%04X rs=%u raw=%umm filt=%umm "
+                 "amb=%u sig=%u spad=%u cnt=%lu ok=%lu err=%lu "
+                 "busy=%lu reinit=%lu\r\n",
+                 (unsigned int)info.enabled,
+                 (unsigned int)info.online,
+                 (unsigned int)info.initialized,
+                 (unsigned int)info.ranging,
+                 (unsigned int)info.data_valid,
+                 (unsigned int)info.new_data,
+                 (unsigned int)info.data_ready,
+                 Test_VL53L1X_StateName(info.state),
+                 (unsigned int)info.last_api_status,
+                 (unsigned int)info.sensor_id,
+                 (unsigned int)info.range_status,
+                 (unsigned int)info.raw_distance_mm,
+                 (unsigned int)info.distance_mm,
+                 (unsigned int)info.ambient_kcps,
+                 (unsigned int)info.signal_per_spad_kcps,
+                 (unsigned int)info.spad_count,
+                 (unsigned long)info.measurement_count,
+                 (unsigned long)info.valid_count,
+                 (unsigned long)info.error_count,
+                 (unsigned long)info.busy_skip_count,
+                 (unsigned long)info.reinit_count);
+
+    if ((n > 0) && (n < (int)sizeof(buf))) {
+        (void)BSP_UART_WriteFrame(UART_PORT1,
+                                  (const uint8_t *)buf,
+                                  (uint16_t)n);
+    }
 }
 
 void Test_LCD_Ascii_Update(void)

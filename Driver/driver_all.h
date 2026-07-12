@@ -16,6 +16,7 @@ extern "C" {
  *   - Motor_Init()
  *   - Drv_Encoder_Init()
  *   - Drv_GraySensor_Init()
+ *   - Drv_VL53L1X_Init()
  *   - Drv_LcdTft_Init()
  *   - Drv_OledI2c_Init()
  *
