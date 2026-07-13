@@ -2,7 +2,6 @@
 #define __SENSOR_MANAGER_H
 
 #include "bsp_common.h"
-#include "drv_icm20948.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -43,6 +42,21 @@ void SensorManager_Init(void);
  */
 void Sensor_Update(void);
 
+/*
+ * 姿态角使用一个结构体一次性复制，保证 Roll/Pitch/Yaw 来自同一帧融合结果。
+ * 上层不需要包含 ICM20948 或 Mahony 的头文件，也不需要主动调用更新函数。
+ */
+typedef struct {
+    float roll_deg;
+    float pitch_deg;
+    float yaw_deg;
+    uint32_t timestamp_ms;
+    uint8_t stationary;
+    uint8_t mag_calibrated;
+    uint8_t mag_healthy;
+    uint8_t mag_used;
+} Sensor_Attitude_t;
+
 /**
  * @brief 获取车头 VL53L1X 的最新有效距离。
  *
@@ -63,24 +77,20 @@ void Sensor_Update(void);
 BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm);
 
 /**
- * @brief 获取 ICM-20948 最新有效九轴数据。
+ * @brief 获取最新有效的融合姿态角。
  *
- * 返回数据包括：
- *   - 三轴加速度，单位 g；
- *   - 三轴角速度，单位 dps；
- *   - 三轴磁场，单位 uT；
- *   - 芯片温度，单位摄氏度；
- *   - 原始 ADC、未滤波物理量和滤波物理量。
+ * Roll/Pitch 由陀螺仪和加速度计 Mahony 融合得到；Yaw 由陀螺仪、
+ * 编码器航向约束和通过异常检查的磁力计慢速修正得到。
  *
- * @param data  数据输出地址。
+ * @param attitude  姿态输出地址，三个角度单位均为 deg。
  *
- * @retval BSP_OK      成功，data 中为最新有效缓存。
- * @retval BSP_PARAM   data 为空指针。
- * @retval BSP_ERROR   IMU 离线、仍在上电标定，或当前没有有效数据。
+ * @retval BSP_OK      成功，attitude 中为同一时间戳的姿态缓存。
+ * @retval BSP_PARAM   attitude 为空指针。
+ * @retval BSP_ERROR   IMU/融合器尚未产生有效姿态。
  *
- * @note 本函数不访问 SPI，适合由 APP、Algorithm 和 Route 层直接调用。
+ * @note 本函数不访问 SPI、不推进融合状态机，只复制后台缓存。
  */
-BSP_Status_t Sensor_GetImuData(Drv_ICM20948_Data_t *data);
+BSP_Status_t Sensor_GetAttitude(Sensor_Attitude_t *attitude);
 
 #ifdef __cplusplus
 }

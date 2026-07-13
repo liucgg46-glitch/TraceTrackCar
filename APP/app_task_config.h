@@ -37,8 +37,7 @@ Task_t task_list[] = {                                                          
     { Encoder_Update,        10U,   0U },  \
     { LineTrack_Update,      10U,   0U },  \
     { Chassis_Update,        10U,   0U },  \
-	{ Test_LineCmd_Update,   10U,   0U },  \
-	{ Test_ICM20948_Mag_Update, 500U, 0U }, \
+	{ Test_Attitude_Update,   10U,   0U },  /* 内部每500ms打印；10ms轮询标定命令 */ \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 

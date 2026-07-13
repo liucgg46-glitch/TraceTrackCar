@@ -10,10 +10,11 @@ extern "C" {
 /* ==================== Heading source select ==================== */
 
 #define HEADING_SOURCE_ENCODER      0U
-#define HEADING_SOURCE_IMU          1U
+#define HEADING_SOURCE_FUSED        1U
+#define HEADING_SOURCE_IMU          HEADING_SOURCE_FUSED
 
-/* Use encoder differential yaw first. Switch this to IMU after drv_imu is ready. */
-#define HEADING_ESTIMATOR_SOURCE    HEADING_SOURCE_ENCODER
+/* 默认使用 Mahony + 编码器 + 磁力计慢修正的融合航向。 */
+#define HEADING_ESTIMATOR_SOURCE    HEADING_SOURCE_FUSED
 
 
 /* ==================== Encoder heading parameters ==================== */
@@ -28,9 +29,9 @@ extern "C" {
 #define HEADING_ENCODER_YAW_REVERSE       0U
 
 
-/* ==================== IMU heading parameters ==================== */
+/* ==================== Fused heading parameters ==================== */
 
-/* Set to 1 if IMU yaw sign is reversed. */
+/* Set to 1 if fused yaw sign is reversed. */
 #define HEADING_IMU_YAW_REVERSE           0U
 
 

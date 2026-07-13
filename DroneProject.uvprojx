@@ -799,6 +799,16 @@
               <FilePath>.\Algorithm\heading_estimator.h</FilePath>
             </File>
             <File>
+              <FileName>attitude_estimator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\attitude_estimator.c</FilePath>
+            </File>
+            <File>
+              <FileName>attitude_estimator.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\attitude_estimator.h</FilePath>
+            </File>
+            <File>
               <FileName>odometer.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Algorithm\odometer.c</FilePath>

@@ -95,6 +95,7 @@ SRCS := \
   Algorithm/pid.c \
   Algorithm/line_detect.c \
   Algorithm/line_track.c \
+  Algorithm/attitude_estimator.c \
   Algorithm/heading_estimator.c \
   Algorithm/odometer.c \
   Driver/test.c \
@@ -104,11 +105,13 @@ SRCS := \
   Driver/drv_gray_4051.c \
   Driver/drv_gray_mcu_i2c.c \
   Driver/drv_gray_sensor.c \
+  Driver/drv_icm20948.c \
   Driver/drv_lcd_tft.c \
   Driver/drv_lcd_font.c \
   Driver/drv_oled_i2c.c \
   Driver/drv_oled_font.c \
   Driver/drv_oled_image.c \
+  Driver/drv_vl53l1x.c \
   APP/app_task_port.c \
   APP/nb_wait.c \
   APP/scheduler.c \

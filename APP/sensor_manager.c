@@ -3,6 +3,7 @@
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
+#include "attitude_estimator.h"
 
 void SensorManager_Init(void)
 {
@@ -22,6 +23,11 @@ void Sensor_Update(void)
      * 上层 APP/Route 只读取缓存，不要再次直接调用各驱动的 Update()。
      */
     (void)Drv_ICM20948_Update();
+    /*
+     * 姿态层按 IMU timestamp 去重：虽然本函数每 1 ms 调用，只有约 102 Hz 的
+     * 新样本会真正执行一次融合。重复样本返回 BSP_BUSY，不会重复积分。
+     */
+    (void)Attitude_Update();
     (void)Drv_VL53L1X_Update();
     (void)Drv_GraySensor_Update();
 }
@@ -44,15 +50,31 @@ BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm)
 }
 
 
-BSP_Status_t Sensor_GetImuData(Drv_ICM20948_Data_t *data)
+BSP_Status_t Sensor_GetAttitude(Sensor_Attitude_t *attitude)
 {
+    Attitude_Info_t info;
+    BSP_Status_t status;
+
     /*
-     * 只复制 ICM-20948 驱动内部已经缓存并通过有效性检查的数据。
-     * 本接口不会启动 SPI 事务，也不会重复推进 IMU 状态机。
+     * Attitude_GetInfo() 内部以临界区一次性复制完整缓存，三个角度和状态
+     * 来自同一融合时间戳。本接口不会访问 SPI 或重复推进融合器。
      */
-    if (data == 0) {
+    if (attitude == 0) {
         return BSP_PARAM;
     }
 
-    return Drv_ICM20948_GetData(data);
+    status = Attitude_GetInfo(&info);
+    if (status != BSP_OK) {
+        return status;
+    }
+
+    attitude->roll_deg = info.roll_deg;
+    attitude->pitch_deg = info.pitch_deg;
+    attitude->yaw_deg = info.yaw_deg;
+    attitude->timestamp_ms = info.timestamp_ms;
+    attitude->stationary = info.stationary;
+    attitude->mag_calibrated = info.mag_calibrated;
+    attitude->mag_healthy = info.mag_healthy;
+    attitude->mag_used = info.mag_used;
+    return BSP_OK;
 }

@@ -41,6 +41,7 @@ void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U
 
 void Test_ICM20948_Update(void);//易读IMU日志 { Test_ICM20948_Update, 500U, 0U },
 void Test_ICM20948_Mag_Update(void);//AK09916专项测试 { Test_ICM20948_Mag_Update, 500U, 0U },
+void Test_Attitude_Update(void);//独立姿态融合日志与标定 { Test_Attitude_Update, 10U, 0U }，内部每500ms打印
 
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
 

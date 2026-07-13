@@ -171,6 +171,15 @@ extern "C" {
 #define DRV_ICM20948_AXIS_Y_SIGN                  1.0f
 #define DRV_ICM20948_AXIS_Z_SIGN                  1.0f
 
+/*
+ * AK09916 在 ICM-20948 封装内部相对 Accel/Gyro 的固定安装矩阵。
+ * InvenSense 官方 eMD 的 AK09916 二级矩阵为 diag(+1, -1, -1)。
+ * 必须先完成此对齐，再应用上面的整板安装方向映射。
+ */
+#define DRV_ICM20948_MAG_TO_IMU_X_SIGN            1.0f
+#define DRV_ICM20948_MAG_TO_IMU_Y_SIGN           -1.0f
+#define DRV_ICM20948_MAG_TO_IMU_Z_SIGN           -1.0f
+
 /* ============================== 静态校准参数 ============================== */
 /*
  * 计算顺序：

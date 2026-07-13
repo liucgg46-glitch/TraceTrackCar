@@ -13,7 +13,9 @@
 #include "drv_encoder.h"
 #include "chassis.h"
 #include "motion_action.h"
+#include "sensor_manager.h"
 #include "odometer.h"
+#include "attitude_estimator.h"
 #include "heading_estimator.h"
 #include "line_follow_app.h"
 #include "line_detect.h"
@@ -1074,6 +1076,132 @@ void Test_ICM20948_Mag_Update(void)
 
     /* 单帧写入，避免 512 字节 UART 环形缓冲区被多次日志调用挤满后丢行。 */
     Test_ICM20948_Print(line);
+}
+
+/*
+ * 独立的姿态融合诊断与标定测试，不修改其他测试函数：
+ *   M：开始磁力计 min/max 标定；N：结束并计算参数；Y：当前融合 Yaw 置零。
+ */
+void Test_Attitude_Update(void)
+{
+    static uint32_t last_log_ms = 0U;
+    Attitude_Info_t info;
+    Sensor_Attitude_t sensor_attitude;
+    Attitude_MagCalibration_t calibration;
+    BSP_Status_t calibration_status;
+    uint8_t ch;
+    char line[500];
+    char response[220];
+    char roll[20], pitch[20], yaw[20];
+    char enc_rate[20], mag_norm[20], mag_ref[20];
+    char bx[20], by[20], bz[20];
+    int length;
+
+    /*
+     * 该测试函数独占本轮姿态测试所需的串口命令，不修改或依赖其他测试函数：
+     *   M：开始磁力计标定；N：完成标定；Y：把当前融合航向设为相对零点。
+     */
+    while (BSP_UART_GetChar(UART_PORT1, &ch)) {
+        if (ch == 'M') {
+            Attitude_MagCalibrationStart();
+            (void)BSP_UART_WriteFrame(
+                UART_PORT1,
+                (const uint8_t *)"mag calibration START: rotate slowly through all axes, then send N\r\n",
+                (uint16_t)(sizeof("mag calibration START: rotate slowly through all axes, then send N\r\n") - 1U));
+        } else if (ch == 'N') {
+            calibration_status = Attitude_MagCalibrationFinish(&calibration);
+            if (calibration_status == BSP_OK) {
+                length = snprintf(response,
+                                  sizeof(response),
+                                  "mag calibration OK: offset x100=%ld,%ld,%ld scale x1000=%ld,%ld,%ld\r\n",
+                                  (long)(calibration.offset_uT[0] * 100.0f),
+                                  (long)(calibration.offset_uT[1] * 100.0f),
+                                  (long)(calibration.offset_uT[2] * 100.0f),
+                                  (long)(calibration.scale[0] * 1000.0f),
+                                  (long)(calibration.scale[1] * 1000.0f),
+                                  (long)(calibration.scale[2] * 1000.0f));
+                if ((length > 0) && (length < (int)sizeof(response))) {
+                    (void)BSP_UART_WriteFrame(UART_PORT1,
+                                              (const uint8_t *)response,
+                                              (uint16_t)length);
+                }
+            } else {
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)"mag calibration FAILED: need >=300 samples and full XYZ rotation; send M to retry\r\n",
+                    (uint16_t)(sizeof("mag calibration FAILED: need >=300 samples and full XYZ rotation; send M to retry\r\n") - 1U));
+            }
+        } else if (ch == 'Y') {
+            Attitude_ZeroYaw();
+            Heading_Reset();
+            (void)BSP_UART_WriteFrame(
+                UART_PORT1,
+                (const uint8_t *)"fused yaw zeroed\r\n",
+                (uint16_t)(sizeof("fused yaw zeroed\r\n") - 1U));
+        }
+    }
+
+    /* 10 ms 运行一次以免漏串口命令，但姿态日志只每 500 ms 输出一次。 */
+    if (!BSP_TimeElapsed(&last_log_ms, 500U)) {
+        return;
+    }
+
+    /* 角度只通过 SensorManager 公共接口读取；Info 仅补充测试诊断计数。 */
+    if ((Sensor_GetAttitude(&sensor_attitude) != BSP_OK) ||
+        (Attitude_GetInfo(&info) != BSP_OK)) {
+        Test_ICM20948_Print("\r\nATTITUDE: waiting for valid IMU data\r\n");
+        return;
+    }
+
+    Test_FormatFixed(roll, sizeof(roll),
+                     (long)(sensor_attitude.roll_deg * 100.0f), 100UL, 2U);
+    Test_FormatFixed(pitch, sizeof(pitch),
+                     (long)(sensor_attitude.pitch_deg * 100.0f), 100UL, 2U);
+    Test_FormatFixed(yaw, sizeof(yaw),
+                     (long)(sensor_attitude.yaw_deg * 100.0f), 100UL, 2U);
+    Test_FormatFixed(enc_rate, sizeof(enc_rate),
+                     (long)(info.encoder_yaw_rate_dps * 100.0f), 100UL, 2U);
+    Test_FormatFixed(mag_norm, sizeof(mag_norm),
+                     (long)(info.mag_norm_uT * 100.0f), 100UL, 2U);
+    Test_FormatFixed(mag_ref, sizeof(mag_ref),
+                     (long)(info.mag_reference_uT * 100.0f), 100UL, 2U);
+    Test_FormatFixed(bx, sizeof(bx),
+                     (long)(info.online_gyro_bias_dps[0] * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(by, sizeof(by),
+                     (long)(info.online_gyro_bias_dps[1] * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(bz, sizeof(bz),
+                     (long)(info.online_gyro_bias_dps[2] * 1000.0f), 1000UL, 3U);
+
+    length = snprintf(line,
+                      sizeof(line),
+                      "\r\n========== ATTITUDE FUSION ==========\r\n"
+                      "angle roll=%s pitch=%s yaw=%s deg\r\n"
+                      "state valid=%u stationary=%u encoder_used=%u enc_rate=%s dps\r\n"
+                      "mag available/calibrating/calibrated/healthy/used=%u/%u/%u/%u/%u norm=%s ref=%s uT\r\n"
+                      "online bias X=%s Y=%s Z=%s dps\r\n"
+                      "count update=%lu mag_accept=%lu mag_reject=%lu cal_samples=%lu\r\n"
+                      "command M=start mag cal, N=finish mag cal, Y=zero yaw\r\n",
+                      roll, pitch, yaw,
+                      (unsigned int)info.valid,
+                      (unsigned int)info.stationary,
+                      (unsigned int)info.encoder_used,
+                      enc_rate,
+                      (unsigned int)info.mag_available,
+                      (unsigned int)info.mag_calibrating,
+                      (unsigned int)info.mag_calibrated,
+                      (unsigned int)info.mag_healthy,
+                      (unsigned int)info.mag_used,
+                      mag_norm,
+                      mag_ref,
+                      bx, by, bz,
+                      (unsigned long)info.update_count,
+                      (unsigned long)info.mag_accept_count,
+                      (unsigned long)info.mag_reject_count,
+                      (unsigned long)info.mag_calibration_samples);
+
+    if ((length > 0) && (length < (int)sizeof(line))) {
+        Test_ICM20948_Print(line);
+    }
 }
 
 void Test_LCD_Ascii_Update(void)

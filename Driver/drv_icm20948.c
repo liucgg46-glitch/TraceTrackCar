@@ -15,7 +15,7 @@
 #define ICM20948_B0_I2C_MST_STATUS            0x17U
 #define ICM20948_B0_INT_STATUS_1              0x1AU
 #define ICM20948_B0_ACCEL_XOUT_H              0x2DU
-#define ICM20948_B0_EXT_SLV_SENS_DATA_00       0x3BU
+#define ICM20948_B0_EXT_SLV_SENS_DATA_00      0x3BU
 
 /* User Bank 2 */
 #define ICM20948_B2_GYRO_SMPLRT_DIV           0x00U
@@ -255,6 +255,17 @@ static void ICM20948_MapAxes(const float source[3], float mapped[3])
     mapped[0] = source[DRV_ICM20948_AXIS_X_SOURCE] * DRV_ICM20948_AXIS_X_SIGN;
     mapped[1] = source[DRV_ICM20948_AXIS_Y_SOURCE] * DRV_ICM20948_AXIS_Y_SIGN;
     mapped[2] = source[DRV_ICM20948_AXIS_Z_SOURCE] * DRV_ICM20948_AXIS_Z_SIGN;
+}
+
+static void ICM20948_MapMagAxes(const float source[3], float mapped[3])
+{
+    float aligned[3];
+
+    /* AK09916 -> ICM20948 Accel/Gyro 坐标，再统一应用模块安装方向映射。 */
+    aligned[0] = source[0] * DRV_ICM20948_MAG_TO_IMU_X_SIGN;
+    aligned[1] = source[1] * DRV_ICM20948_MAG_TO_IMU_Y_SIGN;
+    aligned[2] = source[2] * DRV_ICM20948_MAG_TO_IMU_Z_SIGN;
+    ICM20948_MapAxes(aligned, mapped);
 }
 
 /* ============================== SPI 基础访问 =============================== */
@@ -737,7 +748,7 @@ static void ICM20948_ProcessSample(const uint8_t buffer[ICM20948_BURST_DATA_LEN]
         mag_chip[0] = (float)s_data.raw.mag[0] * 0.15f;
         mag_chip[1] = (float)s_data.raw.mag[1] * 0.15f;
         mag_chip[2] = (float)s_data.raw.mag[2] * 0.15f;
-        ICM20948_MapAxes(mag_chip, mag_mapped);
+        ICM20948_MapMagAxes(mag_chip, mag_mapped);
 
         mag_corrected[0] = (mag_mapped[0] - DRV_ICM20948_MAG_OFFSET_X_UT) * DRV_ICM20948_MAG_SCALE_X;
         mag_corrected[1] = (mag_mapped[1] - DRV_ICM20948_MAG_OFFSET_Y_UT) * DRV_ICM20948_MAG_SCALE_Y;
