@@ -224,6 +224,12 @@ BSP_Status_t BSP_SPI_TransferAsync_DMA(SPI_Bus_t bus,
 
 uint8_t BSP_SPI_IsBusy(SPI_Bus_t bus);
 
+/*
+ * 等待 SPI 移位寄存器真正空闲（BSY=0）。
+ * 设备层在拉高 CS 之前应调用本函数，避免最后一位数据尚未发送完就结束事务。
+ */
+BSP_Status_t BSP_SPI_WaitIdle(SPI_Bus_t bus);
+
 /* 建议 1ms~5ms 调一次，处理非阻塞传输的软件看门狗超时 */
 void BSP_SPI_Task(SPI_Bus_t bus);
 void BSP_SPI_TaskAll(void);

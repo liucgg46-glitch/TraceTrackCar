@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define LCD_UI_ENABLE                1U
+#define LCD_UI_ENABLE                0U
 #define LCD_UI_UPDATE_PERIOD_MS      500U
 #define LCD_UI_BOOT_HOLD_MS          1000U
 

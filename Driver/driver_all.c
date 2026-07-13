@@ -3,6 +3,7 @@
 #include "drv_encoder.h"
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
+#include "drv_icm20948.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 
@@ -19,6 +20,9 @@ void Driver_Init(void)
 
     /* VL53L1X ToF：只初始化状态机，I2C 配置由 Sensor_Update() 分步推进。 */
     Drv_VL53L1X_Init();
+
+    /* ICM-20948 九轴 IMU：初始化 SPI 状态机，实际配置由 Sensor_Update() 推进。 */
+    Drv_ICM20948_Init();
 
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();

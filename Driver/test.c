@@ -23,6 +23,7 @@
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 #include "drv_vl53l1x.h"
+#include "drv_icm20948.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -748,6 +749,331 @@ void Test_VL53L1X_Update(void)
                                   (const uint8_t *)buf,
                                   (uint16_t)n);
     }
+}
+
+
+/*
+ * 将放大后的有符号整数格式化成带小数点的 ASCII 文本。
+ *
+ * 示例：
+ *   scaled = -8339, divisor = 1000, digits = 3
+ *   输出 "-8.339"
+ *
+ * 不使用 printf 浮点功能，兼容 Keil ARMCC 默认配置。
+ */
+static void Test_FormatFixed(char *out,
+                             uint16_t out_size,
+                             long scaled,
+                             unsigned long divisor,
+                             uint8_t digits)
+{
+    unsigned long absolute_value;
+    unsigned long integer_part;
+    unsigned long fraction_part;
+    char sign;
+
+    if ((out == 0) || (out_size == 0U) || (divisor == 0UL)) {
+        return;
+    }
+
+    sign = (scaled < 0L) ? '-' : '+';
+    absolute_value = (scaled < 0L) ?
+                     (unsigned long)(-(scaled + 1L)) + 1UL :
+                     (unsigned long)scaled;
+    integer_part = absolute_value / divisor;
+    fraction_part = absolute_value % divisor;
+
+    if (digits == 3U) {
+        (void)snprintf(out,
+                       out_size,
+                       "%c%lu.%03lu",
+                       sign,
+                       integer_part,
+                       fraction_part);
+    } else if (digits == 2U) {
+        (void)snprintf(out,
+                       out_size,
+                       "%c%lu.%02lu",
+                       sign,
+                       integer_part,
+                       fraction_part);
+    } else if (digits == 1U) {
+        (void)snprintf(out,
+                       out_size,
+                       "%c%lu.%01lu",
+                       sign,
+                       integer_part,
+                       fraction_part);
+    } else {
+        (void)snprintf(out, out_size, "%c%lu", sign, integer_part);
+    }
+}
+
+static void Test_ICM20948_Print(const char *text)
+{
+    uint16_t length = 0U;
+
+    if (text == 0) {
+        return;
+    }
+
+    while ((text[length] != '\0') && (length < 500U)) {
+        length++;
+    }
+
+    if (length != 0U) {
+        (void)BSP_UART_WriteFrame(UART_PORT1,
+                                  (const uint8_t *)text,
+                                  length);
+    }
+}
+
+/*
+ * ICM-20948 数据独立日志测试。
+ *
+ * 本函数只读取驱动缓存，不推进传感器状态机。任务表必须同时保留：
+ *   { Sensor_Update,          1U,   0U },
+ *
+ * 建议注册：
+ *   { Test_ICM20948_Update, 500U,   0U },
+ *
+ * 输出单位：
+ *   加速度      g
+ *   角速度      deg/s（度/秒，不是姿态角）
+ *   磁场强度    uT
+ *   温度        degC
+ */
+void Test_ICM20948_Update(void)
+{
+    Drv_ICM20948_Info_t info;
+    Drv_ICM20948_Data_t data;
+    BSP_Status_t data_status;
+    char line[256];
+    char ax[20], ay[20], az[20];
+    char gx[20], gy[20], gz[20];
+    char mx[20], my[20], mz[20];
+    char temp[20];
+    char bx[20], by[20], bz[20];
+
+    if (Drv_ICM20948_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    data_status = Drv_ICM20948_GetData(&data);
+
+    Test_ICM20948_Print("\r\n========== ICM-20948 SENSOR ==========\r\n");
+
+    (void)snprintf(line,
+                   sizeof(line),
+                   "Main chip       : %s (WHO_AM_I=0x%02X, expected 0xEA)\r\n"
+                   "Sampling        : %s | Valid data: %s | Gyro calibration: %s\r\n",
+                   (info.online != 0U) ? "ONLINE" : "OFFLINE",
+                   (unsigned int)info.who_am_i,
+                   (info.running != 0U) ? "RUNNING" : "STOPPED",
+                   (info.data_valid != 0U) ? "YES" : "NO",
+                   (info.calibrating != 0U) ? "IN PROGRESS" :
+                   ((info.gyro_cal_samples != 0U) ? "DONE" : "NOT STARTED"));
+    Test_ICM20948_Print(line);
+
+    if (data_status == BSP_OK) {
+        Test_FormatFixed(ax, sizeof(ax),
+                         (long)(data.accel_filtered_g.x * 1000.0f),
+                         1000UL, 3U);
+        Test_FormatFixed(ay, sizeof(ay),
+                         (long)(data.accel_filtered_g.y * 1000.0f),
+                         1000UL, 3U);
+        Test_FormatFixed(az, sizeof(az),
+                         (long)(data.accel_filtered_g.z * 1000.0f),
+                         1000UL, 3U);
+
+        Test_FormatFixed(gx, sizeof(gx),
+                         (long)(data.gyro_filtered_dps.x * 1000.0f),
+                         1000UL, 3U);
+        Test_FormatFixed(gy, sizeof(gy),
+                         (long)(data.gyro_filtered_dps.y * 1000.0f),
+                         1000UL, 3U);
+        Test_FormatFixed(gz, sizeof(gz),
+                         (long)(data.gyro_filtered_dps.z * 1000.0f),
+                         1000UL, 3U);
+
+        Test_FormatFixed(temp, sizeof(temp),
+                         (long)(data.temperature_filtered_c * 100.0f),
+                         100UL, 2U);
+
+        (void)snprintf(line,
+                       sizeof(line),
+                       "Accelerometer   : X=%s g, Y=%s g, Z=%s g\r\n"
+                       "Gyroscope rate  : X=%s deg/s, Y=%s deg/s, Z=%s deg/s\r\n"
+                       "Chip temperature: %s degC\r\n",
+                       ax, ay, az,
+                       gx, gy, gz,
+                       temp);
+        Test_ICM20948_Print(line);
+
+        if ((info.mag_valid != 0U) && (data.mag_valid != 0U)) {
+            Test_FormatFixed(mx, sizeof(mx),
+                             (long)(data.mag_filtered_uT.x * 100.0f),
+                             100UL, 2U);
+            Test_FormatFixed(my, sizeof(my),
+                             (long)(data.mag_filtered_uT.y * 100.0f),
+                             100UL, 2U);
+            Test_FormatFixed(mz, sizeof(mz),
+                             (long)(data.mag_filtered_uT.z * 100.0f),
+                             100UL, 2U);
+
+            (void)snprintf(line,
+                           sizeof(line),
+                           "Magnetometer    : X=%s uT, Y=%s uT, Z=%s uT"
+                           " (WIA1=0x%02X, WIA2=0x%02X)\r\n",
+                           mx, my, mz,
+                           (unsigned int)info.mag_wia1,
+                           (unsigned int)info.mag_wia2);
+        } else {
+            (void)snprintf(line,
+                           sizeof(line),
+                           "Magnetometer    : INVALID / NOT DETECTED"
+                           " (WIA1=0x%02X, WIA2=0x%02X, ST1=0x%02X, ST2=0x%02X)\r\n",
+                           (unsigned int)info.mag_wia1,
+                           (unsigned int)info.mag_wia2,
+                           (unsigned int)info.mag_st1,
+                           (unsigned int)info.mag_st2);
+        }
+        Test_ICM20948_Print(line);
+    } else {
+        Test_ICM20948_Print("Sensor values   : unavailable until valid sampling starts\r\n");
+    }
+
+    Test_FormatFixed(bx, sizeof(bx),
+                     (long)(info.gyro_bias_dps.x * 1000.0f),
+                     1000UL, 3U);
+    Test_FormatFixed(by, sizeof(by),
+                     (long)(info.gyro_bias_dps.y * 1000.0f),
+                     1000UL, 3U);
+    Test_FormatFixed(bz, sizeof(bz),
+                     (long)(info.gyro_bias_dps.z * 1000.0f),
+                     1000UL, 3U);
+
+    (void)snprintf(line,
+                   sizeof(line),
+                   "Gyro zero bias  : X=%s deg/s, Y=%s deg/s, Z=%s deg/s"
+                   " (%u samples)\r\n"
+                   "Counters        : samples=%lu, valid=%lu, mag_valid=%lu,"
+                   " errors=%lu, reinit=%lu\r\n",
+                   bx, by, bz,
+                   (unsigned int)info.gyro_cal_samples,
+                   (unsigned long)info.sample_count,
+                   (unsigned long)info.valid_count,
+                   (unsigned long)info.mag_valid_count,
+                   (unsigned long)info.error_count,
+                   (unsigned long)info.reinit_count);
+    Test_ICM20948_Print(line);
+}
+
+/*
+ * AK09916 磁力计专项诊断。
+ *
+ * 只用于定位内部辅助 I2C 通信，不会修改驱动状态。测试时可暂时只注册本函数，
+ * 避免与完整 IMU 日志混在一起：
+ *   { Test_ICM20948_Mag_Update, 500U, 0U },
+ */
+void Test_ICM20948_Mag_Update(void)
+{
+    Drv_ICM20948_Info_t info;
+    Drv_ICM20948_Data_t data;
+    BSP_Status_t data_status;
+    char line[500];
+    char mx[20], my[20], mz[20];
+    const char *method;
+    const char *diagnosis;
+    uint8_t identity_valid;
+    int length;
+
+    if (Drv_ICM20948_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    data_status = Drv_ICM20948_GetData(&data);
+    method = (info.mag_init_method == 2U) ? "SLV0+SLV1" :
+             ((info.mag_init_method == 1U) ? "SLV4" : "unknown");
+    identity_valid = ((info.mag_wia1 == DRV_ICM20948_MAG_WIA1_EXPECTED) ||
+                      (info.mag_wia2 == DRV_ICM20948_MAG_WIA2_EXPECTED)) ? 1U : 0U;
+
+    if ((info.last_i2c_mst_status & 0x01U) != 0U) {
+        diagnosis = "SLV0 NACK at 0x0C";
+    } else if ((info.last_i2c_mst_status & 0x02U) != 0U) {
+        diagnosis = "SLV1 NACK at 0x0C";
+    } else if (identity_valid == 0U) {
+        diagnosis = "neither identity byte matches";
+    } else if ((info.mag_st2 & 0x08U) != 0U) {
+        diagnosis = "magnetic overflow";
+    } else if ((info.mag_st1 & 0x01U) == 0U) {
+        diagnosis = "identity OK, waiting for DRDY";
+    } else {
+        diagnosis = "identity and DRDY OK";
+    }
+
+    length = snprintf(line,
+                      sizeof(line),
+                      "\r\n========== AK09916 MAG TEST ==========\r\n"
+                      "init=%s method=%s identity=%s\r\n"
+                      "WIA1=0x%02X WIA2=0x%02X ST1=0x%02X ST2=0x%02X MST=0x%02X retry=%u\r\n"
+                      "USER_CTRL=0x%02X LP_CONFIG=0x%02X I2C_MST_CTRL=0x%02X\r\n"
+                      "SLV0 addr/ctrl=0x%02X/0x%02X SLV1 addr/ctrl=0x%02X/0x%02X\r\n"
+                      "count valid=%lu not_ready=%lu overflow=%lu nack=%lu\r\n"
+                      "diagnosis=%s\r\n",
+                      (info.mag_valid != 0U) ? "SUCCESS" : "WAITING/FAILED",
+                      method,
+                      (identity_valid != 0U) ? "PASS" : "FAIL",
+                      (unsigned int)info.mag_wia1,
+                      (unsigned int)info.mag_wia2,
+                      (unsigned int)info.mag_st1,
+                      (unsigned int)info.mag_st2,
+                      (unsigned int)info.last_i2c_mst_status,
+                      (unsigned int)info.mag_retry_count,
+                      (unsigned int)info.user_ctrl_readback,
+                      (unsigned int)info.lp_config_readback,
+                      (unsigned int)info.i2c_mst_ctrl_readback,
+                      (unsigned int)info.slv0_addr_readback,
+                      (unsigned int)info.slv0_ctrl_readback,
+                      (unsigned int)info.slv1_addr_readback,
+                      (unsigned int)info.slv1_ctrl_readback,
+                      (unsigned long)info.mag_valid_count,
+                      (unsigned long)info.mag_not_ready_count,
+                      (unsigned long)info.mag_overflow_count,
+                      (unsigned long)info.mag_nack_count,
+                      diagnosis);
+    if (length < 0) {
+        return;
+    }
+    if (length >= (int)sizeof(line)) {
+        length = (int)sizeof(line) - 1;
+    }
+
+    if ((data_status == BSP_OK) &&
+        (info.mag_valid != 0U) &&
+        (data.mag_valid != 0U)) {
+        Test_FormatFixed(mx, sizeof(mx),
+                         (long)(data.mag_filtered_uT.x * 100.0f),
+                         100UL, 2U);
+        Test_FormatFixed(my, sizeof(my),
+                         (long)(data.mag_filtered_uT.y * 100.0f),
+                         100UL, 2U);
+        Test_FormatFixed(mz, sizeof(mz),
+                         (long)(data.mag_filtered_uT.z * 100.0f),
+                         100UL, 2U);
+
+        (void)snprintf(&line[length],
+                       sizeof(line) - (uint16_t)length,
+                       "mag X=%s uT Y=%s uT Z=%s uT\r\n",
+                       mx, my, mz);
+    } else {
+        (void)snprintf(&line[length],
+                       sizeof(line) - (uint16_t)length,
+                       "mag unavailable\r\n");
+    }
+
+    /* 单帧写入，避免 512 字节 UART 环形缓冲区被多次日志调用挤满后丢行。 */
+    Test_ICM20948_Print(line);
 }
 
 void Test_LCD_Ascii_Update(void)

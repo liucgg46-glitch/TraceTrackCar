@@ -2,11 +2,12 @@
 
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
+#include "drv_icm20948.h"
 
 void SensorManager_Init(void)
 {
     /*
-     * Driver_Init() 已经完成灰度传感器和 VL53L1X 的初始化。
+     * Driver_Init() 已经完成灰度传感器、VL53L1X 和 ICM-20948 的初始化。
      * 这里不重复操作硬件，避免同一个驱动被重复初始化。
      */
 }
@@ -14,12 +15,13 @@ void SensorManager_Init(void)
 void Sensor_Update(void)
 {
     /*
-     * VL53L1X 与感为灰度传感器当前共用 I2C1。
-     * 两个驱动均采用非阻塞方式，并会在总线忙时等待下一轮调度。
+     * ICM-20948 使用 SPI2；VL53L1X 与感为灰度传感器共用 I2C1。
+     * 三个驱动都采用状态机方式推进。ICM-20948 与 LCD 共用 SPI2 时，
+     * 会在 LCD DMA 占用总线时主动跳过本轮，下一次 1 ms 调度再重试。
      *
-     * 先推进 VL53L1X 的短事务，再推进灰度传感器读取；如果本轮总线
-     * 已被占用，相应驱动会返回 BSP_BUSY，并在下一次 1 ms 调度时重试。
+     * 上层 APP/Route 只读取缓存，不要再次直接调用各驱动的 Update()。
      */
+    (void)Drv_ICM20948_Update();
     (void)Drv_VL53L1X_Update();
     (void)Drv_GraySensor_Update();
 }
@@ -39,4 +41,18 @@ BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm)
      * 该接口不会重新访问 I2C，也不会重复推进 VL53L1X 状态机。
      */
     return Drv_VL53L1X_GetDistanceMm(distance_mm);
+}
+
+
+BSP_Status_t Sensor_GetImuData(Drv_ICM20948_Data_t *data)
+{
+    /*
+     * 只复制 ICM-20948 驱动内部已经缓存并通过有效性检查的数据。
+     * 本接口不会启动 SPI 事务，也不会重复推进 IMU 状态机。
+     */
+    if (data == 0) {
+        return BSP_PARAM;
+    }
+
+    return Drv_ICM20948_GetData(data);
 }

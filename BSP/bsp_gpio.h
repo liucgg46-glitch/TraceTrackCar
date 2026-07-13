@@ -23,6 +23,8 @@ extern "C" {
  *   CH2  ：PB12，SPI2 设备 CS 默认片选
  *   CH3~CH10：四电机方向脚，避开 USART2 的 PD5/PD6
  *   CH11~CH13：74HC4051 灰度模块地址选择脚 S0/S1/S2
+ *   CH14~CH15：SPI TFT LCD 控制脚 DC/BL
+ *   CH16 ：PE5，ICM-20948 SPI2 独立片选 CS
  *
  * 电机方向脚规划：
  *   M1_IN1 = PD0, M1_IN2 = PD1
@@ -194,6 +196,17 @@ extern "C" {
 #define BSP_GPIO_CH15_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH15_INIT_LEVEL     0U
 
+/* CH16：ICM-20948 独立 SPI2 CS，PE5，默认拉高不选中。
+ * SPI2 的 SCK/MISO/MOSI 可与 LCD 共用，但每个设备必须使用独立 CS。 */
+#define BSP_GPIO_CH16_ENABLE         1
+#define BSP_GPIO_CH16_PORT           GPIOE
+#define BSP_GPIO_CH16_PIN            GPIO_Pin_5
+#define BSP_GPIO_CH16_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH16_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH16_PUPD           GPIO_PuPd_UP
+#define BSP_GPIO_CH16_SPEED          GPIO_Speed_50MHz
+#define BSP_GPIO_CH16_INIT_LEVEL     1U
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -241,6 +254,9 @@ typedef enum {
 #if BSP_GPIO_CH15_ENABLE
     BSP_GPIO_CH15,
 #endif
+#if BSP_GPIO_CH16_ENABLE
+    BSP_GPIO_CH16,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -254,6 +270,9 @@ typedef enum {
 #define BSP_GPIO_LCD_CS    BSP_GPIO_CH2
 #define BSP_GPIO_LCD_DC    BSP_GPIO_CH14
 #define BSP_GPIO_LCD_BL    BSP_GPIO_CH15
+
+/* ICM-20948 SPI2 independent chip-select alias. */
+#define BSP_GPIO_ICM20948_CS BSP_GPIO_CH16
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

@@ -2,6 +2,7 @@
 #define __SENSOR_MANAGER_H
 
 #include "bsp_common.h"
+#include "drv_icm20948.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -18,7 +19,8 @@ extern "C" {
  *
  * 当前接入：
  *   - 感为八路灰度传感器；
- *   - VL53L1X 激光测距传感器。
+ *   - VL53L1X 激光测距传感器；
+ *   - ICM-20948 九轴 IMU。
  */
 
 /**
@@ -36,7 +38,7 @@ void SensorManager_Init(void);
  *
  *     { Sensor_Update, 1U, 0U },
  *
- * 本函数负责推进 VL53L1X 和灰度传感器的非阻塞状态机。
+ * 本函数负责推进 ICM-20948、VL53L1X 和灰度传感器状态机。
  * 上层模块只读取缓存结果，不要再次直接调用各驱动的 Update()。
  */
 void Sensor_Update(void);
@@ -59,6 +61,26 @@ void Sensor_Update(void);
  *   - 本接口返回的是驱动筛选后的有效距离，不是未经校验的原始距离。
  */
 BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm);
+
+/**
+ * @brief 获取 ICM-20948 最新有效九轴数据。
+ *
+ * 返回数据包括：
+ *   - 三轴加速度，单位 g；
+ *   - 三轴角速度，单位 dps；
+ *   - 三轴磁场，单位 uT；
+ *   - 芯片温度，单位摄氏度；
+ *   - 原始 ADC、未滤波物理量和滤波物理量。
+ *
+ * @param data  数据输出地址。
+ *
+ * @retval BSP_OK      成功，data 中为最新有效缓存。
+ * @retval BSP_PARAM   data 为空指针。
+ * @retval BSP_ERROR   IMU 离线、仍在上电标定，或当前没有有效数据。
+ *
+ * @note 本函数不访问 SPI，适合由 APP、Algorithm 和 Route 层直接调用。
+ */
+BSP_Status_t Sensor_GetImuData(Drv_ICM20948_Data_t *data);
 
 #ifdef __cplusplus
 }

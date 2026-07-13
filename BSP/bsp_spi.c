@@ -512,6 +512,27 @@ uint8_t BSP_SPI_IsBusy(SPI_Bus_t bus)
     return s_spi_rt[bus].busy;
 }
 
+
+BSP_Status_t BSP_SPI_WaitIdle(SPI_Bus_t bus)
+{
+    SPI_TypeDef *periph;
+    uint32_t timeout;
+
+    if (bus >= SPI_BUS_COUNT) {
+        return BSP_PARAM;
+    }
+
+    periph = s_spi_cfg[bus].periph;
+    timeout = SPI_BLOCK_TIMEOUT;
+    while (SPI_I2S_GetFlagStatus(periph, SPI_I2S_FLAG_BSY) != RESET) {
+        if (--timeout == 0U) {
+            return BSP_TIMEOUT;
+        }
+    }
+
+    return BSP_OK;
+}
+
 void BSP_SPI_Task(SPI_Bus_t bus)
 {
     volatile SPI_Runtime_t *rt;
