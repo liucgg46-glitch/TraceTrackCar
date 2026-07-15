@@ -1093,7 +1093,7 @@ void Test_Attitude_Update(void)
     char line[500];
     char response[220];
     char roll[20], pitch[20], yaw[20];
-    char enc_rate[20], mag_norm[20], mag_ref[20];
+    char enc_yaw[20], enc_rate[20], mag_norm[20], mag_ref[20];
     char bx[20], by[20], bz[20];
     int length;
 
@@ -1159,6 +1159,8 @@ void Test_Attitude_Update(void)
                      (long)(sensor_attitude.pitch_deg * 100.0f), 100UL, 2U);
     Test_FormatFixed(yaw, sizeof(yaw),
                      (long)(sensor_attitude.yaw_deg * 100.0f), 100UL, 2U);
+    Test_FormatFixed(enc_yaw, sizeof(enc_yaw),
+                     (long)(info.encoder_yaw_deg * 100.0f), 100UL, 2U);
     Test_FormatFixed(enc_rate, sizeof(enc_rate),
                      (long)(info.encoder_yaw_rate_dps * 100.0f), 100UL, 2U);
     Test_FormatFixed(mag_norm, sizeof(mag_norm),
@@ -1176,7 +1178,7 @@ void Test_Attitude_Update(void)
                       sizeof(line),
                       "\r\n========== ATTITUDE FUSION ==========\r\n"
                       "angle roll=%s pitch=%s yaw=%s deg\r\n"
-                      "state valid=%u stationary=%u encoder_used=%u enc_rate=%s dps\r\n"
+                      "state valid=%u stationary=%u encoder_used/valid=%u/%u enc_yaw=%s deg enc_rate=%s dps\r\n"
                       "mag available/calibrating/calibrated/healthy/used=%u/%u/%u/%u/%u norm=%s ref=%s uT\r\n"
                       "online bias X=%s Y=%s Z=%s dps\r\n"
                       "count update=%lu mag_accept=%lu mag_reject=%lu cal_samples=%lu\r\n"
@@ -1185,6 +1187,8 @@ void Test_Attitude_Update(void)
                       (unsigned int)info.valid,
                       (unsigned int)info.stationary,
                       (unsigned int)info.encoder_used,
+                      (unsigned int)info.encoder_heading_valid,
+                      enc_yaw,
                       enc_rate,
                       (unsigned int)info.mag_available,
                       (unsigned int)info.mag_calibrating,

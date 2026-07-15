@@ -92,6 +92,7 @@ typedef struct {
     /* 驱动上电零偏之后，本融合层继续学习到的残余零偏。 */
     float online_gyro_bias_dps[3];
 
+    float encoder_yaw_deg;
     float encoder_yaw_rate_dps;
     float mag_norm_uT;
     float mag_reference_uT;
@@ -106,6 +107,7 @@ typedef struct {
     uint8_t valid;
     uint8_t stationary;
     uint8_t encoder_used;
+    uint8_t encoder_heading_valid;
     uint8_t mag_available;
     uint8_t mag_healthy;
     uint8_t mag_used;

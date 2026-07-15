@@ -26,6 +26,7 @@ static uint16_t s_stationary_samples;
 static uint16_t s_mag_good_samples;
 static uint8_t s_have_timestamp;
 static uint8_t s_mag_reference_valid;
+static uint8_t s_encoder_heading_valid;
 
 static float Attitude_AbsF(float value)
 {
@@ -236,6 +237,7 @@ static void Attitude_ResetFusionState(void)
     s_info.q[0] = 1.0f;
     s_info.mag_calibrated = mag_calibrated;
     s_encoder_yaw_rad = 0.0f;
+    s_encoder_heading_valid = 1U;
     s_yaw_output_offset_deg = 0.0f;
     s_last_timestamp_ms = 0U;
     s_stationary_samples = 0U;
@@ -291,7 +293,25 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
     uint8_t magnitude_ok;
 
     s_info.mag_available = data->mag_valid;
-    s_info.mag_used = 0U;
+
+    /* These states make the magnetometer definitively unusable. */
+    if ((data->mag_valid == 0U) ||
+        (s_mag_cal.valid == 0U) ||
+        (s_info.mag_calibrating != 0U)) {
+        s_info.mag_healthy = 0U;
+        s_info.mag_used = 0U;
+        s_mag_good_samples = 0U;
+        return 0U;
+    }
+
+    /*
+     * AK09916 and Accel/Gyro do not necessarily update at the same rate.
+     * No fresh sample in this IMU cycle is not a fault: keep the previous
+     * healthy/used state and simply skip magnetometer correction this time.
+     */
+    if (data->mag_updated == 0U) {
+        return 0U;
+    }
 
     raw[0] = data->mag_filtered_uT.x;
     raw[1] = data->mag_filtered_uT.y;
@@ -310,15 +330,6 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
     norm = Attitude_VectorNorm(mag_normalized);
     s_info.mag_norm_uT = norm;
 
-    if ((data->mag_valid == 0U) ||
-        (data->mag_updated == 0U) ||
-        (s_mag_cal.valid == 0U) ||
-        (s_info.mag_calibrating != 0U)) {
-        s_info.mag_healthy = 0U;
-        s_mag_good_samples = 0U;
-        return 0U;
-    }
-
     magnitude_ok = ((norm >= ATTITUDE_MAG_FIELD_MIN_UT) &&
                     (norm <= ATTITUDE_MAG_FIELD_MAX_UT)) ? 1U : 0U;
 
@@ -330,6 +341,7 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
 
     if (magnitude_ok == 0U) {
         s_info.mag_healthy = 0U;
+        s_info.mag_used = 0U;
         s_mag_good_samples = 0U;
         s_info.mag_reject_count++;
         return 0U;
@@ -351,6 +363,8 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
 
     if (Attitude_NormalizeVector(mag_normalized) == 0U) {
         s_info.mag_healthy = 0U;
+        s_info.mag_used = 0U;
+        s_mag_good_samples = 0U;
         return 0U;
     }
     return 1U;
@@ -376,12 +390,15 @@ static void Attitude_AddMagCorrection(const float mag_body[3],
     Attitude_RotateEarthToBody(s_mag_reference_earth, predicted_body);
     if (Attitude_NormalizeVector(predicted_body) == 0U) {
         s_info.mag_healthy = 0U;
+        s_info.mag_used = 0U;
+        s_mag_good_samples = 0U;
         return;
     }
 
     direction_dot = Attitude_Dot(mag_body, predicted_body);
     if (direction_dot < ATTITUDE_MAG_DIRECTION_MIN_DOT) {
         s_info.mag_healthy = 0U;
+        s_info.mag_used = 0U;
         s_mag_good_samples = 0U;
         s_info.mag_reject_count++;
         return;
@@ -493,6 +510,7 @@ BSP_Status_t Attitude_Update(void)
     float gyro_vertical;
     float encoder_error;
     float encoder_rate_rad_s;
+    float fused_yaw_rad;
     float left_mm_s;
     float right_mm_s;
     float dt;
@@ -529,6 +547,9 @@ BSP_Status_t Attitude_Update(void)
         Attitude_EulerToQuaternion(roll, pitch, 0.0f);
         Attitude_UpdateEuler();
         s_encoder_yaw_rad = 0.0f;
+        s_encoder_heading_valid = 1U;
+        s_info.encoder_yaw_deg = 0.0f;
+        s_info.encoder_heading_valid = 1U;
         s_last_timestamp_ms = data.timestamp_ms;
         s_have_timestamp = 1U;
         s_info.timestamp_ms = data.timestamp_ms;
@@ -570,10 +591,34 @@ BSP_Status_t Attitude_Update(void)
     encoder_rate_rad_s = ATTITUDE_ENCODER_YAW_SIGN *
                          ((right_mm_s - left_mm_s) / ATTITUDE_ENCODER_WHEEL_BASE_MM);
     s_info.encoder_yaw_rate_dps = encoder_rate_rad_s * ATTITUDE_RAD_TO_DEG;
-    s_encoder_yaw_rad = Attitude_WrapPi(s_encoder_yaw_rad + encoder_rate_rad_s * dt);
-
     encoder_moving = ((Attitude_AbsF(left_mm_s) + Attitude_AbsF(right_mm_s)) >=
                       ATTITUDE_ENCODER_MOVING_MIN_MM_S) ? 1U : 0U;
+    fused_yaw_rad = Attitude_GetQuaternionYawRad();
+
+    /*
+     * If the body rotates while the wheels are not moving, encoder yaw has
+     * not observed that rotation.  Do not let its stale absolute angle pull
+     * the fused yaw back to the old direction after the body becomes still.
+     */
+    if (s_info.stationary != 0U) {
+        if (s_encoder_heading_valid == 0U) {
+            s_encoder_yaw_rad = fused_yaw_rad;
+            s_encoder_heading_valid = 1U;
+        }
+    } else if (encoder_moving != 0U) {
+        if (s_encoder_heading_valid == 0U) {
+            s_encoder_yaw_rad = fused_yaw_rad;
+        }
+        s_encoder_yaw_rad = Attitude_WrapPi(s_encoder_yaw_rad + encoder_rate_rad_s * dt);
+        s_encoder_heading_valid = 1U;
+    } else {
+        s_encoder_yaw_rad = fused_yaw_rad;
+        s_encoder_heading_valid = 0U;
+    }
+
+    s_info.encoder_yaw_deg = Attitude_Wrap180Deg(
+        s_encoder_yaw_rad * ATTITUDE_RAD_TO_DEG - s_yaw_output_offset_deg);
+    s_info.encoder_heading_valid = s_encoder_heading_valid;
     s_info.encoder_used = ((encoder_moving != 0U) || (s_info.stationary != 0U)) ? 1U : 0U;
 
     if (s_info.encoder_used != 0U) {
@@ -585,10 +630,12 @@ BSP_Status_t Attitude_Update(void)
         correction[2] += ATTITUDE_ENCODER_RATE_BLEND *
                          (encoder_rate_rad_s - gyro_vertical) * gravity[2];
 
-        encoder_error = Attitude_WrapPi(s_encoder_yaw_rad - Attitude_GetQuaternionYawRad());
-        correction[0] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[0];
-        correction[1] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[1];
-        correction[2] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[2];
+        if (s_encoder_heading_valid != 0U) {
+            encoder_error = Attitude_WrapPi(s_encoder_yaw_rad - fused_yaw_rad);
+            correction[0] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[0];
+            correction[1] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[1];
+            correction[2] += ATTITUDE_ENCODER_YAW_KP * encoder_error * gravity[2];
+        }
     }
 
     mag_usable = Attitude_PrepareMagnetometer(&data, mag);
@@ -599,6 +646,7 @@ BSP_Status_t Attitude_Update(void)
                 ATTITUDE_MAG_STALE_TIMEOUT_MS)) {
         s_info.mag_healthy = 0U;
         s_info.mag_used = 0U;
+        s_mag_good_samples = 0U;
     }
 
     angular_rate[0] += correction[0];
