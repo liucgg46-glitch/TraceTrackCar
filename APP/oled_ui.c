@@ -101,6 +101,7 @@ void OledUi_ShowDashboard(void)
     yaw_abs_x10 = (yaw_x10 < 0) ? -yaw_x10 : yaw_x10;
 
     Drv_OledI2c_Clear();
+    Drv_OledI2c_DrawRect(0U, 0U, 128U, 64U, DRV_OLED_COLOR_ON);
 
     if (attitude_ok != 0U) {
         (void)snprintf(text, sizeof(text), "R:%c%ld.%ld P:%c%ld.%ld",
@@ -111,7 +112,7 @@ void OledUi_ShowDashboard(void)
     } else {
         (void)snprintf(text, sizeof(text), "R:WAIT P:WAIT");
     }
-    Drv_OledI2c_DrawString5x7(0U, 1U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(4U, 2U, text, DRV_OLED_COLOR_ON);
 
     if (attitude_ok != 0U) {
         (void)snprintf(text, sizeof(text), "Y:%c%ld.%ld M:%c%c",
@@ -122,21 +123,21 @@ void OledUi_ShowDashboard(void)
     } else {
         (void)snprintf(text, sizeof(text), "Y:WAIT M:--");
     }
-    Drv_OledI2c_DrawString5x7(0U, 11U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
 
     if (line_ok != 0U) {
         (void)snprintf(text, sizeof(text), "LINE:%s %s",
                        (line.state == LINE_FOLLOW_RUN) ? "RUN" : "STOP",
                        OledUi_LineTypeName(line.detect.type));
-        Drv_OledI2c_DrawString5x7(0U, 21U, text, DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "M:%02X E:%d",
                        (unsigned int)line.detect.black_mask,
                        (int)line.detect.error_x1000);
     } else {
-        Drv_OledI2c_DrawString5x7(0U, 21U, "LINE:WAIT", DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 22U, "LINE:WAIT", DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "M:-- E:----");
     }
-    Drv_OledI2c_DrawString5x7(0U, 31U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(4U, 32U, text, DRV_OLED_COLOR_ON);
 
     if (chassis_ok != 0U) {
         (void)snprintf(text, sizeof(text), "T:%d/%d F:%ld/%ld",
@@ -147,7 +148,7 @@ void OledUi_ShowDashboard(void)
     } else {
         (void)snprintf(text, sizeof(text), "T:--/-- F:--/--");
     }
-    Drv_OledI2c_DrawString5x7(0U, 41U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(4U, 42U, text, DRV_OLED_COLOR_ON);
 
     if ((chassis_ok != 0U) && (distance_ok != 0U)) {
         (void)snprintf(text, sizeof(text), "P:%d/%d D:%u",
@@ -161,7 +162,7 @@ void OledUi_ShowDashboard(void)
     } else {
         (void)snprintf(text, sizeof(text), "P:--/-- D:----");
     }
-    Drv_OledI2c_DrawString5x7(0U, 51U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(4U, 52U, text, DRV_OLED_COLOR_ON);
 
     Drv_OledI2c_Flush();
 #endif
