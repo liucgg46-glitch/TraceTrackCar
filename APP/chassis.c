@@ -38,8 +38,6 @@ void Chassis_Init(void)
     cfg.integral_max =  CHASSIS_SPEED_PID_I_MAX;
 
     Motor_Init();
-    Drv_Encoder_Init();
-
     PID_Init(&s_pid_fl, &cfg);
     PID_Init(&s_pid_fr, &cfg);
 #if (VEHICLE_REAR_DRIVE_ENABLE != 0U)

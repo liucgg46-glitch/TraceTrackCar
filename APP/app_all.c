@@ -9,6 +9,7 @@
 #include "line_follow_app.h"
 #include "lcd_ui.h"
 #include "oled_ui.h"
+#include "k210_comm.h"
 
 void App_Init(void)
 {
@@ -23,7 +24,6 @@ void App_Init(void)
      /* 这里只请求显示启动页，不重新初始化 LCD/OLED 驱动 */
     //LcdUi_ShowBoot();
     //OledUi_ShowBoot();
-	 /*
     /*
      * 初始化K210通信协议层。
      *
@@ -31,6 +31,10 @@ void App_Init(void)
      * 这里只初始化协议状态机。
      */
     K210_Comm_Init();
-	//LineFollow_Start();
+
+    /*
+     * Do not auto-start motors here. LineFollow_Start() is called only by a
+     * later task/state transition after Sensor_IsImuReadyForMotion() is true.
+     */
 }
 

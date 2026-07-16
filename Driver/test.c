@@ -1201,14 +1201,17 @@ void Test_Attitude_Update(void)
     static uint32_t last_log_ms = 0U;
     Attitude_Info_t info;
     Sensor_Attitude_t sensor_attitude;
+    Drv_ICM20948_Info_t imu_info;
     Attitude_MagCalibration_t calibration;
     BSP_Status_t calibration_status;
     uint8_t ch;
     char line[500];
     char response[220];
     char roll[20], pitch[20], yaw[20];
-    char enc_yaw[20], enc_rate[20], mag_norm[20], mag_ref[20];
-    char bx[20], by[20], bz[20];
+    char startup_bx[20], startup_by[20], startup_bz[20];
+    char online_bx[20], online_by[20], online_bz[20];
+    char cal_gyro_max[20], cal_accel_norm[20];
+    char mag_norm[20];
     int length;
 
     /*
@@ -1216,7 +1219,16 @@ void Test_Attitude_Update(void)
      *   M：开始磁力计标定；N：完成标定；Y：把当前融合航向设为相对零点。
      */
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
-        if (ch == 'M') {
+        if (ch == 'G') {
+            Chassis_Stop();
+            Drv_ICM20948_StartGyroCalibration();
+            Attitude_Reset();
+            Heading_Reset();
+            (void)BSP_UART_WriteFrame(
+                UART_PORT1,
+                (const uint8_t *)"gyro calibration RESTARTED: keep the vehicle completely still\r\n",
+                (uint16_t)(sizeof("gyro calibration RESTARTED: keep the vehicle completely still\r\n") - 1U));
+        } else if (ch == 'M') {
             Attitude_MagCalibrationStart();
             (void)BSP_UART_WriteFrame(
                 UART_PORT1,
@@ -1250,8 +1262,8 @@ void Test_Attitude_Update(void)
             Heading_Reset();
             (void)BSP_UART_WriteFrame(
                 UART_PORT1,
-                (const uint8_t *)"fused yaw zeroed\r\n",
-                (uint16_t)(sizeof("fused yaw zeroed\r\n") - 1U));
+                (const uint8_t *)"gyro yaw zeroed\r\n",
+                (uint16_t)(sizeof("gyro yaw zeroed\r\n") - 1U));
         }
     }
 
@@ -1261,9 +1273,40 @@ void Test_Attitude_Update(void)
     }
 
     /* 角度只通过 SensorManager 公共接口读取；Info 仅补充测试诊断计数。 */
+    if (Drv_ICM20948_GetInfo(&imu_info) != BSP_OK) {
+        Test_ICM20948_Print("\r\nIMU INFO unavailable\r\n");
+        return;
+    }
+    Test_FormatFixed(cal_gyro_max, sizeof(cal_gyro_max),
+                     (long)(imu_info.gyro_cal_last_max_abs_dps * 100.0f), 100UL, 2U);
+    Test_FormatFixed(cal_accel_norm, sizeof(cal_accel_norm),
+                     (long)(imu_info.gyro_cal_last_accel_norm_g * 100.0f), 100UL, 2U);
+
+    /* Before attitude becomes valid, show why motion is still interlocked. */
     if ((Sensor_GetAttitude(&sensor_attitude) != BSP_OK) ||
         (Attitude_GetInfo(&info) != BSP_OK)) {
-        Test_ICM20948_Print("\r\nATTITUDE: waiting for valid IMU data\r\n");
+        length = snprintf(line,
+                          sizeof(line),
+                          "\r\n========== GYRO ATTITUDE TEST ==========\r\n"
+                          "WAITING: keep vehicle completely still; motors are disabled\r\n"
+                          "imu state=%u online/init/run/cal/data=%u/%u/%u/%u/%u\r\n"
+                          "gyro calibration samples=%u/%u (must reach the full count)\r\n"
+                          "last max gyro=%s dps accel norm=%s g reject=%lu\r\n"
+                          "command G=restart gyro calibration\r\n",
+                          (unsigned int)imu_info.state,
+                          (unsigned int)imu_info.online,
+                          (unsigned int)imu_info.initialized,
+                          (unsigned int)imu_info.running,
+                          (unsigned int)imu_info.calibrating,
+                          (unsigned int)imu_info.data_valid,
+                          (unsigned int)imu_info.gyro_cal_samples,
+                          (unsigned int)DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT,
+                          cal_gyro_max,
+                          cal_accel_norm,
+                          (unsigned long)imu_info.gyro_cal_reject_count);
+        if ((length > 0) && (length < (int)sizeof(line))) {
+            Test_ICM20948_Print(line);
+        }
         return;
     }
 
@@ -1273,49 +1316,50 @@ void Test_Attitude_Update(void)
                      (long)(sensor_attitude.pitch_deg * 100.0f), 100UL, 2U);
     Test_FormatFixed(yaw, sizeof(yaw),
                      (long)(sensor_attitude.yaw_deg * 100.0f), 100UL, 2U);
-    Test_FormatFixed(enc_yaw, sizeof(enc_yaw),
-                     (long)(info.encoder_yaw_deg * 100.0f), 100UL, 2U);
-    Test_FormatFixed(enc_rate, sizeof(enc_rate),
-                     (long)(info.encoder_yaw_rate_dps * 100.0f), 100UL, 2U);
+    Test_FormatFixed(startup_bx, sizeof(startup_bx),
+                     (long)(imu_info.gyro_bias_dps.x * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(startup_by, sizeof(startup_by),
+                     (long)(imu_info.gyro_bias_dps.y * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(startup_bz, sizeof(startup_bz),
+                     (long)(imu_info.gyro_bias_dps.z * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(online_bx, sizeof(online_bx),
+                     (long)(info.online_gyro_bias_dps[0] * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(online_by, sizeof(online_by),
+                     (long)(info.online_gyro_bias_dps[1] * 1000.0f), 1000UL, 3U);
+    Test_FormatFixed(online_bz, sizeof(online_bz),
+                     (long)(info.online_gyro_bias_dps[2] * 1000.0f), 1000UL, 3U);
     Test_FormatFixed(mag_norm, sizeof(mag_norm),
                      (long)(info.mag_norm_uT * 100.0f), 100UL, 2U);
-    Test_FormatFixed(mag_ref, sizeof(mag_ref),
-                     (long)(info.mag_reference_uT * 100.0f), 100UL, 2U);
-    Test_FormatFixed(bx, sizeof(bx),
-                     (long)(info.online_gyro_bias_dps[0] * 1000.0f), 1000UL, 3U);
-    Test_FormatFixed(by, sizeof(by),
-                     (long)(info.online_gyro_bias_dps[1] * 1000.0f), 1000UL, 3U);
-    Test_FormatFixed(bz, sizeof(bz),
-                     (long)(info.online_gyro_bias_dps[2] * 1000.0f), 1000UL, 3U);
 
     length = snprintf(line,
                       sizeof(line),
-                      "\r\n========== ATTITUDE FUSION ==========\r\n"
+                      "\r\n========== GYRO ATTITUDE TEST ==========\r\n"
                       "angle roll=%s pitch=%s yaw=%s deg\r\n"
-                      "state valid=%u stationary=%u encoder_used/valid=%u/%u enc_yaw=%s deg enc_rate=%s dps\r\n"
-                      "mag available/calibrating/calibrated/healthy/used=%u/%u/%u/%u/%u norm=%s ref=%s uT\r\n"
-                      "online bias X=%s Y=%s Z=%s dps\r\n"
-                      "count update=%lu mag_accept=%lu mag_reject=%lu cal_samples=%lu\r\n"
-                      "command M=start mag cal, N=finish mag cal, Y=zero yaw\r\n",
+                      "mode yaw=GYRO+MAG encoder=0 mag_slow_kp_x100=%ld\r\n"
+                      "imu ready=%u init/run/cal/data=%u/%u/%u/%u samples=%u/%u\r\n"
+                      "bias startup=%s,%s,%s online=%s,%s,%s dps\r\n"
+                      "mag available/calibrated/healthy/used=%u/%u/%u/%u norm=%s uT\r\n"
+                      "state valid=%u stationary=%u update=%lu\r\n"
+                      "command G=restart gyro cal, Y=zero yaw\r\n",
                       roll, pitch, yaw,
-                      (unsigned int)info.valid,
-                      (unsigned int)info.stationary,
-                      (unsigned int)info.encoder_used,
-                      (unsigned int)info.encoder_heading_valid,
-                      enc_yaw,
-                      enc_rate,
+                      (long)(ATTITUDE_MAHONY_MAG_KP * 100.0f),
+                      (unsigned int)Sensor_IsImuReadyForMotion(),
+                      (unsigned int)imu_info.initialized,
+                      (unsigned int)imu_info.running,
+                      (unsigned int)imu_info.calibrating,
+                      (unsigned int)imu_info.data_valid,
+                      (unsigned int)imu_info.gyro_cal_samples,
+                      (unsigned int)DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT,
+                      startup_bx, startup_by, startup_bz,
+                      online_bx, online_by, online_bz,
                       (unsigned int)info.mag_available,
-                      (unsigned int)info.mag_calibrating,
                       (unsigned int)info.mag_calibrated,
                       (unsigned int)info.mag_healthy,
                       (unsigned int)info.mag_used,
                       mag_norm,
-                      mag_ref,
-                      bx, by, bz,
-                      (unsigned long)info.update_count,
-                      (unsigned long)info.mag_accept_count,
-                      (unsigned long)info.mag_reject_count,
-                      (unsigned long)info.mag_calibration_samples);
+                      (unsigned int)info.valid,
+                      (unsigned int)info.stationary,
+                      (unsigned long)info.update_count);
 
     if ((length > 0) && (length < (int)sizeof(line))) {
         Test_ICM20948_Print(line);

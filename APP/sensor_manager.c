@@ -32,6 +32,28 @@ void Sensor_Update(void)
     (void)Drv_GraySensor_Update();
 }
 
+uint8_t Sensor_IsImuReadyForMotion(void)
+{
+    Drv_ICM20948_Info_t info;
+
+    if (Drv_ICM20948_GetInfo(&info) != BSP_OK) {
+        return 0U;
+    }
+    if ((info.initialized == 0U) ||
+        (info.running == 0U) ||
+        (info.calibrating != 0U) ||
+        (info.data_valid == 0U) ||
+        (Attitude_IsValid() == 0U)) {
+        return 0U;
+    }
+#if (DRV_ICM20948_GYRO_CAL_ENABLE != 0U)
+    if (info.gyro_cal_samples < DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT) {
+        return 0U;
+    }
+#endif
+    return 1U;
+}
+
 BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm)
 {
     /* 明确检查上层传入的输出指针，避免空指针写入。 */

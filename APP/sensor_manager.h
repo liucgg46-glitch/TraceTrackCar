@@ -43,6 +43,13 @@ void SensorManager_Init(void);
 void Sensor_Update(void);
 
 /*
+ * Returns 1 only after the IMU is running, all startup gyro-calibration
+ * samples have been accepted, and the attitude estimator has valid output.
+ * Motor/route code can use this as the common startup interlock.
+ */
+uint8_t Sensor_IsImuReadyForMotion(void);
+
+/*
  * 姿态角使用一个结构体一次性复制，保证 Roll/Pitch/Yaw 来自同一帧融合结果。
  * 上层不需要包含 ICM20948 或 Mahony 的头文件，也不需要主动调用更新函数。
  */
@@ -90,6 +97,7 @@ BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm);
  *
  * @note 本函数不访问 SPI、不推进融合状态机，只复制后台缓存。
  */
+/* Current policy: Roll/Pitch use gyro+accel; Yaw uses gyro Z + slow mag correction. */
 BSP_Status_t Sensor_GetAttitude(Sensor_Attitude_t *attitude);
 
 #ifdef __cplusplus

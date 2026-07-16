@@ -22,16 +22,22 @@ extern "C" {
 /* 加速度计对 Roll/Pitch 的 Mahony 比例反馈，越大收敛越快。 */
 #define ATTITUDE_MAHONY_ACCEL_KP                 2.0f
 
+/*
+ * Yaw source policy:
+ *   - Roll/Pitch keep using gyro + accelerometer Mahony correction.
+ *   - Yaw uses calibrated gyro Z integration plus slow magnetometer feedback.
+ *   - Encoder heading/rate never participates in attitude estimation.
+ */
+#define ATTITUDE_SEPARATE_YAW_ENABLE              1U
+#define ATTITUDE_ENCODER_YAW_CORRECTION_ENABLE    0U
+#define ATTITUDE_MAG_YAW_CORRECTION_ENABLE        1U
+#define ATTITUDE_MAG_DISABLE_WHEN_MOTOR_ACTIVE    1U
+#define ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE    5
+
 /* 磁力计只用于绕重力方向的慢速 Yaw 修正。 */
-#define ATTITUDE_MAHONY_MAG_KP                   0.12f
+#define ATTITUDE_MAHONY_MAG_KP                   0.05f
 
 /* 编码器航向角/角速度对陀螺仪 Yaw 的约束。 */
-#define ATTITUDE_ENCODER_YAW_KP                  0.65f
-#define ATTITUDE_ENCODER_RATE_BLEND              0.12f
-#define ATTITUDE_ENCODER_WHEEL_BASE_MM         165.0f
-#define ATTITUDE_ENCODER_YAW_SIGN                1.0f
-#define ATTITUDE_ENCODER_MOVING_MIN_MM_S          8.0f
-
 /* 合法积分周期，超出范围时使用标称周期，避免停顿后一次积分过大。 */
 #define ATTITUDE_NOMINAL_DT_S                     0.00978f
 #define ATTITUDE_MIN_DT_S                         0.002f
@@ -44,9 +50,8 @@ extern "C" {
 /* 静止检测与运行中残余零偏更新。 */
 #define ATTITUDE_STATIONARY_ACCEL_MIN_G           0.97f
 #define ATTITUDE_STATIONARY_ACCEL_MAX_G           1.03f
-#define ATTITUDE_STATIONARY_GYRO_MAX_DPS          1.20f
-#define ATTITUDE_STATIONARY_ENCODER_MAX_MM_S      5.0f
-#define ATTITUDE_STATIONARY_SAMPLE_COUNT         50U
+#define ATTITUDE_STATIONARY_GYRO_MAX_DPS          0.35f
+#define ATTITUDE_STATIONARY_SAMPLE_COUNT        100U
 #define ATTITUDE_ONLINE_BIAS_ALPHA                0.005f
 #define ATTITUDE_ONLINE_BIAS_MAX_DPS              5.0f
 
@@ -54,12 +59,13 @@ extern "C" {
 
 /*
  * 这些默认值可以在完成一次旋转标定后填入，之后上电即可直接启用磁力计。
- * 默认 VALID=0：未标定磁力计不会参与 Yaw，防止硬铁偏置造成错误航向。
+ * These values are the result previously printed by this vehicle's M/N test.
+ * Recalibrate after changing the IMU, mounting direction or vehicle assembly.
  */
 #define ATTITUDE_MAG_CAL_DEFAULT_VALID             1U
 #define ATTITUDE_MAG_CAL_OFFSET_X_UT             -43.05f
-#define ATTITUDE_MAG_CAL_OFFSET_Y_UT             -30.75f
-#define ATTITUDE_MAG_CAL_OFFSET_Z_UT               4.35f
+#define ATTITUDE_MAG_CAL_OFFSET_Y_UT              30.75f
+#define ATTITUDE_MAG_CAL_OFFSET_Z_UT              -4.35f
 #define ATTITUDE_MAG_CAL_SCALE_X                   1.004f
 #define ATTITUDE_MAG_CAL_SCALE_Y                   0.973f
 #define ATTITUDE_MAG_CAL_SCALE_Z                   1.022f
@@ -71,10 +77,10 @@ extern "C" {
 /* 磁场异常门控：绝对强度、相对基准变化和方向突变。 */
 #define ATTITUDE_MAG_FIELD_MIN_UT                 15.0f
 #define ATTITUDE_MAG_FIELD_MAX_UT                100.0f
-#define ATTITUDE_MAG_FIELD_REL_TOLERANCE           0.30f
+#define ATTITUDE_MAG_FIELD_REL_TOLERANCE           0.15f
 #define ATTITUDE_MAG_REFERENCE_ALPHA               0.002f
 #define ATTITUDE_MAG_ACQUIRE_SAMPLES              10U
-#define ATTITUDE_MAG_DIRECTION_MIN_DOT             0.50f
+#define ATTITUDE_MAG_DIRECTION_MIN_DOT             0.85f
 #define ATTITUDE_MAG_STALE_TIMEOUT_MS             250U
 
 typedef struct {

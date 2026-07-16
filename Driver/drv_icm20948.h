@@ -141,8 +141,9 @@ extern "C" {
  */
 #define DRV_ICM20948_GYRO_CAL_ENABLE              1U
 #define DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT      200U
+#define DRV_ICM20948_GYRO_CAL_MIN_SAMPLES       DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT
 #define DRV_ICM20948_GYRO_CAL_TIMEOUT_MS        6000U
-#define DRV_ICM20948_GYRO_CAL_MAX_DPS             3.0f
+#define DRV_ICM20948_GYRO_CAL_MAX_DPS             6.0f
 #define DRV_ICM20948_GYRO_CAL_ACCEL_MIN_G         0.80f
 #define DRV_ICM20948_GYRO_CAL_ACCEL_MAX_G         1.20f
 
@@ -332,6 +333,9 @@ typedef struct {
 
     uint16_t gyro_cal_samples;
     Drv_ICM20948_Vector3f_t gyro_bias_dps;
+    float gyro_cal_last_max_abs_dps;
+    float gyro_cal_last_accel_norm_g;
+    uint32_t gyro_cal_reject_count;
 } Drv_ICM20948_Info_t;
 
 /* ============================== 公共接口 ================================== */

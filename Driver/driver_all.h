@@ -14,7 +14,6 @@ extern "C" {
  *
  * 当前包含：
  *   - Motor_Init()
- *   - Drv_Encoder_Init()
  *   - Drv_GraySensor_Init()
  *   - Drv_VL53L1X_Init()
  *   - Drv_ICM20948_Init()

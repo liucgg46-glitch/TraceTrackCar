@@ -5,6 +5,7 @@
 #include "line_track.h"
 #include "chassis.h"
 #include "route_manager.h"
+#include "sensor_manager.h"
 
 static LineFollow_Info_t s_lf;
 
@@ -24,6 +25,11 @@ void LineFollow_Init(void)
 
 void LineFollow_Start(void)
 {
+    if (Sensor_IsImuReadyForMotion() == 0U) {
+        s_lf.state = LINE_FOLLOW_STOP;
+        Chassis_Stop();
+        return;
+    }
     s_lf.state = LINE_FOLLOW_RUN;
 }
 
@@ -37,6 +43,12 @@ void LineFollow_Update(void)
 {
     const LineDetect_Result_t *res;
 
+    if ((s_lf.state == LINE_FOLLOW_RUN) &&
+        (Sensor_IsImuReadyForMotion() == 0U)) {
+        LineFollow_Stop();
+        return;
+    }
+
     if (Drv_GraySensor_IsOnline() == 0U) {
         return;
     }
@@ -47,9 +59,9 @@ void LineFollow_Update(void)
        s_lf.detect = *res;
 
     /*
-     * Ö»Í¨¹ı RouteManager Êä³ö¡£
-     * µ±Ç° ROUTE_PROFILE_BASIC ÄÚ²¿»áµ÷ÓÃ LineTrack_Compute¡£
-     * ÒÔºóÇĞ»»µ½ HJduino ×´Ì¬»ú£¬Ò²´ÓÕâÀïÍ³Ò»½Ó¹Ü¡£
+     * åªé€šè¿‡ RouteManager è¾“å‡ºã€‚
+     * å½“å‰ ROUTE_PROFILE_BASIC å†…éƒ¨ä¼šè°ƒç”¨ LineTrack_Computeã€‚
+     * ä»¥ååˆ‡æ¢åˆ° HJduino çŠ¶æ€æœºï¼Œä¹Ÿä»è¿™é‡Œç»Ÿä¸€æ¥ç®¡ã€‚
      */
     RouteManager_Update(res, &s_lf.output);
 

@@ -1,6 +1,7 @@
 #include "drv_icm20948.h"
 
 #include "bsp_systick.h"
+#include <math.h>
 #include <string.h>
 
 /* ============================== 寄存器定义 ================================ */
@@ -66,8 +67,6 @@
 
 #define ICM20948_BURST_DATA_LEN                23U
 #define ICM20948_INVALID_BANK                  0xFFU
-#define ICM20948_GYRO_CAL_MIN_SAMPLES          10U
-
 #if (DRV_ICM20948_ACCEL_FS_SEL > 3U)
 #error "DRV_ICM20948_ACCEL_FS_SEL must be 0..3"
 #endif
@@ -821,15 +820,20 @@ static BSP_Status_t ICM20948_ReadFreshSample(void)
 
 static uint8_t ICM20948_IsCalibrationSampleStable(void)
 {
+    float gyro_abs_x;
+    float gyro_abs_y;
+    float gyro_abs_z;
+    float gyro_abs_max;
     float accel_norm_sq;
     float accel_min_sq;
     float accel_max_sq;
 
-    if ((ICM20948_AbsF(s_data.gyro_dps.x + s_info.gyro_bias_dps.x) > DRV_ICM20948_GYRO_CAL_MAX_DPS) ||
-        (ICM20948_AbsF(s_data.gyro_dps.y + s_info.gyro_bias_dps.y) > DRV_ICM20948_GYRO_CAL_MAX_DPS) ||
-        (ICM20948_AbsF(s_data.gyro_dps.z + s_info.gyro_bias_dps.z) > DRV_ICM20948_GYRO_CAL_MAX_DPS)) {
-        return 0U;
-    }
+    gyro_abs_x = ICM20948_AbsF(s_data.gyro_dps.x + s_info.gyro_bias_dps.x);
+    gyro_abs_y = ICM20948_AbsF(s_data.gyro_dps.y + s_info.gyro_bias_dps.y);
+    gyro_abs_z = ICM20948_AbsF(s_data.gyro_dps.z + s_info.gyro_bias_dps.z);
+    gyro_abs_max = gyro_abs_x;
+    if (gyro_abs_y > gyro_abs_max) gyro_abs_max = gyro_abs_y;
+    if (gyro_abs_z > gyro_abs_max) gyro_abs_max = gyro_abs_z;
 
     accel_norm_sq = s_data.accel_g.x * s_data.accel_g.x +
                     s_data.accel_g.y * s_data.accel_g.y +
@@ -837,20 +841,29 @@ static uint8_t ICM20948_IsCalibrationSampleStable(void)
     accel_min_sq = DRV_ICM20948_GYRO_CAL_ACCEL_MIN_G * DRV_ICM20948_GYRO_CAL_ACCEL_MIN_G;
     accel_max_sq = DRV_ICM20948_GYRO_CAL_ACCEL_MAX_G * DRV_ICM20948_GYRO_CAL_ACCEL_MAX_G;
 
+    s_info.gyro_cal_last_max_abs_dps = gyro_abs_max;
+    s_info.gyro_cal_last_accel_norm_g = sqrtf(accel_norm_sq);
+
+    if (gyro_abs_max > DRV_ICM20948_GYRO_CAL_MAX_DPS) {
+        return 0U;
+    }
+
     return ((accel_norm_sq >= accel_min_sq) && (accel_norm_sq <= accel_max_sq)) ? 1U : 0U;
 }
 
 static void ICM20948_FinishGyroCalibration(void)
 {
-    if (s_info.gyro_cal_samples >= ICM20948_GYRO_CAL_MIN_SAMPLES) {
-        s_info.gyro_bias_dps.x = s_gyro_cal_sum[0] / (float)s_info.gyro_cal_samples;
-        s_info.gyro_bias_dps.y = s_gyro_cal_sum[1] / (float)s_info.gyro_cal_samples;
-        s_info.gyro_bias_dps.z = s_gyro_cal_sum[2] / (float)s_info.gyro_cal_samples;
-    } else {
-        s_info.gyro_bias_dps.x = 0.0f;
-        s_info.gyro_bias_dps.y = 0.0f;
-        s_info.gyro_bias_dps.z = 0.0f;
+    /* Never accept a partial or timed-out calibration result. */
+    if (s_info.gyro_cal_samples < DRV_ICM20948_GYRO_CAL_MIN_SAMPLES) {
+        memset(s_gyro_cal_sum, 0, sizeof(s_gyro_cal_sum));
+        s_info.gyro_cal_samples = 0U;
+        s_gyro_cal_start_ms = BSP_GET_TICK();
+        return;
     }
+
+    s_info.gyro_bias_dps.x = s_gyro_cal_sum[0] / (float)s_info.gyro_cal_samples;
+    s_info.gyro_bias_dps.y = s_gyro_cal_sum[1] / (float)s_info.gyro_cal_samples;
+    s_info.gyro_bias_dps.z = s_gyro_cal_sum[2] / (float)s_info.gyro_cal_samples;
 
     s_info.calibrating = 0U;
     s_info.initialized = 1U;
@@ -1101,9 +1114,14 @@ void Drv_ICM20948_StartGyroCalibration(void)
 #if (DRV_ICM20948_ENABLE != 0U)
     memset(s_gyro_cal_sum, 0, sizeof(s_gyro_cal_sum));
     s_info.gyro_cal_samples = 0U;
+    s_info.gyro_cal_last_max_abs_dps = 0.0f;
+    s_info.gyro_cal_last_accel_norm_g = 0.0f;
+    s_info.gyro_cal_reject_count = 0U;
     s_info.gyro_bias_dps.x = 0.0f;
     s_info.gyro_bias_dps.y = 0.0f;
     s_info.gyro_bias_dps.z = 0.0f;
+    s_info.initialized = 0U;
+    s_info.running = 0U;
     s_info.calibrating = 1U;
     s_info.data_valid = 0U;
     s_data.accel_gyro_valid = 0U;
@@ -1508,7 +1526,9 @@ BSP_Status_t Drv_ICM20948_Update(void)
             status = ICM20948_ReadFreshSample();
             if (status == BSP_BUSY) {
                 if ((now - s_gyro_cal_start_ms) >= DRV_ICM20948_GYRO_CAL_TIMEOUT_MS) {
-                    ICM20948_FinishGyroCalibration();
+                    memset(s_gyro_cal_sum, 0, sizeof(s_gyro_cal_sum));
+                    s_info.gyro_cal_samples = 0U;
+                    s_gyro_cal_start_ms = now;
                 }
                 return BSP_BUSY;
             }
@@ -1520,11 +1540,16 @@ BSP_Status_t Drv_ICM20948_Update(void)
                 s_gyro_cal_sum[1] += s_data.gyro_dps.y;
                 s_gyro_cal_sum[2] += s_data.gyro_dps.z;
                 s_info.gyro_cal_samples++;
+            } else {
+                s_info.gyro_cal_reject_count++;
             }
 
-            if ((s_info.gyro_cal_samples >= DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT) ||
-                ((now - s_gyro_cal_start_ms) >= DRV_ICM20948_GYRO_CAL_TIMEOUT_MS)) {
+            if (s_info.gyro_cal_samples >= DRV_ICM20948_GYRO_CAL_SAMPLE_COUNT) {
                 ICM20948_FinishGyroCalibration();
+            } else if ((now - s_gyro_cal_start_ms) >= DRV_ICM20948_GYRO_CAL_TIMEOUT_MS) {
+                memset(s_gyro_cal_sum, 0, sizeof(s_gyro_cal_sum));
+                s_info.gyro_cal_samples = 0U;
+                s_gyro_cal_start_ms = now;
             }
             return BSP_OK;
 
