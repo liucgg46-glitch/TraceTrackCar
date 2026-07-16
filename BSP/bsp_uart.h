@@ -75,34 +75,56 @@ extern "C" {
 #define UART_PORT1_DMA_TX_IRQ_HANDLER DMA2_Stream7_IRQHandler
 
 /* ---------------------------------------------------------------------------
- * UART_PORT2: USART2, PD5(TX), PD6(RX), DMA1 Stream6(TX), DMA1 Stream5(RX)
+ * UART_PORT2: USART2
+ *
+ * PA2 -> USART2_TX
+ * PA3 -> USART2_RX
+ *
+ * DMA:
+ * USART2_RX -> DMA1 Stream5 Channel4
+ * USART2_TX -> DMA1 Stream6 Channel4
  * ------------------------------------------------------------------------- */
-#define UART_PORT2_ENABLE             1
-#define UART_PORT2_PERIPH             USART2
-#define UART_PORT2_PERIPH_CLOCK_FN    RCC_APB1PeriphClockCmd
-#define UART_PORT2_PERIPH_CLOCK_MASK  RCC_APB1Periph_USART2
-#define UART_PORT2_DMA_RCC_MASK       RCC_AHB1Periph_DMA1
-#define UART_PORT2_BAUDRATE           115200UL
-#define UART_PORT2_WORD_LENGTH        USART_WordLength_8b
-#define UART_PORT2_STOP_BITS          USART_StopBits_1
-#define UART_PORT2_PARITY             USART_Parity_No
-#define UART_PORT2_FLOW_CONTROL       USART_HardwareFlowControl_None
-#define UART_PORT2_TX_GPIO_PORT       GPIOD
-#define UART_PORT2_TX_PIN             GPIO_Pin_5
-#define UART_PORT2_TX_PINSRC          GPIO_PinSource5
-#define UART_PORT2_RX_GPIO_PORT       GPIOD
-#define UART_PORT2_RX_PIN             GPIO_Pin_6
-#define UART_PORT2_RX_PINSRC          GPIO_PinSource6
-#define UART_PORT2_AF                 GPIO_AF_USART2
-#define UART_PORT2_DMA_RX_STREAM      DMA1_Stream5
-#define UART_PORT2_DMA_RX_STREAM_NUM  5
-#define UART_PORT2_DMA_TX_STREAM      DMA1_Stream6
-#define UART_PORT2_DMA_TX_STREAM_NUM  6
-#define UART_PORT2_DMA_CHANNEL        DMA_Channel_4
-#define UART_PORT2_IRQn               USART2_IRQn
-#define UART_PORT2_DMA_TX_IRQn        DMA1_Stream6_IRQn
-#define UART_PORT2_IRQ_HANDLER        USART2_IRQHandler
-#define UART_PORT2_DMA_TX_IRQ_HANDLER DMA1_Stream6_IRQHandler
+#define UART_PORT2_ENABLE                1
+
+#define UART_PORT2_PERIPH                USART2
+#define UART_PORT2_PERIPH_CLOCK_FN       RCC_APB1PeriphClockCmd
+#define UART_PORT2_PERIPH_CLOCK_MASK     RCC_APB1Periph_USART2
+
+#define UART_PORT2_DMA_RCC_MASK          RCC_AHB1Periph_DMA1
+
+#define UART_PORT2_BAUDRATE              115200UL
+#define UART_PORT2_WORD_LENGTH           USART_WordLength_8b
+#define UART_PORT2_STOP_BITS             USART_StopBits_1
+#define UART_PORT2_PARITY                USART_Parity_No
+#define UART_PORT2_FLOW_CONTROL          USART_HardwareFlowControl_None
+
+/* USART2发送引脚：PA2 */
+#define UART_PORT2_TX_GPIO_PORT          GPIOA
+#define UART_PORT2_TX_PIN                GPIO_Pin_2
+#define UART_PORT2_TX_PINSRC             GPIO_PinSource2
+
+/* USART2接收引脚：PA3 */
+#define UART_PORT2_RX_GPIO_PORT          GPIOA
+#define UART_PORT2_RX_PIN                GPIO_Pin_3
+#define UART_PORT2_RX_PINSRC             GPIO_PinSource3
+
+#define UART_PORT2_AF                    GPIO_AF_USART2
+
+/* USART2_RX：DMA1 Stream5 Channel4 */
+#define UART_PORT2_DMA_RX_STREAM         DMA1_Stream5
+#define UART_PORT2_DMA_RX_STREAM_NUM     5
+
+/* USART2_TX：DMA1 Stream6 Channel4 */
+#define UART_PORT2_DMA_TX_STREAM         DMA1_Stream6
+#define UART_PORT2_DMA_TX_STREAM_NUM     6
+
+#define UART_PORT2_DMA_CHANNEL           DMA_Channel_4
+
+#define UART_PORT2_IRQn                  USART2_IRQn
+#define UART_PORT2_DMA_TX_IRQn           DMA1_Stream6_IRQn
+
+#define UART_PORT2_IRQ_HANDLER           USART2_IRQHandler
+#define UART_PORT2_DMA_TX_IRQ_HANDLER    DMA1_Stream6_IRQHandler
 
 /* ---------------------------------------------------------------------------
  * 下面是常用备用通道模板，默认关闭。启用前请按芯片手册核对引脚复用、

@@ -5,6 +5,7 @@
 #include "app_task_port.h"
 #include "motion_action.h"
 #include "test.h"
+#include "k210_comm.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,13 +32,15 @@ extern "C" {
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
-	{ Test_GPIO_Toggle,       10U,   0U },                                          \
-    { AppTask_BSP_Background,  1U,   0U },  /* B：BSP 后台维护 */                   \
-    { Sensor_Update,          1U,   0U },  \
-    { Encoder_Update,        10U,   0U },  \
-    { LineTrack_Update,      10U,   0U },  \
-    { Chassis_Update,        10U,   0U },  \
-	{ Test_Attitude_Update,   10U,   0U },  /* 内部每500ms打印；10ms轮询标定命令 */ \
+    { Test_GPIO_Toggle,         10U,  0U },                                         \
+    { AppTask_BSP_Background,    1U,  0U },                                         \
+    { Sensor_Update,             1U,  0U },                                         \
+    { Encoder_Update,           10U,  0U },                                         \
+    { LineTrack_Update,         10U,  0U },                                         \
+    { Chassis_Update,           10U,  0U },                                         \
+    { K210_Comm_Update,          5U,  0U },                                         \
+		/*{ Test_K210_CommUpdate, 20U, 0U },   */                                            \
+    /* { Test_Attitude_Update,  10U,  0U }, */                                      \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 
