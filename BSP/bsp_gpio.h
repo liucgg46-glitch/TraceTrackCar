@@ -207,6 +207,16 @@ extern "C" {
 #define BSP_GPIO_CH16_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH16_INIT_LEVEL     1U
 
+/* CH17: laser enable in both drive modes, PG2 push-pull, default OFF. */
+#define BSP_GPIO_CH17_ENABLE         1
+#define BSP_GPIO_CH17_PORT           GPIOG
+#define BSP_GPIO_CH17_PIN            GPIO_Pin_2
+#define BSP_GPIO_CH17_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH17_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH17_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH17_SPEED          GPIO_Speed_50MHz
+#define BSP_GPIO_CH17_INIT_LEVEL     0U
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -257,6 +267,9 @@ typedef enum {
 #if BSP_GPIO_CH16_ENABLE
     BSP_GPIO_CH16,
 #endif
+#if BSP_GPIO_CH17_ENABLE
+    BSP_GPIO_CH17,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -273,6 +286,8 @@ typedef enum {
 
 /* ICM-20948 SPI2 independent chip-select alias. */
 #define BSP_GPIO_ICM20948_CS BSP_GPIO_CH16
+
+#define BSP_GPIO_LASER_EN    BSP_GPIO_CH17
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

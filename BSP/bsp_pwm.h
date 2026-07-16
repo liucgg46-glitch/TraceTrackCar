@@ -87,6 +87,35 @@ extern "C" {
 #define BSP_PWM_CH4_INIT_COMPARE          0U
 #define BSP_PWM_CH4_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
 
+/* Gimbal servos: enabled in both 2WD and 4WD modes, 50 Hz output. */
+#define BSP_PWM_CH5_ENABLE                1
+#define BSP_PWM_CH5_TIM                   TIM13
+#define BSP_PWM_CH5_TIM_CLOCK_FN          RCC_APB1PeriphClockCmd
+#define BSP_PWM_CH5_TIM_CLOCK_MASK        RCC_APB1Periph_TIM13
+#define BSP_PWM_CH5_GPIO_PORT             GPIOF
+#define BSP_PWM_CH5_GPIO_PIN              GPIO_Pin_8
+#define BSP_PWM_CH5_GPIO_PINSRC           GPIO_PinSource8
+#define BSP_PWM_CH5_GPIO_AF               GPIO_AF_TIM13
+#define BSP_PWM_CH5_CHANNEL               1U
+#define BSP_PWM_CH5_PRESCALER             (84U - 1U)
+#define BSP_PWM_CH5_PERIOD                (20000U - 1U)
+#define BSP_PWM_CH5_INIT_COMPARE          0U
+#define BSP_PWM_CH5_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
+
+#define BSP_PWM_CH6_ENABLE                1
+#define BSP_PWM_CH6_TIM                   TIM14
+#define BSP_PWM_CH6_TIM_CLOCK_FN          RCC_APB1PeriphClockCmd
+#define BSP_PWM_CH6_TIM_CLOCK_MASK        RCC_APB1Periph_TIM14
+#define BSP_PWM_CH6_GPIO_PORT             GPIOF
+#define BSP_PWM_CH6_GPIO_PIN              GPIO_Pin_9
+#define BSP_PWM_CH6_GPIO_PINSRC           GPIO_PinSource9
+#define BSP_PWM_CH6_GPIO_AF               GPIO_AF_TIM14
+#define BSP_PWM_CH6_CHANNEL               1U
+#define BSP_PWM_CH6_PRESCALER             (84U - 1U)
+#define BSP_PWM_CH6_PERIOD                (20000U - 1U)
+#define BSP_PWM_CH6_INIT_COMPARE          0U
+#define BSP_PWM_CH6_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
+
 typedef enum {
 #if BSP_PWM_CH1_ENABLE
     BSP_PWM_CH1,
@@ -100,8 +129,17 @@ typedef enum {
 #if BSP_PWM_CH4_ENABLE
     BSP_PWM_CH4,
 #endif
+#if BSP_PWM_CH5_ENABLE
+    BSP_PWM_CH5,
+#endif
+#if BSP_PWM_CH6_ENABLE
+    BSP_PWM_CH6,
+#endif
     BSP_PWM_COUNT
 } BSP_PWM_Id_t;
+
+#define BSP_PWM_SERVO_HORIZONTAL          BSP_PWM_CH5
+#define BSP_PWM_SERVO_PITCH               BSP_PWM_CH6
 
 void       BSP_PWM_Init(BSP_PWM_Id_t id);
 void       BSP_PWM_InitAll(void);
