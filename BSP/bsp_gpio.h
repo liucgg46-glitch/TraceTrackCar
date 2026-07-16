@@ -97,7 +97,7 @@ extern "C" {
 #define BSP_GPIO_CH6_SPEED           GPIO_Speed_50MHz
 #define BSP_GPIO_CH6_INIT_LEVEL      0U
 
-#define BSP_GPIO_CH7_ENABLE          1
+#define BSP_GPIO_CH7_ENABLE          VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_GPIO_CH7_PORT            GPIOD
 #define BSP_GPIO_CH7_PIN             GPIO_Pin_4
 #define BSP_GPIO_CH7_MODE            GPIO_Mode_OUT
@@ -106,7 +106,7 @@ extern "C" {
 #define BSP_GPIO_CH7_SPEED           GPIO_Speed_50MHz
 #define BSP_GPIO_CH7_INIT_LEVEL      0U
 
-#define BSP_GPIO_CH8_ENABLE          1
+#define BSP_GPIO_CH8_ENABLE          VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_GPIO_CH8_PORT            GPIOD
 #define BSP_GPIO_CH8_PIN             GPIO_Pin_7
 #define BSP_GPIO_CH8_MODE            GPIO_Mode_OUT
@@ -115,7 +115,7 @@ extern "C" {
 #define BSP_GPIO_CH8_SPEED           GPIO_Speed_50MHz
 #define BSP_GPIO_CH8_INIT_LEVEL      0U
 
-#define BSP_GPIO_CH9_ENABLE          1
+#define BSP_GPIO_CH9_ENABLE          VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_GPIO_CH9_PORT            GPIOD
 #define BSP_GPIO_CH9_PIN             GPIO_Pin_8
 #define BSP_GPIO_CH9_MODE            GPIO_Mode_OUT
@@ -124,7 +124,7 @@ extern "C" {
 #define BSP_GPIO_CH9_SPEED           GPIO_Speed_50MHz
 #define BSP_GPIO_CH9_INIT_LEVEL      0U
 
-#define BSP_GPIO_CH10_ENABLE         1
+#define BSP_GPIO_CH10_ENABLE         VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_GPIO_CH10_PORT           GPIOD
 #define BSP_GPIO_CH10_PIN            GPIO_Pin_9
 #define BSP_GPIO_CH10_MODE           GPIO_Mode_OUT

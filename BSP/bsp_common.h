@@ -1,6 +1,7 @@
 #ifndef __BSP_COMMON_H
 #define __BSP_COMMON_H
 
+#include "vehicle_config.h"
 #include "stm32f4xx.h"
 #include "stm32f4xx_dma.h"
 #include "stm32f4xx_gpio.h"

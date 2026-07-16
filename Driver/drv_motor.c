@@ -1,6 +1,7 @@
 #include "drv_motor.h"
 
 typedef struct {
+    uint8_t       enabled;
     BSP_PWM_Id_t  pwm_id;
     BSP_GPIO_Id_t in1_gpio;
     BSP_GPIO_Id_t in2_gpio;
@@ -8,10 +9,15 @@ typedef struct {
 } Motor_Cfg_t;
 
 static const Motor_Cfg_t s_motor_cfg[MOTOR_COUNT] = {
-    [MOTOR_FL] = {MOTOR_FL_PWM_ID, MOTOR_FL_IN1_GPIO, MOTOR_FL_IN2_GPIO, MOTOR_FL_REVERSE},
-    [MOTOR_FR] = {MOTOR_FR_PWM_ID, MOTOR_FR_IN1_GPIO, MOTOR_FR_IN2_GPIO, MOTOR_FR_REVERSE},
-    [MOTOR_RL] = {MOTOR_RL_PWM_ID, MOTOR_RL_IN1_GPIO, MOTOR_RL_IN2_GPIO, MOTOR_RL_REVERSE},
-    [MOTOR_RR] = {MOTOR_RR_PWM_ID, MOTOR_RR_IN1_GPIO, MOTOR_RR_IN2_GPIO, MOTOR_RR_REVERSE},
+    [MOTOR_FL] = {1U, MOTOR_FL_PWM_ID, MOTOR_FL_IN1_GPIO, MOTOR_FL_IN2_GPIO, MOTOR_FL_REVERSE},
+    [MOTOR_FR] = {1U, MOTOR_FR_PWM_ID, MOTOR_FR_IN1_GPIO, MOTOR_FR_IN2_GPIO, MOTOR_FR_REVERSE},
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
+    [MOTOR_RL] = {1U, MOTOR_RL_PWM_ID, MOTOR_RL_IN1_GPIO, MOTOR_RL_IN2_GPIO, MOTOR_RL_REVERSE},
+    [MOTOR_RR] = {1U, MOTOR_RR_PWM_ID, MOTOR_RR_IN1_GPIO, MOTOR_RR_IN2_GPIO, MOTOR_RR_REVERSE},
+#else
+    [MOTOR_RL] = {0U, (BSP_PWM_Id_t)0, (BSP_GPIO_Id_t)0, (BSP_GPIO_Id_t)0, 0U},
+    [MOTOR_RR] = {0U, (BSP_PWM_Id_t)0, (BSP_GPIO_Id_t)0, (BSP_GPIO_Id_t)0, 0U},
+#endif
 };
 
 static int16_t s_motor_last[MOTOR_COUNT];
@@ -35,6 +41,11 @@ void Motor_SetPermille(Motor_Id_t id, int16_t pwm_permille)
 
     if (id >= MOTOR_COUNT) return;
     cfg = &s_motor_cfg[id];
+
+    if (cfg->enabled == 0U) {
+        s_motor_last[id] = 0;
+        return;
+    }
 
     pwm_permille = Motor_LimitPermille(pwm_permille);
     if (cfg->reverse) {
@@ -83,6 +94,12 @@ int16_t Motor_GetLastPermille(Motor_Id_t id)
 {
     if (id >= MOTOR_COUNT) return 0;
     return s_motor_last[id];
+}
+
+uint8_t Motor_IsEnabled(Motor_Id_t id)
+{
+    if (id >= MOTOR_COUNT) return 0U;
+    return s_motor_cfg[id].enabled;
 }
 
 BSP_Status_t Motor_GetAllLastPermille(int16_t out_pwm[MOTOR_COUNT])

@@ -87,7 +87,7 @@ extern "C" {
 #define BSP_ENCODER_CH2_REVERSE            0
 
 /* ============================ CH3：TIM3 PA6/PA7 ============================ */
-#define BSP_ENCODER_CH3_ENABLE             1
+#define BSP_ENCODER_CH3_ENABLE             VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_ENCODER_CH3_TIM                TIM3
 #define BSP_ENCODER_CH3_TIM_CLOCK_FN       RCC_APB1PeriphClockCmd
 #define BSP_ENCODER_CH3_TIM_CLOCK_MASK     RCC_APB1Periph_TIM3
@@ -102,7 +102,7 @@ extern "C" {
 #define BSP_ENCODER_CH3_REVERSE            0
 
 /* ============================ CH4：TIM4 PB6/PB7 ============================ */
-#define BSP_ENCODER_CH4_ENABLE             1
+#define BSP_ENCODER_CH4_ENABLE             VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_ENCODER_CH4_TIM                TIM4
 #define BSP_ENCODER_CH4_TIM_CLOCK_FN       RCC_APB1PeriphClockCmd
 #define BSP_ENCODER_CH4_TIM_CLOCK_MASK     RCC_APB1Periph_TIM4

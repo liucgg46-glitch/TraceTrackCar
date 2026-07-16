@@ -232,6 +232,33 @@ void Test_SPI2_LCD(void)
     Drv_LcdTft_Init();
 }
 
+void Test_DriveProfile_Update(void)
+{
+    static uint8_t printed = 0U;
+    char line[180];
+    int length;
+
+    if (printed != 0U) return;
+    printed = 1U;
+
+    length = snprintf(line,
+                      sizeof(line),
+                      "DRIVE PROFILE=%s motor FL/FR/RL/RR=%u/%u/%u/%u encoder=%u/%u/%u/%u SPI1_pins_free=%u\r\n",
+                      VEHICLE_DRIVE_MODE_NAME,
+                      (unsigned int)Motor_IsEnabled(MOTOR_FL),
+                      (unsigned int)Motor_IsEnabled(MOTOR_FR),
+                      (unsigned int)Motor_IsEnabled(MOTOR_RL),
+                      (unsigned int)Motor_IsEnabled(MOTOR_RR),
+                      (unsigned int)Drv_Encoder_IsWheelEnabled(WHEEL_FL),
+                      (unsigned int)Drv_Encoder_IsWheelEnabled(WHEEL_FR),
+                      (unsigned int)Drv_Encoder_IsWheelEnabled(WHEEL_RL),
+                      (unsigned int)Drv_Encoder_IsWheelEnabled(WHEEL_RR),
+                      (unsigned int)VEHICLE_SPI1_PINS_AVAILABLE);
+    if ((length > 0) && (length < (int)sizeof(line))) {
+        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)line, (uint16_t)length);
+    }
+}
+
 /*
  * 鐢垫満寮€鐜懡浠ゆ祴璇曘€?
  * 涓插彛鍙戦€侊細
@@ -249,13 +276,13 @@ void Test_MotorCmd_Update(void)
 
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
         if (ch == 'w') {
-            Motor_SetAllPermille(300, 300, 300, 300);
+            Motor_SetPWM(300, 300);
         } else if (ch == 's') {
-            Motor_SetAllPermille(-300, -300, -300, -300);
+            Motor_SetPWM(-300, -300);
         } else if (ch == 'a') {
-            Motor_SetAllPermille(-300, 300, -300, 300);
+            Motor_SetPWM(-300, 300);
         } else if (ch == 'd') {
-            Motor_SetAllPermille(300, -300, 300, -300);
+            Motor_SetPWM(300, -300);
         } else if (ch == '0') {
             Motor_StopAll();
         }
@@ -318,13 +345,13 @@ void Test_ChassisCmd_Update(void)
 
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
         if (ch == 'g') {
-            Chassis_SetSpeed(600, 0);
+            Chassis_SetSpeed(2000, 0);
         } else if (ch == 'b') {
-            Chassis_SetSpeed(-600, 0);
+            Chassis_SetSpeed(-2000, 0);
         } else if (ch == 'l') {
-            Chassis_SetSpeed(0, 400);
+            Chassis_SetSpeed(0, 1200);
         } else if (ch == 'r') {
-            Chassis_SetSpeed(0, -400);
+            Chassis_SetSpeed(0, -1200);
         } else if (ch == 'x' || ch == '0') {
             Chassis_Stop();
         }

@@ -36,8 +36,10 @@ typedef enum {
 /* 默认映射：按 Part1 引脚规划。若实际接线不同，只改这里。 */
 #define DRV_ENCODER_FL_BSP_ID       BSP_ENCODER_CH1
 #define DRV_ENCODER_FR_BSP_ID       BSP_ENCODER_CH2
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
 #define DRV_ENCODER_RL_BSP_ID       BSP_ENCODER_CH3
 #define DRV_ENCODER_RR_BSP_ID       BSP_ENCODER_CH4
+#endif
 
 /* 轮子参数：这里先给模板值，实际必须按你的编码器和轮径修改。 */
 #define DRV_ENCODER_WHEEL_DIAMETER_MM     65.0f
@@ -45,9 +47,9 @@ typedef enum {
 
 /* 是否使用四路平均。若只想临时用后轮反馈，可改下面两个宏。 */
 #define DRV_ENCODER_LEFT_USE_FRONT        1
-#define DRV_ENCODER_LEFT_USE_REAR         1
+#define DRV_ENCODER_LEFT_USE_REAR         VEHICLE_REAR_DRIVE_ENABLE
 #define DRV_ENCODER_RIGHT_USE_FRONT       1
-#define DRV_ENCODER_RIGHT_USE_REAR        1
+#define DRV_ENCODER_RIGHT_USE_REAR        VEHICLE_REAR_DRIVE_ENABLE
 
 typedef struct {
     int16_t delta_count;
@@ -65,6 +67,7 @@ int32_t Drv_Encoder_GetWheelSpeedCps(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelTotalCount(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelSpeedMmS(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelTotalMm(Wheel_Id_t wheel);
+uint8_t Drv_Encoder_IsWheelEnabled(Wheel_Id_t wheel);
 
 int32_t Drv_Encoder_GetLeftSpeedCps(void);
 int32_t Drv_Encoder_GetRightSpeedCps(void);

@@ -47,6 +47,9 @@ extern "C" {
  * PA5 -> SCK, PA6 -> MISO, PA7 -> MOSI
  */
 #define SPI_BUS1_ENABLE             0
+#if (SPI_BUS1_ENABLE != 0) && (VEHICLE_SPI1_PINS_AVAILABLE == 0U)
+#error "SPI1 PA5/PA6/PA7 conflict with 4WD encoder CH3; select 2WD or remap the encoder"
+#endif
 #define SPI_BUS1_PERIPH             SPI1
 #define SPI_BUS1_PERIPH_CLOCK_FN    RCC_APB2PeriphClockCmd  /* SPI1 挂在 APB2 上 */
 #define SPI_BUS1_PERIPH_CLOCK_MASK  RCC_APB2Periph_SPI1

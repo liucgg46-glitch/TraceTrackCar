@@ -38,17 +38,21 @@ typedef enum {
 /* 当前引脚规划 v1.4：TIM8 PC6~PC9 PWM；PD0~PD9 中部分脚作方向。 */
 #define MOTOR_FL_PWM_ID          BSP_PWM_CH1
 #define MOTOR_FR_PWM_ID          BSP_PWM_CH2
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
 #define MOTOR_RL_PWM_ID          BSP_PWM_CH3
 #define MOTOR_RR_PWM_ID          BSP_PWM_CH4
+#endif
 
 #define MOTOR_FL_IN1_GPIO        BSP_GPIO_CH3   /* PD0 */
 #define MOTOR_FL_IN2_GPIO        BSP_GPIO_CH4   /* PD1 */
 #define MOTOR_FR_IN1_GPIO        BSP_GPIO_CH5   /* PD2 */
 #define MOTOR_FR_IN2_GPIO        BSP_GPIO_CH6   /* PD3 */
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
 #define MOTOR_RL_IN1_GPIO        BSP_GPIO_CH7   /* PD4 */
 #define MOTOR_RL_IN2_GPIO        BSP_GPIO_CH8   /* PD7 */
 #define MOTOR_RR_IN1_GPIO        BSP_GPIO_CH9   /* PD8 */
 #define MOTOR_RR_IN2_GPIO        BSP_GPIO_CH10  /* PD9 */
+#endif
 
 /* 某个电机方向反了，优先改这里，不要在 chassis 里取反。 */
 #define MOTOR_FL_REVERSE         0
@@ -65,6 +69,7 @@ void         Motor_SetAllPermille(int16_t fl, int16_t fr, int16_t rl, int16_t rr
 void         Motor_StopOne(Motor_Id_t id);
 void         Motor_StopAll(void);
 int16_t      Motor_GetLastPermille(Motor_Id_t id);
+uint8_t      Motor_IsEnabled(Motor_Id_t id);
 BSP_Status_t Motor_GetAllLastPermille(int16_t out_pwm[MOTOR_COUNT]);
 
 /* 兼容你流程里的简化接口：左右同侧输出相同 PWM。 */

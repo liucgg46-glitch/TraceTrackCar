@@ -4,8 +4,10 @@
 
 static PID_t s_pid_fl;
 static PID_t s_pid_fr;
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
 static PID_t s_pid_rl;
 static PID_t s_pid_rr;
+#endif
 
 static Chassis_Info_t s_chassis;
 
@@ -40,8 +42,10 @@ void Chassis_Init(void)
 
     PID_Init(&s_pid_fl, &cfg);
     PID_Init(&s_pid_fr, &cfg);
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
     PID_Init(&s_pid_rl, &cfg);
     PID_Init(&s_pid_rr, &cfg);
+#endif
 
     Chassis_Stop();
 }
@@ -56,9 +60,11 @@ void Chassis_SetSpeed(int16_t linear_speed_cps, int16_t turn_speed_cps)
     s_chassis.right_target_cps = Chassis_LimitTarget((int32_t)s_chassis.linear_target_cps + s_chassis.turn_target_cps);
 
     PID_SetTarget(&s_pid_fl, (float)s_chassis.left_target_cps);
-    PID_SetTarget(&s_pid_rl, (float)s_chassis.left_target_cps);
     PID_SetTarget(&s_pid_fr, (float)s_chassis.right_target_cps);
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
+    PID_SetTarget(&s_pid_rl, (float)s_chassis.left_target_cps);
     PID_SetTarget(&s_pid_rr, (float)s_chassis.right_target_cps);
+#endif
 
     s_chassis.mode = CHASSIS_MODE_SPEED;
 }
@@ -79,16 +85,20 @@ void Chassis_ResetPID(void)
 {
     PID_Reset(&s_pid_fl);
     PID_Reset(&s_pid_fr);
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
     PID_Reset(&s_pid_rl);
     PID_Reset(&s_pid_rr);
+#endif
 }
 
 void Chassis_SetPIDConfig(const PID_Config_t *cfg)
 {
     PID_SetConfig(&s_pid_fl, cfg);
     PID_SetConfig(&s_pid_fr, cfg);
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
     PID_SetConfig(&s_pid_rl, cfg);
     PID_SetConfig(&s_pid_rr, cfg);
+#endif
 }
 
 Chassis_Mode_t Chassis_GetMode(void)
@@ -105,13 +115,23 @@ void Chassis_Update(void)
 
     s_chassis.fl_feedback_cps = Drv_Encoder_GetWheelSpeedCps(WHEEL_FL);
     s_chassis.fr_feedback_cps = Drv_Encoder_GetWheelSpeedCps(WHEEL_FR);
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
     s_chassis.rl_feedback_cps = Drv_Encoder_GetWheelSpeedCps(WHEEL_RL);
     s_chassis.rr_feedback_cps = Drv_Encoder_GetWheelSpeedCps(WHEEL_RR);
+#else
+    s_chassis.rl_feedback_cps = 0;
+    s_chassis.rr_feedback_cps = 0;
+#endif
 
     s_chassis.fl_output = Chassis_LimitOutput(PID_Update(&s_pid_fl, (float)s_chassis.fl_feedback_cps));
     s_chassis.fr_output = Chassis_LimitOutput(PID_Update(&s_pid_fr, (float)s_chassis.fr_feedback_cps));
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
     s_chassis.rl_output = Chassis_LimitOutput(PID_Update(&s_pid_rl, (float)s_chassis.rl_feedback_cps));
     s_chassis.rr_output = Chassis_LimitOutput(PID_Update(&s_pid_rr, (float)s_chassis.rr_feedback_cps));
+#else
+    s_chassis.rl_output = 0;
+    s_chassis.rr_output = 0;
+#endif
 
     Motor_SetAllPermille(s_chassis.fl_output,
                          s_chassis.fr_output,

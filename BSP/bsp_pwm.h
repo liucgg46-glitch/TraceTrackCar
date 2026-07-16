@@ -59,7 +59,7 @@ extern "C" {
 #define BSP_PWM_CH2_INIT_COMPARE          0U
 #define BSP_PWM_CH2_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
 
-#define BSP_PWM_CH3_ENABLE                1
+#define BSP_PWM_CH3_ENABLE                VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_PWM_CH3_TIM                   TIM8
 #define BSP_PWM_CH3_TIM_CLOCK_FN          RCC_APB2PeriphClockCmd
 #define BSP_PWM_CH3_TIM_CLOCK_MASK        RCC_APB2Periph_TIM8
@@ -73,7 +73,7 @@ extern "C" {
 #define BSP_PWM_CH3_INIT_COMPARE          0U
 #define BSP_PWM_CH3_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
 
-#define BSP_PWM_CH4_ENABLE                1
+#define BSP_PWM_CH4_ENABLE                VEHICLE_REAR_DRIVE_ENABLE
 #define BSP_PWM_CH4_TIM                   TIM8
 #define BSP_PWM_CH4_TIM_CLOCK_FN          RCC_APB2PeriphClockCmd
 #define BSP_PWM_CH4_TIM_CLOCK_MASK        RCC_APB2Periph_TIM8

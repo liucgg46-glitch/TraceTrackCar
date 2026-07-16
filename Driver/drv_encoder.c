@@ -3,14 +3,20 @@
 #define DRV_ENCODER_PI 3.1415926f
 
 typedef struct {
+    uint8_t enabled;
     BSP_Encoder_Id_t bsp_id;
 } Drv_Encoder_Cfg_t;
 
 static const Drv_Encoder_Cfg_t s_drv_enc_cfg[WHEEL_COUNT] = {
-    [WHEEL_FL] = {DRV_ENCODER_FL_BSP_ID},
-    [WHEEL_FR] = {DRV_ENCODER_FR_BSP_ID},
-    [WHEEL_RL] = {DRV_ENCODER_RL_BSP_ID},
-    [WHEEL_RR] = {DRV_ENCODER_RR_BSP_ID},
+    [WHEEL_FL] = {1U, DRV_ENCODER_FL_BSP_ID},
+    [WHEEL_FR] = {1U, DRV_ENCODER_FR_BSP_ID},
+#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
+    [WHEEL_RL] = {1U, DRV_ENCODER_RL_BSP_ID},
+    [WHEEL_RR] = {1U, DRV_ENCODER_RR_BSP_ID},
+#else
+    [WHEEL_RL] = {0U, (BSP_Encoder_Id_t)0},
+    [WHEEL_RR] = {0U, (BSP_Encoder_Id_t)0},
+#endif
 };
 
 static int32_t Encoder_CpsToMmS(int32_t cps)
@@ -49,19 +55,19 @@ void Drv_Encoder_Update(void)
 
 int16_t Drv_Encoder_GetWheelDelta(Wheel_Id_t wheel)
 {
-    if (wheel >= WHEEL_COUNT) return 0;
+    if ((wheel >= WHEEL_COUNT) || (s_drv_enc_cfg[wheel].enabled == 0U)) return 0;
     return BSP_Encoder_GetDelta(s_drv_enc_cfg[wheel].bsp_id);
 }
 
 int32_t Drv_Encoder_GetWheelSpeedCps(Wheel_Id_t wheel)
 {
-    if (wheel >= WHEEL_COUNT) return 0;
+    if ((wheel >= WHEEL_COUNT) || (s_drv_enc_cfg[wheel].enabled == 0U)) return 0;
     return BSP_Encoder_GetSpeedCps(s_drv_enc_cfg[wheel].bsp_id);
 }
 
 int32_t Drv_Encoder_GetWheelTotalCount(Wheel_Id_t wheel)
 {
-    if (wheel >= WHEEL_COUNT) return 0;
+    if ((wheel >= WHEEL_COUNT) || (s_drv_enc_cfg[wheel].enabled == 0U)) return 0;
     return BSP_Encoder_GetTotal(s_drv_enc_cfg[wheel].bsp_id);
 }
 
@@ -73,6 +79,12 @@ int32_t Drv_Encoder_GetWheelSpeedMmS(Wheel_Id_t wheel)
 int32_t Drv_Encoder_GetWheelTotalMm(Wheel_Id_t wheel)
 {
     return Encoder_CountToMm(Drv_Encoder_GetWheelTotalCount(wheel));
+}
+
+uint8_t Drv_Encoder_IsWheelEnabled(Wheel_Id_t wheel)
+{
+    if (wheel >= WHEEL_COUNT) return 0U;
+    return s_drv_enc_cfg[wheel].enabled;
 }
 
 int32_t Drv_Encoder_GetLeftSpeedCps(void)
@@ -119,6 +131,7 @@ void Drv_Encoder_ClearAllTotal(void)
 BSP_Status_t Drv_Encoder_GetWheelInfo(Wheel_Id_t wheel, Drv_Encoder_WheelInfo_t *info)
 {
     if (wheel >= WHEEL_COUNT || info == 0) return BSP_PARAM;
+    if (s_drv_enc_cfg[wheel].enabled == 0U) return BSP_ERROR;
 
     info->delta_count = Drv_Encoder_GetWheelDelta(wheel);
     info->speed_cps   = Drv_Encoder_GetWheelSpeedCps(wheel);
