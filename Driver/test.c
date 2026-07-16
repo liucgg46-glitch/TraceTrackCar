@@ -632,7 +632,6 @@ static void Test_Line_Print(void)
     Drv_GraySensor_Info_t sensor;
     Drv_GrayMcu_Info_t mcu;
     BSP_I2C_Debug_t i2c;
-    uint8_t rx8[8];
     char buf[192];
     int n;
 
@@ -641,7 +640,6 @@ static void Test_Line_Print(void)
 
     (void)Drv_GrayMcu_GetInfo(&mcu);
     (void)BSP_I2C_GetDebug(I2C_BUS1, &i2c);
-    (void)Drv_GrayMcu_GetRx8(rx8, 8);
 
     n = sprintf(buf,
                 "GRAY on=%u valid=%u busy=%u st=%d i2c=%d ph=%u op=%u reg=0x%02X len=%u ping=0x%02X upd=%lu err=%lu pok=%lu perr=%lu addr=0x%02X\r\n",
@@ -691,15 +689,15 @@ static void Test_Line_Print(void)
     }
 
     n = sprintf(buf,
-                "RX8 %3u %3u %3u %3u %3u %3u %3u %3u | RAW %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
-                (unsigned int)rx8[0], (unsigned int)rx8[1],
-                (unsigned int)rx8[2], (unsigned int)rx8[3],
-                (unsigned int)rx8[4], (unsigned int)rx8[5],
-                (unsigned int)rx8[6], (unsigned int)rx8[7],
+                "RAW  %4u %4u %4u %4u %4u %4u %4u %4u | FILT %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
                 (unsigned int)sensor.raw[0], (unsigned int)sensor.raw[1],
                 (unsigned int)sensor.raw[2], (unsigned int)sensor.raw[3],
                 (unsigned int)sensor.raw[4], (unsigned int)sensor.raw[5],
-                (unsigned int)sensor.raw[6], (unsigned int)sensor.raw[7]);
+                (unsigned int)sensor.raw[6], (unsigned int)sensor.raw[7],
+                (unsigned int)sensor.filt[0], (unsigned int)sensor.filt[1],
+                (unsigned int)sensor.filt[2], (unsigned int)sensor.filt[3],
+                (unsigned int)sensor.filt[4], (unsigned int)sensor.filt[5],
+                (unsigned int)sensor.filt[6], (unsigned int)sensor.filt[7]);
 
     if (n > 0 && n < (int)sizeof(buf)) {
         (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
@@ -755,9 +753,17 @@ void Test_LineCmd_Update(void)
     uint16_t raw[LINE_DETECT_SENSOR_NUM];
 
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
-        if (ch == '1') {
+        if ((ch == '1') || (ch == 'l') || (ch == 'L')) {
             LineFollow_Start();
-            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"line follow start\r\n", (uint16_t)(sizeof("line follow start\r\n") - 1U));
+            if (LineFollow_GetState() == LINE_FOLLOW_RUN) {
+                (void)BSP_UART_WriteFrame(UART_PORT1,
+                                          (const uint8_t *)"line follow RUN\r\n",
+                                          (uint16_t)(sizeof("line follow RUN\r\n") - 1U));
+            } else {
+                (void)BSP_UART_WriteFrame(UART_PORT1,
+                                          (const uint8_t *)"line follow rejected: wait for IMU calibration\r\n",
+                                          (uint16_t)(sizeof("line follow rejected: wait for IMU calibration\r\n") - 1U));
+            }
         } else if (ch == '0' || ch == 'x') {
             LineFollow_Stop();
             (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"line follow stop\r\n", (uint16_t)(sizeof("line follow stop\r\n") - 1U));
@@ -1371,11 +1377,35 @@ void Test_LCD_Ascii_Update(void)
     Test_AsyncDisplay_Update();
 }
 
-void Test_AsyncDisplay_Update(void)
+void Test_OLED_Ascii_Update(void)
 {
     static uint32_t last_oled_ms = 0U;
-    static uint32_t last_lcd_ms = 0U;
     static uint32_t oled_cnt = 0U;
+    uint16_t bar_w;
+    char buf[24];
+
+    if ((Drv_OledI2c_IsReady() == 0U) ||
+        (Drv_OledI2c_IsBusy() != 0U) ||
+        (BSP_TimeElapsed(&last_oled_ms, 200U) == 0U)) {
+        return;
+    }
+
+    oled_cnt++;
+    Drv_OledI2c_Clear();
+    Drv_OledI2c_DrawRect(0U, 0U, 128U, 64U, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(6U, 6U, "OLED TEST", DRV_OLED_COLOR_ON);
+    Drv_OledI2c_DrawString5x7(6U, 18U, "I2C DMA OK", DRV_OLED_COLOR_ON);
+    (void)snprintf(buf, sizeof(buf), "CNT:%lu", (unsigned long)oled_cnt);
+    Drv_OledI2c_DrawString5x7(6U, 32U, buf, DRV_OLED_COLOR_ON);
+    bar_w = (uint16_t)(8U + ((oled_cnt * 5U) % 104U));
+    Drv_OledI2c_DrawRect(6U, 48U, 116U, 10U, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_FillRect(8U, 50U, (uint8_t)bar_w, 6U, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_Flush();
+}
+
+void Test_AsyncDisplay_Update(void)
+{
+    static uint32_t last_lcd_ms = 0U;
     static uint32_t lcd_cnt = 0U;
     static uint8_t lcd_base_done = 0U;
     static uint8_t lcd_base_step = 0U;
@@ -1385,21 +1415,7 @@ void Test_AsyncDisplay_Update(void)
     char buf[32];
     BSP_Status_t ret = BSP_BUSY;
 
-    if ((Drv_OledI2c_IsReady() != 0U) &&
-        (Drv_OledI2c_IsBusy() == 0U) &&
-        (BSP_TimeElapsed(&last_oled_ms, 200U) != 0U)) {
-        oled_cnt++;
-        Drv_OledI2c_Clear();
-        Drv_OledI2c_DrawRect(0U, 0U, 128U, 64U, DRV_OLED_COLOR_ON);
-        Drv_OledI2c_DrawString5x7(6U, 6U,  "OLED TEST", DRV_OLED_COLOR_ON);
-        Drv_OledI2c_DrawString5x7(6U, 18U, "I2C DMA OK", DRV_OLED_COLOR_ON);
-        (void)sprintf(buf, "CNT:%lu", (unsigned long)oled_cnt);
-        Drv_OledI2c_DrawString5x7(6U, 32U, buf, DRV_OLED_COLOR_ON);
-        bar_w = (uint16_t)(8U + ((oled_cnt * 5U) % 104U));
-        Drv_OledI2c_DrawRect(6U, 48U, 116U, 10U, DRV_OLED_COLOR_ON);
-        Drv_OledI2c_FillRect(8U, 50U, (uint8_t)bar_w, 6U, DRV_OLED_COLOR_ON);
-        Drv_OledI2c_Flush();
-    }
+    Test_OLED_Ascii_Update();
 
     if ((Drv_LcdTft_IsReady() == 0U) || (Drv_LcdTft_IsBusy() != 0U)) {
         return;
@@ -1422,7 +1438,7 @@ void Test_AsyncDisplay_Update(void)
                 break;
 
             case 3U:
-                ret = Drv_LcdTft_TryDrawString5x7(16U, 38U, "SPI2 DMA ASYNC",
+                ret = Drv_LcdTft_TryDrawString5x7(16U, 38U, "SPI1 DMA ASYNC",
                                                   DRV_LCD_COLOR_CYAN,
                                                   DRV_LCD_COLOR_BLACK);
                 break;

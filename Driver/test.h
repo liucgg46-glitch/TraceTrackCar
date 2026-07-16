@@ -44,6 +44,7 @@ void Test_ICM20948_Mag_Update(void);//AK09916专项测试 { Test_ICM20948_Mag_Up
 void Test_Attitude_Update(void);//独立姿态融合日志与标定 { Test_Attitude_Update, 10U, 0U }，内部每500ms打印
 
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
+void Test_OLED_Ascii_Update(void);//测试OLED{ Test_OLED_Ascii_Update, 20U, 0U },
 
 void Test_AsyncDisplay_Update(void);//
 void Test_K210_CommUpdate(void);//K210测试

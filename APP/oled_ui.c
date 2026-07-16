@@ -1,11 +1,26 @@
 #include "oled_ui.h"
 #include "drv_oled_i2c.h"
 #include "bsp_systick.h"
+#include "sensor_manager.h"
+#include "line_follow_app.h"
+#include "chassis.h"
 #include <stdio.h>
 
-static uint32_t s_oled_ui_counter = 0U;
 static uint8_t s_oled_boot_visible = 0U;
 static uint32_t s_oled_boot_done_ms = 0U;
+
+static const char *OledUi_LineTypeName(LineType_t type)
+{
+    switch (type) {
+        case LINE_TYPE_SINGLE:       return "SINGLE";
+        case LINE_TYPE_LEFT_BRANCH:  return "LEFT";
+        case LINE_TYPE_RIGHT_BRANCH: return "RIGHT";
+        case LINE_TYPE_CROSS:        return "CROSS";
+        case LINE_TYPE_FULL_BLACK:   return "FULL";
+        case LINE_TYPE_LOST:
+        default:                     return "LOST";
+    }
+}
 
 static void OledUi_DrawBase(void)
 {
@@ -46,6 +61,112 @@ void OledUi_Init(void)
 #endif
 }
 
+void OledUi_ShowDashboard(void)
+{
+#if OLED_UI_ENABLE
+    Sensor_Attitude_t attitude;
+    LineFollow_Info_t line;
+    Chassis_Info_t chassis;
+    uint16_t distance_mm;
+    int32_t roll_x10 = 0;
+    int32_t pitch_x10 = 0;
+    int32_t yaw_x10 = 0;
+    int32_t roll_abs_x10;
+    int32_t pitch_abs_x10;
+    int32_t yaw_abs_x10;
+    uint8_t attitude_ok;
+    uint8_t line_ok;
+    uint8_t chassis_ok;
+    uint8_t distance_ok;
+    char text[32];
+
+    if ((Drv_OledI2c_IsReady() == 0U) ||
+        (Drv_OledI2c_IsBusy() != 0U) ||
+        (s_oled_boot_visible != 0U)) {
+        return;
+    }
+
+    attitude_ok = (uint8_t)(Sensor_GetAttitude(&attitude) == BSP_OK);
+    line_ok = (uint8_t)(LineFollow_GetInfo(&line) == BSP_OK);
+    chassis_ok = (uint8_t)(Chassis_GetInfo(&chassis) == BSP_OK);
+    distance_ok = (uint8_t)(Sensor_GetFrontDistanceMm(&distance_mm) == BSP_OK);
+
+    if (attitude_ok != 0U) {
+        roll_x10 = (int32_t)(attitude.roll_deg * 10.0f);
+        pitch_x10 = (int32_t)(attitude.pitch_deg * 10.0f);
+        yaw_x10 = (int32_t)(attitude.yaw_deg * 10.0f);
+    }
+    roll_abs_x10 = (roll_x10 < 0) ? -roll_x10 : roll_x10;
+    pitch_abs_x10 = (pitch_x10 < 0) ? -pitch_x10 : pitch_x10;
+    yaw_abs_x10 = (yaw_x10 < 0) ? -yaw_x10 : yaw_x10;
+
+    Drv_OledI2c_Clear();
+
+    if (attitude_ok != 0U) {
+        (void)snprintf(text, sizeof(text), "R:%c%ld.%ld P:%c%ld.%ld",
+                       (roll_x10 < 0) ? '-' : '+',
+                       (long)(roll_abs_x10 / 10), (long)(roll_abs_x10 % 10),
+                       (pitch_x10 < 0) ? '-' : '+',
+                       (long)(pitch_abs_x10 / 10), (long)(pitch_abs_x10 % 10));
+    } else {
+        (void)snprintf(text, sizeof(text), "R:WAIT P:WAIT");
+    }
+    Drv_OledI2c_DrawString5x7(0U, 1U, text, DRV_OLED_COLOR_ON);
+
+    if (attitude_ok != 0U) {
+        (void)snprintf(text, sizeof(text), "Y:%c%ld.%ld M:%c%c",
+                       (yaw_x10 < 0) ? '-' : '+',
+                       (long)(yaw_abs_x10 / 10), (long)(yaw_abs_x10 % 10),
+                       attitude.mag_healthy ? 'H' : '-',
+                       attitude.mag_used ? 'U' : '-');
+    } else {
+        (void)snprintf(text, sizeof(text), "Y:WAIT M:--");
+    }
+    Drv_OledI2c_DrawString5x7(0U, 11U, text, DRV_OLED_COLOR_ON);
+
+    if (line_ok != 0U) {
+        (void)snprintf(text, sizeof(text), "LINE:%s %s",
+                       (line.state == LINE_FOLLOW_RUN) ? "RUN" : "STOP",
+                       OledUi_LineTypeName(line.detect.type));
+        Drv_OledI2c_DrawString5x7(0U, 21U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "M:%02X E:%d",
+                       (unsigned int)line.detect.black_mask,
+                       (int)line.detect.error_x1000);
+    } else {
+        Drv_OledI2c_DrawString5x7(0U, 21U, "LINE:WAIT", DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "M:-- E:----");
+    }
+    Drv_OledI2c_DrawString5x7(0U, 31U, text, DRV_OLED_COLOR_ON);
+
+    if (chassis_ok != 0U) {
+        (void)snprintf(text, sizeof(text), "T:%d/%d F:%ld/%ld",
+                       (int)chassis.left_target_cps,
+                       (int)chassis.right_target_cps,
+                       (long)chassis.fl_feedback_cps,
+                       (long)chassis.fr_feedback_cps);
+    } else {
+        (void)snprintf(text, sizeof(text), "T:--/-- F:--/--");
+    }
+    Drv_OledI2c_DrawString5x7(0U, 41U, text, DRV_OLED_COLOR_ON);
+
+    if ((chassis_ok != 0U) && (distance_ok != 0U)) {
+        (void)snprintf(text, sizeof(text), "P:%d/%d D:%u",
+                       (int)chassis.fl_output,
+                       (int)chassis.fr_output,
+                       (unsigned int)distance_mm);
+    } else if (chassis_ok != 0U) {
+        (void)snprintf(text, sizeof(text), "P:%d/%d D:----",
+                       (int)chassis.fl_output,
+                       (int)chassis.fr_output);
+    } else {
+        (void)snprintf(text, sizeof(text), "P:--/-- D:----");
+    }
+    Drv_OledI2c_DrawString5x7(0U, 51U, text, DRV_OLED_COLOR_ON);
+
+    Drv_OledI2c_Flush();
+#endif
+}
+
 void OledUi_ShowStatus(const char *line1, const char *line2, const char *line3)
 {
 #if OLED_UI_ENABLE
@@ -71,7 +192,6 @@ void OledUi_Update(void)
 {
 #if OLED_UI_ENABLE
     static uint32_t last_ms = 0U;
-    char buf[24];
 
     if (Drv_OledI2c_IsReady() == 0U) {
         return;
@@ -98,12 +218,7 @@ void OledUi_Update(void)
         return;
     }
 
-    s_oled_ui_counter++;
-    (void)sprintf(buf, "RUN:%lu", (unsigned long)s_oled_ui_counter);
-    Drv_OledI2c_FillRect(6U, 52U, 70U, 8U, DRV_OLED_COLOR_OFF);
-    Drv_OledI2c_DrawString5x7(6U, 52U, buf, DRV_OLED_COLOR_ON);
-    Drv_OledI2c_FlushPage(6U);
-    Drv_OledI2c_FlushPage(7U);
+    OledUi_ShowDashboard();
 #endif
 }
 

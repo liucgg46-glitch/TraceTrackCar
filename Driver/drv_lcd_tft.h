@@ -10,7 +10,12 @@
 extern "C" {
 #endif
 
+#if (VEHICLE_SPI1_PINS_AVAILABLE != 0U)
+#define DRV_LCD_TFT_SPI_BUS          SPI_BUS1
+#else
+/* 4WD uses PA6/PA7 for the rear encoder, so retain the former SPI2 wiring. */
 #define DRV_LCD_TFT_SPI_BUS          SPI_BUS2
+#endif
 #define DRV_LCD_TFT_CS_GPIO          BSP_GPIO_LCD_CS
 #define DRV_LCD_TFT_DC_GPIO          BSP_GPIO_LCD_DC
 #define DRV_LCD_TFT_BL_GPIO          BSP_GPIO_LCD_BL

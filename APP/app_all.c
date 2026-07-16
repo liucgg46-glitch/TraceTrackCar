@@ -20,10 +20,10 @@ void App_Init(void)
     Motion_Init();
     SensorManager_Init();
     LineFollow_Init();
+    LcdUi_Init();
+    OledUi_Init();
 
      /* 这里只请求显示启动页，不重新初始化 LCD/OLED 驱动 */
-    //LcdUi_ShowBoot();
-    //OledUi_ShowBoot();
     /*
      * 初始化K210通信协议层。
      *

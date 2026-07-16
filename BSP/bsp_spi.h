@@ -43,10 +43,10 @@ extern "C" {
  * =========================================================================== */
 
 /*
- * ----- SPI_BUS1：当前硬件在用的这一路（PMW3901，SPI Mode3） -----
+ * ----- SPI_BUS1：1.54-inch ST7789 TFT LCD（SPI Mode0） -----
  * PA5 -> SCK, PA6 -> MISO, PA7 -> MOSI
  */
-#define SPI_BUS1_ENABLE             0
+#define SPI_BUS1_ENABLE             VEHICLE_SPI1_PINS_AVAILABLE
 #if (SPI_BUS1_ENABLE != 0) && (VEHICLE_SPI1_PINS_AVAILABLE == 0U)
 #error "SPI1 PA5/PA6/PA7 conflict with 4WD encoder CH3; select 2WD or remap the encoder"
 #endif
@@ -66,15 +66,14 @@ extern "C" {
 #define SPI_BUS1_MOSI_PINSRC        GPIO_PinSource7
 #define SPI_BUS1_AF                 GPIO_AF_SPI1
 
-#define SPI_BUS1_CPOL               SPI_CPOL_High   /* PMW3901 用 SPI Mode 3：CPOL=1, CPHA=1 */
-#define SPI_BUS1_CPHA               SPI_CPHA_2Edge
+#define SPI_BUS1_CPOL               SPI_CPOL_Low    /* ST7789 SPI Mode 0 */
+#define SPI_BUS1_CPHA               SPI_CPHA_1Edge
 
 /*
- * 调试阶段先用 /128，稳定后可改 /64。
- * SPI1 在 APB2=84MHz 时：/128 = 656 kHz，/64 = 1.3125 MHz。
+ * 先使用 /16；SPI1 在 APB2=84MHz 时为 5.25 MHz，适合杜邦线调试。
  * 实际频率取决于工程时钟树配置，换板子/换主频时请重新核对。
  */
-#define SPI_BUS1_BAUD_PRESCALER     SPI_BaudRatePrescaler_128
+#define SPI_BUS1_BAUD_PRESCALER     SPI_BaudRatePrescaler_16
 
 #define SPI_BUS1_DMA_RX_STREAM      DMA2_Stream0
 #define SPI_BUS1_DMA_RX_STREAM_NUM  0
