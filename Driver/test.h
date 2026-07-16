@@ -46,6 +46,7 @@ void Test_Attitude_Update(void);//独立姿态融合日志与标定 { Test_Attit
 void Test_LCD_Ascii_Update(void);//测试lcd{ Test_LCD_Ascii_Update, 50U, 0U },
 
 void Test_AsyncDisplay_Update(void);//
+void Test_K210_CommUpdate(void);//K210测试
 
 void Test_DriveProfile_Update(void);
 

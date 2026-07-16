@@ -31,6 +31,93 @@
 #include <stdint.h>
 
 #include "bsp_systick.h"
+#include "test.h"
+
+#include "k210_comm.h"
+#include "bsp_uart.h"
+#include "bsp_systick.h"
+
+#include <stdio.h>
+
+void Test_K210_CommUpdate(void)
+{
+    static uint32_t last_status_ms = 0U;
+
+    uint8_t digit;
+    uint8_t valid;
+    uint8_t confidence;
+
+    K210_Comm_Info_t info;
+
+    char buf[160];
+    int n;
+
+    /*
+     * 读取新的数字结果。
+     */
+    if (K210_Comm_GetNewDigit(
+            &digit,
+            &valid,
+            &confidence) == BSP_OK) {
+        n = snprintf(
+            buf,
+            sizeof(buf),
+            "NEW DIGIT=%u valid=%u confidence=%u\r\n",
+            (unsigned int)digit,
+            (unsigned int)valid,
+            (unsigned int)confidence
+        );
+
+        if ((n > 0) &&
+            (n < (int)sizeof(buf))) {
+            (void)BSP_UART_WriteFrame(
+                UART_PORT1,
+                (const uint8_t *)buf,
+                (uint16_t)n
+            );
+        }
+    }
+
+    /*
+     * 每500ms打印一次通信状态。
+     */
+    if ((uint32_t)(
+            BSP_GetTickMs() -
+            last_status_ms
+        ) < 500U) {
+        return;
+    }
+
+    last_status_ms = BSP_GetTickMs();
+
+    if (K210_Comm_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    n = snprintf(
+        buf,
+        sizeof(buf),
+        "K210 online=%u frames=%lu checksum_err=%lu format_err=%lu last_rx=%lu\r\n",
+        (unsigned int)info.online,
+        (unsigned long)info.valid_frame_count,
+        (unsigned long)info.checksum_error_count,
+        (unsigned long)info.format_error_count,
+        (unsigned long)info.last_rx_ms
+    );
+
+    if ((n > 0) &&
+        (n < (int)sizeof(buf))) {
+        (void)BSP_UART_WriteFrame(
+            UART_PORT1,
+            (const uint8_t *)buf,
+            (uint16_t)n
+        );
+    }
+}
+
+
+
+
 
 //娴嬭瘯鍑芥暟锛孫LED闂儊
 void Test_GPIO_Toggle(void)
