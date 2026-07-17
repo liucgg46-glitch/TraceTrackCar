@@ -17,31 +17,44 @@ void LineFollow_Init(void)
     for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
         s_lf.raw[i] = 0U;
     }
+    s_lf.output.linear_cps = 0;
+    s_lf.output.turn_cps = 0;
+    s_lf.output.valid = 0U;
 
     LineDetect_Init();
     LineTrack_Init();
-		RouteManager_Init();
+    RouteManager_Init();
 }
 
 void LineFollow_Start(void)
 {
     if (Sensor_IsImuReadyForMotion() == 0U) {
-        s_lf.state = LINE_FOLLOW_STOP;
-        Chassis_Stop();
+        LineFollow_Stop();
         return;
     }
+
+    /* Start each run with a clean route state and no stale motion action. */
+    RouteManager_Reset();
+    s_lf.output.linear_cps = 0;
+    s_lf.output.turn_cps = 0;
+    s_lf.output.valid = 0U;
     s_lf.state = LINE_FOLLOW_RUN;
 }
 
 void LineFollow_Stop(void)
 {
     s_lf.state = LINE_FOLLOW_STOP;
+    RouteManager_Reset();
+    s_lf.output.linear_cps = 0;
+    s_lf.output.turn_cps = 0;
+    s_lf.output.valid = 0U;
     Chassis_Stop();
 }
 
 void LineFollow_Update(void)
 {
     const LineDetect_Result_t *res;
+    Route_ControlMode_t control;
 
     if ((s_lf.state == LINE_FOLLOW_RUN) &&
         (Sensor_IsImuReadyForMotion() == 0U)) {
@@ -50,31 +63,48 @@ void LineFollow_Update(void)
     }
 
     if (Drv_GraySensor_IsOnline() == 0U) {
+        if (s_lf.state == LINE_FOLLOW_RUN) {
+            LineFollow_Stop();
+        }
         return;
     }
 
     (void)Drv_GraySensor_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
     LineDetect_Update(s_lf.raw);
     res = LineDetect_GetResultPtr();
-       s_lf.detect = *res;
+    s_lf.detect = *res;
+
+    /* Keep detection available for UI while stopped, but do not advance the
+     * route state machine until the vehicle is actually running. */
+    if (s_lf.state != LINE_FOLLOW_RUN) {
+        s_lf.output.linear_cps = 0;
+        s_lf.output.turn_cps = 0;
+        s_lf.output.valid = 0U;
+        return;
+    }
 
     /*
      * 只通过 RouteManager 输出。
      * 当前 ROUTE_PROFILE_BASIC 内部会调用 LineTrack_Compute。
      * 以后切换到 HJduino 状态机，也从这里统一接管。
      */
-    RouteManager_Update(res, &s_lf.output);
+    control = RouteManager_Update(res, &s_lf.output);
 
-    if (s_lf.state == LINE_FOLLOW_RUN) {
-        if (s_lf.output.valid) {
-            Chassis_SetSpeed(s_lf.output.linear_cps, s_lf.output.turn_cps);
-        } else {
-            Chassis_Stop();
-        }
-    
-			}
+    if (control == ROUTE_CONTROL_MOTION) {
+        /* Motion_Update() exclusively owns the chassis during this state. */
+        return;
+    }
+
+    if ((control == ROUTE_CONTROL_LINE_TRACK) &&
+        (s_lf.output.valid != 0U)) {
+        Chassis_SetSpeed(s_lf.output.linear_cps, s_lf.output.turn_cps);
+        return;
+    }
+
+    /* Invalid route output or action failure is fail-safe. */
+    LineFollow_Stop();
 }
-			
+
 LineFollow_State_t LineFollow_GetState(void)
 {
     return s_lf.state;

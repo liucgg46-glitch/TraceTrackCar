@@ -18,7 +18,7 @@ extern "C" {
  *   - Motion_GoDistance() / Motion_TurnAngle() 只启动动作，不等待完成；
  *   - Motion_Update() 必须 10ms 周期调用；
  *   - 任务状态机只查询 Motion_IsDone()，不要直接盯编码器细节；
- *   - 当前 TurnAngle 默认用编码器差速估算 yaw，后续可切换 IMU yaw。
+ *   - TurnAngle 使用 heading_estimator 的相对航向；默认来源是融合 IMU yaw。
  */
 
 typedef enum {
@@ -51,6 +51,9 @@ typedef struct {
 #define MOTION_DEFAULT_TIMEOUT_MS         8000U
 #define MOTION_MIN_ABS_SPEED_CPS          150
 #define MOTION_MAX_ABS_SPEED_CPS          2500
+#define MOTION_TURN_MIN_SPEED_CPS         1000
+#define MOTION_TURN_KP_CPS_PER_DEG        8.0f
+#define MOTION_TURN_SETTLE_SAMPLES        3U
 
 void Motion_Init(void);
 void Motion_Update(void);

@@ -35,6 +35,8 @@ void Test_MotionCmd_Update(void);//动作库测试 { Test_MotionCmd_Update,  10U
 void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
 
 void Test_LineCmd_Update(void);// { Test_LineCmd_Update,   10U,   0U },
+void Test_RouteCmd_Update(void);// { Test_RouteCmd_Update, 10U, 0U }
+void Test_RouteLog(void);// { Test_RouteLog, 200U, 0U }
 void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和校准后的灰度数据，巡线状态等等）{ Test_LineCmd_Log,     200U,   0U }, 
 
 void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U, 0U },

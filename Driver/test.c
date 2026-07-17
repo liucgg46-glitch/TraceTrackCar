@@ -20,6 +20,7 @@
 #include "line_follow_app.h"
 #include "line_detect.h"
 #include "line_track.h"
+#include "route_manager.h"
 #include "drv_gray_sensor.h"
 #include "drv_gray_mcu_i2c.h"
 #include "drv_lcd_tft.h"
@@ -527,9 +528,9 @@ void Test_MotionCmd_Update(void)
         } else if (ch == 'v') {
             (void)Motion_GoDistance(-500, 800);
         } else if (ch == 'L') {
-            (void)Motion_TurnAngle(90, 600);
+            (void)Motion_TurnAngle(90, 1600);
         } else if (ch == 'R') {
-            (void)Motion_TurnAngle(-90, 600);
+            (void)Motion_TurnAngle(-90, 1600);
         } else if (ch == 'x' || ch == '0') {
             Motion_Stop();
         }
@@ -794,6 +795,60 @@ void Test_LineCmd_Update(void)
 void Test_LineCmd_Log(void)
 {
     Test_Line_Print();
+}
+
+void Test_RouteLog(void)
+{
+    RouteManager_Info_t route;
+    LineFollow_Info_t line;
+    Motion_Info_t motion;
+    char buf[256];
+    int n;
+
+    if (RouteManager_GetInfo(&route) != BSP_OK) return;
+    if (LineFollow_GetInfo(&line) != BSP_OK) return;
+    if (Motion_GetInfo(&motion) != BSP_OK) return;
+
+    n = snprintf(buf, sizeof(buf),
+                 "ROUTE profile=%u state=%u control=%u line=%u "
+                 "motion=%u run_ms=%lu confirm=%u transitions=%lu "
+                 "type=%s mask=%02X out=%d/%d yaw=%d\r\n",
+                 (unsigned int)route.profile,
+                 (unsigned int)route.profile_state,
+                 (unsigned int)route.control_mode,
+                 (unsigned int)line.state,
+                 (unsigned int)route.motion_state,
+                 (unsigned long)route.running_ms,
+                 (unsigned int)route.event_confirm_samples,
+                 (unsigned long)route.transition_count,
+                 LineTypeName(line.detect.type),
+                 (unsigned int)line.detect.black_mask,
+                 (int)line.output.linear_cps,
+                 (int)line.output.turn_cps,
+                 (int)motion.current_yaw_deg);
+
+    if ((n > 0) && (n < (int)sizeof(buf))) {
+        (void)BSP_UART_WriteFrame(UART_PORT1,
+                                  (const uint8_t *)buf,
+                                  (uint16_t)n);
+    }
+}
+
+void Test_RouteCmd_Update(void)
+{
+    uint8_t ch;
+
+    while (BSP_UART_GetChar(UART_PORT1, &ch)) {
+        if ((ch == '1') || (ch == 'l') || (ch == 'L')) {
+            LineFollow_Start();
+        } else if ((ch == '0') || (ch == 'x') || (ch == 'X')) {
+            LineFollow_Stop();
+        } else if ((ch == 'r') || (ch == 'R')) {
+            RouteManager_Reset();
+        } else if ((ch == 'p') || (ch == 'P')) {
+            Test_RouteLog();
+        }
+    }
 }
 
 

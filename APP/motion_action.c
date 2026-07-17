@@ -5,6 +5,7 @@
 #include "bsp_common.h"
 
 static Motion_Info_t s_motion;
+static uint8_t s_turn_settle_samples;
 
 static int32_t Motion_Abs32(int32_t x)
 {
@@ -33,6 +34,7 @@ static void Motion_SetDone(void)
     Chassis_Stop();
     s_motion.state = MOTION_DONE;
     s_motion.action = MOTION_ACTION_NONE;
+    s_turn_settle_samples = 0U;
 }
 
 static void Motion_SetError(void)
@@ -40,6 +42,7 @@ static void Motion_SetError(void)
     Chassis_Stop();
     s_motion.state = MOTION_ERROR;
     s_motion.action = MOTION_ACTION_NONE;
+    s_turn_settle_samples = 0U;
 }
 
 void Motion_Init(void)
@@ -53,6 +56,7 @@ void Motion_Init(void)
     s_motion.current_yaw_deg = 0.0f;
     s_motion.start_time_ms = 0;
     s_motion.timeout_ms = MOTION_DEFAULT_TIMEOUT_MS;
+    s_turn_settle_samples = 0U;
 }
 
 BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
@@ -77,6 +81,7 @@ BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
     s_motion.current_yaw_deg = 0.0f;
     s_motion.start_time_ms = BSP_GET_TICK();
     s_motion.timeout_ms = MOTION_DEFAULT_TIMEOUT_MS;
+    s_turn_settle_samples = 0U;
 
     return BSP_OK;
 }
@@ -97,10 +102,14 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg, int16_t speed_cps)
     if (s_motion.speed_cps < 0) {
         s_motion.speed_cps = (int16_t)(-s_motion.speed_cps);
     }
+    if (s_motion.speed_cps < MOTION_TURN_MIN_SPEED_CPS) {
+        s_motion.speed_cps = MOTION_TURN_MIN_SPEED_CPS;
+    }
     s_motion.current_distance_mm = 0;
     s_motion.current_yaw_deg = 0.0f;
     s_motion.start_time_ms = BSP_GET_TICK();
     s_motion.timeout_ms = MOTION_DEFAULT_TIMEOUT_MS;
+    s_turn_settle_samples = 0U;
 
     return BSP_OK;
 }
@@ -110,6 +119,7 @@ void Motion_Stop(void)
     Chassis_Stop();
     s_motion.state = MOTION_IDLE;
     s_motion.action = MOTION_ACTION_NONE;
+    s_turn_settle_samples = 0U;
 }
 
 void Motion_Update(void)
@@ -117,6 +127,7 @@ void Motion_Update(void)
     int32_t target_abs;
     int32_t dist_abs;
     float err_deg;
+    float cmd_f;
     int16_t cmd;
 
     if (s_motion.state != MOTION_RUNNING) {
@@ -149,10 +160,24 @@ void Motion_Update(void)
         case MOTION_ACTION_TURN_ANGLE:
             err_deg = Heading_GetErrorDeg((float)s_motion.target_angle_deg);
             if (Motion_AbsFloat(err_deg) <= MOTION_ANGLE_TOLERANCE_DEG) {
-                Motion_SetDone();
+                if (s_turn_settle_samples < 0xFFU) {
+                    s_turn_settle_samples++;
+                }
+                Chassis_Stop();
+                if (s_turn_settle_samples >= MOTION_TURN_SETTLE_SAMPLES) {
+                    Motion_SetDone();
+                }
             } else {
+                s_turn_settle_samples = 0U;
                 /* 约定 turn > 0 左转，turn < 0 右转。 */
-                cmd = (err_deg > 0.0f) ? s_motion.speed_cps : (int16_t)(-s_motion.speed_cps);
+                cmd_f = Motion_AbsFloat(err_deg) * MOTION_TURN_KP_CPS_PER_DEG;
+                if (cmd_f > (float)s_motion.speed_cps) {
+                    cmd_f = (float)s_motion.speed_cps;
+                }
+                if (cmd_f < (float)MOTION_TURN_MIN_SPEED_CPS) {
+                    cmd_f = (float)MOTION_TURN_MIN_SPEED_CPS;
+                }
+                cmd = (err_deg > 0.0f) ? (int16_t)cmd_f : (int16_t)(-cmd_f);
                 Chassis_SetSpeed(0, cmd);
             }
             break;

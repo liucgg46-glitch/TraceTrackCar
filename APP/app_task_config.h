@@ -21,7 +21,7 @@ extern "C" {
  *   1. 改周期：直接改 period_ms；
  *   2. 暂时不用某任务：把 task_func 改成 0，或把该行注释掉；
  *   3. 加新任务：先在 app_task_port.h 声明函数，再在这里加一行；
- *   4. A/B/C 对接：只实现这里对应的 Update 函数，不要改函数名。
+ *   4. A/B1	/C 对接：只实现这里对应的 Update 函数，不要改函数名。
  *
  * 周期建议：
  *   - 1ms：只放很轻的后台维护任务；
@@ -33,13 +33,13 @@ extern "C" {
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
 	{ Test_GPIO_Toggle,        100U, 0U },   \
-	{ AppTask_BSP_Background,    1U, 0U },  \
+	{ AppTask_BSP_Background,    1U,   0U },  \
 	{ Sensor_Update,             1U,   0U },  \
 	{ Encoder_Update,           10U,   0U },  \
-	{ LineTrack_Update,         10U,   0U },  \
+	{ Test_MotionCmd_Update,    10U,   0U },  \
+	{ Motion_Update,            10U,   0U },  \
 	{ Chassis_Update,           10U,   0U },  \
-	{ OLED_Update,             20U,   0U },   \
-	{ LCD_Update,             20U,   0U },   \
+	{ Test_MotionCmd_Log,      200U,   0U },  \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 
