@@ -19,8 +19,10 @@ extern "C" {
  *   - Drv_ICM20948_Init()
  *   - Drv_LcdTft_Init()
  *   - Drv_OledI2c_Init()
+ *   - Drv_E220_Init()（USART1 选择 E220 时注册 AUX 发送保护）
  *
- * Driver_Task() 必须被 1ms 左右后台任务周期调用，用于推进非阻塞 LCD/OLED DMA 状态机。
+ * Driver_Task() 必须被 1ms 左右后台任务周期调用，用于推进 E220 发送重试及
+ * 非阻塞 LCD/OLED DMA 状态机。
  */
 void Driver_Init(void);
 void Driver_Task(void);

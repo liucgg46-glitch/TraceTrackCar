@@ -273,8 +273,24 @@ typedef struct {
     uint16_t tx_count;
 } UART_Stats_t;
 
+/*
+ * 可选的逐端口发送就绪检查。
+ * 返回 1 允许新的写入；返回 0 时，非阻塞写入报告忙。
+ * 传入空函数指针时保持原有 UART 行为。
+ */
+typedef uint8_t (*BSP_UART_TxReadyFn_t)(void);
+
+/*
+ * 可选的完整帧延后处理函数。
+ * 仅当 BSP_UART_WriteFrame() 当前无法接收整帧时调用。
+ * 回调函数复制并保存完整帧后才能返回 BSP_OK。
+ */
+typedef BSP_Status_t (*BSP_UART_TxDeferredFn_t)(const uint8_t *data, uint16_t len);
+
 void BSP_UART_Init(UART_Port_t port);
 void BSP_UART_InitAll(void);
+void BSP_UART_SetTxReadyGuard(UART_Port_t port, BSP_UART_TxReadyFn_t guard);
+void BSP_UART_SetTxDeferredHandler(UART_Port_t port, BSP_UART_TxDeferredFn_t handler);
 
 /*
  * 流式写入：尽可能把 data 写入 TX 环形缓冲区，返回实际写入字节数。
@@ -288,6 +304,12 @@ uint16_t BSP_UART_Write(UART_Port_t port, const uint8_t *data, uint16_t len);
  * 返回 BSP_BUSY 时，本次不会写入任何字节，适合 MAVLink、自定义帧等协议包。
  */
 BSP_Status_t BSP_UART_WriteFrame(UART_Port_t port, const uint8_t *data, uint16_t len);
+
+/*
+ * 驱动层重试专用：直接尝试写入 UART TX 环形缓冲区，不调用就绪保护和延后处理器。
+ * 仍保持整帧原子语义；空间不足时返回 BSP_BUSY，且不写入任何字节。
+ */
+BSP_Status_t BSP_UART_WriteFrameNow(UART_Port_t port, const uint8_t *data, uint16_t len);
 
 /* 兼容旧接口：现在等价于 BSP_UART_WriteFrame()，避免协议帧被部分写入。 */
 BSP_Status_t BSP_UART_SendData_NonBlocking(UART_Port_t port, const uint8_t *data, uint16_t len);

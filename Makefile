@@ -102,6 +102,7 @@ SRCS := \
   Driver/drv_encoder.c \
   Driver/drv_motor.c \
   Driver/driver_all.c \
+  Driver/drv_e220.c \
   Driver/drv_gray_4051.c \
   Driver/drv_gray_mcu_i2c.c \
   Driver/drv_gray_sensor.c \

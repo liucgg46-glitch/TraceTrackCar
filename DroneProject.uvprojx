@@ -869,6 +869,16 @@
               <FilePath>.\Driver\driver_all.h</FilePath>
             </File>
             <File>
+              <FileName>drv_e220.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_e220.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_e220.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_e220.h</FilePath>
+            </File>
+            <File>
               <FileName>drv_gray_4051.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Driver\drv_gray_4051.c</FilePath>

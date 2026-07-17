@@ -25,6 +25,8 @@ extern "C" {
  *   CH11~CH13：74HC4051 灰度模块地址选择脚 S0/S1/S2
  *   CH14~CH15：SPI TFT LCD 控制脚 DC/BL
  *   CH16 ：PE5，ICM-20948 SPI2 独立片选 CS
+ *   CH17 ：PG2，激光使能
+ *   CH18 ：PE6，E220 AUX 输入（仅无线 USART1 模式启用）
  *
  * 电机方向脚规划：
  *   M1_IN1 = PD0, M1_IN2 = PD1
@@ -217,6 +219,24 @@ extern "C" {
 #define BSP_GPIO_CH17_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH17_INIT_LEVEL     0U
 
+/*
+ * CH18：E220 AUX 忙闲状态输入，使用 PE6。
+ *
+ * AUX 是 E220 的输出：低电平表示忙，高电平表示空闲。该引脚不能配置为
+ * MCU 输出，也不能在外部下拉。本通道不使用内部上下拉，避免 MCU 在模块
+ * 上电期间影响 AUX 电平。
+ *
+ * 当前源码配置未占用 PE6；实际开发板是否已引出 PE6，仍需结合板级硬件确认。
+ */
+#define BSP_GPIO_CH18_ENABLE         VEHICLE_UART1_E220_ENABLE
+#define BSP_GPIO_CH18_PORT           GPIOE
+#define BSP_GPIO_CH18_PIN            GPIO_Pin_6
+#define BSP_GPIO_CH18_MODE           GPIO_Mode_IN
+#define BSP_GPIO_CH18_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH18_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH18_SPEED          GPIO_Speed_2MHz
+#define BSP_GPIO_CH18_INIT_LEVEL     0U
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -270,6 +290,9 @@ typedef enum {
 #if BSP_GPIO_CH17_ENABLE
     BSP_GPIO_CH17,
 #endif
+#if BSP_GPIO_CH18_ENABLE
+    BSP_GPIO_CH18,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -288,6 +311,10 @@ typedef enum {
 #define BSP_GPIO_ICM20948_CS BSP_GPIO_CH16
 
 #define BSP_GPIO_LASER_EN    BSP_GPIO_CH17
+
+#if BSP_GPIO_CH18_ENABLE
+#define BSP_GPIO_E220_AUX     BSP_GPIO_CH18
+#endif
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

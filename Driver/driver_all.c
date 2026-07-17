@@ -5,9 +5,13 @@
 #include "drv_icm20948.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
+#include "drv_e220.h"
 
 void Driver_Init(void)
 {
+    /* USART1 的普通直连或 E220 模式由 BSP/vehicle_config.h 选择。 */
+    Drv_E220_Init();
+
     /* 电机 PWM + 方向 GPIO 组合层。BSP_InitAll() 已经初始化底层 PWM/GPIO。 */
     Motor_Init();
 
@@ -29,6 +33,7 @@ void Driver_Init(void)
 
 void Driver_Task(void)
 {
+    Drv_E220_Task();
     Drv_LcdTft_Task();
     Drv_OledI2c_Task();
 }

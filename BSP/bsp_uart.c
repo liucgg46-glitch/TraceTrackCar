@@ -238,6 +238,9 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
 #endif
 };
 
+static BSP_UART_TxReadyFn_t s_uart_tx_ready_guard[UART_PORT_COUNT];
+static BSP_UART_TxDeferredFn_t s_uart_tx_deferred_handler[UART_PORT_COUNT];
+
 typedef struct {
     volatile uint16_t rx_head;
     volatile uint16_t rx_tail;
@@ -489,6 +492,24 @@ void BSP_UART_InitAll(void)
     }
 }
 
+void BSP_UART_SetTxReadyGuard(UART_Port_t port, BSP_UART_TxReadyFn_t guard)
+{
+    if (port >= UART_PORT_COUNT) {
+        return;
+    }
+
+    s_uart_tx_ready_guard[port] = guard;
+}
+
+void BSP_UART_SetTxDeferredHandler(UART_Port_t port, BSP_UART_TxDeferredFn_t handler)
+{
+    if (port >= UART_PORT_COUNT) {
+        return;
+    }
+
+    s_uart_tx_deferred_handler[port] = handler;
+}
+
 uint16_t BSP_UART_Write(UART_Port_t port, const uint8_t *data, uint16_t len)
 {
     volatile UART_Runtime_t *rt;
@@ -501,6 +522,12 @@ uint16_t BSP_UART_Write(UART_Port_t port, const uint8_t *data, uint16_t len)
     }
 
     rt = &s_uart_rt[port];
+
+    if ((s_uart_tx_ready_guard[port] != 0) &&
+        (s_uart_tx_ready_guard[port]() == 0U)) {
+        rt->tx_drop = (uint16_t)(rt->tx_drop + len);
+        return 0U;
+    }
 
     primask = BSP_EnterCritical();
 
@@ -528,14 +555,14 @@ uint16_t BSP_UART_Write(UART_Port_t port, const uint8_t *data, uint16_t len)
     return written;
 }
 
-BSP_Status_t BSP_UART_WriteFrame(UART_Port_t port, const uint8_t *data, uint16_t len)
+BSP_Status_t BSP_UART_WriteFrameNow(UART_Port_t port, const uint8_t *data, uint16_t len)
 {
     volatile UART_Runtime_t *rt;
     uint16_t i;
     uint8_t need_start = 0U;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT || data == 0 || len == 0U) {
+    if (port >= UART_PORT_COUNT || data == 0 || len == 0U || len > UART_TX_BUF_SIZE) {
         return BSP_PARAM;
     }
 
@@ -569,6 +596,30 @@ BSP_Status_t BSP_UART_WriteFrame(UART_Port_t port, const uint8_t *data, uint16_t
     }
 
     return BSP_OK;
+}
+
+BSP_Status_t BSP_UART_WriteFrame(UART_Port_t port, const uint8_t *data, uint16_t len)
+{
+    BSP_Status_t status;
+
+    if (port >= UART_PORT_COUNT || data == 0 || len == 0U || len > UART_TX_BUF_SIZE) {
+        return BSP_PARAM;
+    }
+
+    if ((s_uart_tx_ready_guard[port] != 0) &&
+        (s_uart_tx_ready_guard[port]() == 0U)) {
+        if (s_uart_tx_deferred_handler[port] != 0) {
+            return s_uart_tx_deferred_handler[port](data, len);
+        }
+        return BSP_BUSY;
+    }
+
+    status = BSP_UART_WriteFrameNow(port, data, len);
+    if ((status == BSP_BUSY) && (s_uart_tx_deferred_handler[port] != 0)) {
+        return s_uart_tx_deferred_handler[port](data, len);
+    }
+
+    return status;
 }
 
 BSP_Status_t BSP_UART_SendData_NonBlocking(UART_Port_t port, const uint8_t *data, uint16_t len)

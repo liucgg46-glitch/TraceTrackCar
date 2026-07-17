@@ -18,6 +18,32 @@
 #define VEHICLE_DRIVE_MODE                 VEHICLE_DRIVE_MODE_2WD
 #endif
 
+/*
+ * USART1 外部链路选择。
+ *
+ * 普通直连：PA9/PA10 直接连接 USB-TTL 转换器或其他 UART 设备。
+ * E220：PA9/PA10 连接 E220 的 RXD/TXD，PE6 读取 E220 AUX。
+ *
+ * E220 模块已配置为 115200、8N1。使用透明传输模式时，M0 和 M1
+ * 必须由硬件可靠拉低；本固件不控制这两个引脚。
+ */
+#define VEHICLE_UART1_LINK_DIRECT           0U
+#define VEHICLE_UART1_LINK_E220             1U
+
+#ifndef VEHICLE_UART1_LINK_MODE
+#define VEHICLE_UART1_LINK_MODE             VEHICLE_UART1_LINK_DIRECT
+#endif
+
+#if (VEHICLE_UART1_LINK_MODE == VEHICLE_UART1_LINK_DIRECT)
+#define VEHICLE_UART1_E220_ENABLE           0U
+#define VEHICLE_UART1_LINK_NAME             "DIRECT"
+#elif (VEHICLE_UART1_LINK_MODE == VEHICLE_UART1_LINK_E220)
+#define VEHICLE_UART1_E220_ENABLE           1U
+#define VEHICLE_UART1_LINK_NAME             "E220"
+#else
+#error "VEHICLE_UART1_LINK_MODE must be VEHICLE_UART1_LINK_DIRECT or VEHICLE_UART1_LINK_E220"
+#endif
+
 #if (VEHICLE_DRIVE_MODE == VEHICLE_DRIVE_MODE_2WD)
 #define VEHICLE_REAR_DRIVE_ENABLE          0U
 #define VEHICLE_SPI1_PINS_AVAILABLE        1U
