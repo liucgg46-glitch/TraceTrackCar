@@ -42,7 +42,8 @@ extern "C" {
  *   CH4：TIM4 PB6 / PB7
  *
  * 这样分配的目的：
- *   - 不占用 PA15 / PB3 / PB4，尽量不影响 SWD/JTAG/SWO 调试脚；
+ *   - 编码器不占用 PA15 / PB3 / PB4；当前 PA15 已另作 KEY5，
+ *     因此保留 PA13/PA14 两线 SWD，但不再保留完整 JTAG；
  *   - TIM8 整个留给 4 路电机 PWM：PC6/PC7/PC8/PC9；
  *   - SPI 改用 SPI2：PB13/PB14/PB15；
  *   - I2C 保留 I2C1：PB8/PB9；

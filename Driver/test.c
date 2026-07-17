@@ -236,11 +236,79 @@ void Test_Gray4051_Log(void)
     }
 }
 
-void Test_Key_LED(void)
+static void Test_Key_Send(const char *message, uint16_t length)
 {
-    if (BSP_Key_WasPressed(BSP_KEY1)) {
-        BSP_GPIO_Toggle(BSP_GPIO_CH1);
+    (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)message, length);
+}
+
+/*
+ * 五按键最小测试任务：
+ *   KEY1=PE4、KEY2=PE3、KEY3=PE2、KEY4=PE1、KEY5=PA15。
+ * 本函数自行完成按键扫描和消抖，不需要额外注册 Sensor_Update。
+ */
+void Test_Key_Update(void)
+{
+    static uint8_t banner_sent = 0U;
+
+    BSP_Key_UpdateAll();
+
+    if (banner_sent == 0U) {
+        static const char banner[] =
+            "KEY TEST READY: KEY1=PE4 KEY2=PE3 KEY3=PE2 KEY4=PE1 KEY5=PA15\r\n";
+        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
+        banner_sent = 1U;
     }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        static const char message[] = "KEY1 PRESSED (PE4)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+    if (BSP_Key_WasReleased(BSP_KEY1)) {
+        static const char message[] = "KEY1 RELEASED (PE4)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        static const char message[] = "KEY2 PRESSED (PE3)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+    if (BSP_Key_WasReleased(BSP_KEY2)) {
+        static const char message[] = "KEY2 RELEASED (PE3)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        static const char message[] = "KEY3 PRESSED (PE2)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+    if (BSP_Key_WasReleased(BSP_KEY3)) {
+        static const char message[] = "KEY3 RELEASED (PE2)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        static const char message[] = "KEY4 PRESSED (PE1)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+    if (BSP_Key_WasReleased(BSP_KEY4)) {
+        static const char message[] = "KEY4 RELEASED (PE1)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        static const char message[] = "KEY5 PRESSED (PA15)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+    if (BSP_Key_WasReleased(BSP_KEY5)) {
+        static const char message[] = "KEY5 RELEASED (PA15)\r\n";
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
 }
 
 /*

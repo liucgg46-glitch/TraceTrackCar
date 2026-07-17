@@ -8,7 +8,7 @@ void Test_Encoder_Log(void); //{ Test_Encoder_Log,   200U, 0U },
 void Test_Gray4051_Update(void);//{ Test_Gray4051_Update,  1U,   0U },
 void Test_Gray4051_Log(void);//{ Test_Gray4051_Log,     200U, 0U },
 
-void Test_Key_LED(void);//{ Test_Key_LED,  10U, 0U },
+void Test_Key_Update(void);//五按键按下/释放串口测试 { Test_Key_Update, 10U, 0U },
 
 void Test_EXTI_Init(void); //在主函数BSP_InitAll（）后，Scheduler_Init();前初始化才行
 void Test_EXTI_Log(void);  //{ Test_EXTI_Log,         200U, 0U },

@@ -49,6 +49,18 @@ extern "C" {
 #define BSP_KEY4_PUPD                    GPIO_PuPd_UP
 #define BSP_KEY4_ACTIVE_LEVEL            0U
 
+/*
+ * KEY5：开发板引出的 PA15 按键。因仓库没有开发板原理图，暂按现有
+ * KEY1~KEY4 的接法配置为内部上拉、低电平按下；实板电平仍需确认。
+ * PA15 复位后兼作 JTDI；配置为按键输入后不能再使用完整 JTAG，
+ * 但 PA13/PA14 上的两线 SWD 调试不受影响。
+ */
+#define BSP_KEY5_ENABLE                  1
+#define BSP_KEY5_PORT                    GPIOA
+#define BSP_KEY5_PIN                     GPIO_Pin_15
+#define BSP_KEY5_PUPD                    GPIO_PuPd_UP
+#define BSP_KEY5_ACTIVE_LEVEL            0U
+
 typedef enum {
 #if BSP_KEY1_ENABLE
     BSP_KEY1,
@@ -61,6 +73,9 @@ typedef enum {
 #endif
 #if BSP_KEY4_ENABLE
     BSP_KEY4,
+#endif
+#if BSP_KEY5_ENABLE
+    BSP_KEY5,
 #endif
     BSP_KEY_COUNT
 } BSP_Key_Id_t;

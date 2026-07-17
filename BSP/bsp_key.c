@@ -28,6 +28,9 @@ static const BSP_Key_Cfg_t s_key_cfg[BSP_KEY_COUNT] = {
 #if BSP_KEY4_ENABLE
     [BSP_KEY4] = {BSP_KEY4_PORT, BSP_KEY4_PIN, BSP_KEY4_PUPD, BSP_KEY4_ACTIVE_LEVEL},
 #endif
+#if BSP_KEY5_ENABLE
+    [BSP_KEY5] = {BSP_KEY5_PORT, BSP_KEY5_PIN, BSP_KEY5_PUPD, BSP_KEY5_ACTIVE_LEVEL},
+#endif
 };
 
 static volatile BSP_Key_Runtime_t s_key_rt[BSP_KEY_COUNT];
