@@ -17,6 +17,7 @@ extern "C" {
  *   - Drv_GraySensor_Init()
  *   - Drv_VL53L1X_Init()
  *   - Drv_ICM20948_Init()
+ *   - Drv_HX711_Init()
  *   - Drv_LcdTft_Init()
  *   - Drv_OledI2c_Init()
  *   - Drv_E220_Init()（USART1 选择 E220 时注册 AUX 发送保护）

@@ -359,6 +359,341 @@ void Test_UART_Stats(void)
     BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
 }
 
+#if VEHICLE_UART1_E220_ENABLE
+
+#define TEST_E220_SEND_PERIOD_MS          1000U
+#define TEST_E220_RX_TIMEOUT_MS           2500U
+#define TEST_E220_START_PHASE_MIN_MS      100U
+#define TEST_E220_START_PHASE_SPAN_MS     800U
+#define TEST_E220_RX_FRAME_MAX_LEN        32U
+#define TEST_E220_UID_BASE_ADDRESS        0x1FFF7A10UL
+
+typedef struct {
+    uint32_t tx_value;
+    uint32_t rx_value;
+    uint32_t rx_count;
+    uint32_t last_rx_ms;
+    uint32_t revision;
+    uint16_t self_id;
+    uint16_t peer_id;
+    uint8_t rx_valid;
+    uint8_t online;
+} Test_E220_LinkState_t;
+
+static Test_E220_LinkState_t s_test_e220_state;
+
+static uint32_t Test_E220_GetUidHash(void)
+{
+    volatile const uint32_t *uid = (volatile const uint32_t *)TEST_E220_UID_BASE_ADDRESS;
+
+    return uid[0] ^ uid[1] ^ uid[2] ^ (uid[0] >> 16U) ^ (uid[2] << 7U);
+}
+
+static uint8_t Test_E220_HexToValue(uint8_t ch, uint8_t *value)
+{
+    if ((ch >= (uint8_t)'0') && (ch <= (uint8_t)'9')) {
+        *value = (uint8_t)(ch - (uint8_t)'0');
+        return 1U;
+    }
+    if ((ch >= (uint8_t)'A') && (ch <= (uint8_t)'F')) {
+        *value = (uint8_t)(ch - (uint8_t)'A' + 10U);
+        return 1U;
+    }
+    if ((ch >= (uint8_t)'a') && (ch <= (uint8_t)'f')) {
+        *value = (uint8_t)(ch - (uint8_t)'a' + 10U);
+        return 1U;
+    }
+    return 0U;
+}
+
+static uint8_t Test_E220_ParseFrame(const uint8_t *frame,
+                                    uint8_t length,
+                                    uint16_t *peer_id,
+                                    uint32_t *value)
+{
+    static const uint8_t prefix[] = "E220,";
+    uint32_t parsed_value = 0U;
+    uint16_t parsed_id = 0U;
+    uint8_t digit;
+    uint8_t i;
+
+    if ((frame == 0) || (peer_id == 0) || (value == 0) || (length < 11U)) {
+        return 0U;
+    }
+
+    for (i = 0U; i < (uint8_t)(sizeof(prefix) - 1U); i++) {
+        if (frame[i] != prefix[i]) {
+            return 0U;
+        }
+    }
+
+    for (i = 5U; i < 9U; i++) {
+        if (Test_E220_HexToValue(frame[i], &digit) == 0U) {
+            return 0U;
+        }
+        parsed_id = (uint16_t)((parsed_id << 4U) | digit);
+    }
+
+    if (frame[9] != (uint8_t)',') {
+        return 0U;
+    }
+
+    for (i = 10U; i < length; i++) {
+        if ((frame[i] < (uint8_t)'0') || (frame[i] > (uint8_t)'9')) {
+            return 0U;
+        }
+        digit = (uint8_t)(frame[i] - (uint8_t)'0');
+        if (parsed_value > ((0xFFFFFFFFUL - digit) / 10U)) {
+            return 0U;
+        }
+        parsed_value = (parsed_value * 10U) + digit;
+    }
+
+    *peer_id = parsed_id;
+    *value = parsed_value;
+    return 1U;
+}
+
+static void Test_E220_OledUpdate(void)
+{
+    static uint32_t displayed_revision = 0U;
+    char text[24];
+
+    if ((displayed_revision == s_test_e220_state.revision) ||
+        (Drv_OledI2c_IsReady() == 0U) ||
+        (Drv_OledI2c_IsBusy() != 0U)) {
+        return;
+    }
+
+    Drv_OledI2c_Clear();
+    Drv_OledI2c_DrawString5x7(2U, 0U, "E220 CAR LINK", DRV_OLED_COLOR_ON);
+    (void)snprintf(text, sizeof(text), "SELF:%04X",
+                   (unsigned int)s_test_e220_state.self_id);
+    Drv_OledI2c_DrawString5x7(2U, 10U, text, DRV_OLED_COLOR_ON);
+    (void)snprintf(text, sizeof(text), "TX:%lu",
+                   (unsigned long)s_test_e220_state.tx_value);
+    Drv_OledI2c_DrawString5x7(2U, 20U, text, DRV_OLED_COLOR_ON);
+
+    if (s_test_e220_state.rx_valid != 0U) {
+        (void)snprintf(text, sizeof(text), "PEER:%04X",
+                       (unsigned int)s_test_e220_state.peer_id);
+    } else {
+        (void)snprintf(text, sizeof(text), "PEER:----");
+    }
+    Drv_OledI2c_DrawString5x7(2U, 30U, text, DRV_OLED_COLOR_ON);
+
+    if (s_test_e220_state.rx_valid != 0U) {
+        (void)snprintf(text, sizeof(text), "RX:%lu",
+                       (unsigned long)s_test_e220_state.rx_value);
+    } else {
+        (void)snprintf(text, sizeof(text), "RX:----");
+    }
+    Drv_OledI2c_DrawString5x7(2U, 40U, text, DRV_OLED_COLOR_ON);
+
+    (void)snprintf(text, sizeof(text), "N:%lu %s",
+                   (unsigned long)s_test_e220_state.rx_count,
+                   (s_test_e220_state.online != 0U) ? "OK" : "WAIT");
+    Drv_OledI2c_DrawString5x7(2U, 52U, text, DRV_OLED_COLOR_ON);
+    Drv_OledI2c_Flush();
+    displayed_revision = s_test_e220_state.revision;
+}
+
+static void Test_E220_LcdUpdate(void)
+{
+    static Test_E220_LinkState_t snapshot;
+    static uint32_t displayed_revision = 0U;
+    static uint32_t active_revision = 0U;
+    static uint8_t refresh_pending = 0U;
+    static uint8_t base_ready = 0U;
+    static uint8_t step = 0U;
+    BSP_Status_t status = BSP_BUSY;
+    char text[24];
+
+    if (Drv_LcdTft_IsReady() == 0U) {
+        return;
+    }
+
+    if (refresh_pending == 0U) {
+        if (displayed_revision == s_test_e220_state.revision) {
+            return;
+        }
+        snapshot = s_test_e220_state;
+        active_revision = s_test_e220_state.revision;
+        step = (base_ready != 0U) ? 3U : 0U;
+        refresh_pending = 1U;
+    }
+
+    if (Drv_LcdTft_IsBusy() != 0U) {
+        return;
+    }
+
+    switch (step) {
+        case 0U:
+            status = Drv_LcdTft_TryClear(DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 1U:
+            status = Drv_LcdTft_TryDrawRect(4U, 4U, 232U, 232U, DRV_LCD_COLOR_BLUE);
+            break;
+
+        case 2U:
+            status = Drv_LcdTft_TryDrawString5x7(16U, 18U, "E220 CAR LINK TEST",
+                                                 DRV_LCD_COLOR_CYAN,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 3U:
+            (void)snprintf(text, sizeof(text), "SELF ID:%04X",
+                           (unsigned int)snapshot.self_id);
+            status = Drv_LcdTft_TryDrawString5x7(16U, 48U, text,
+                                                 DRV_LCD_COLOR_WHITE,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 4U:
+            (void)snprintf(text, sizeof(text), "TX:%10lu",
+                           (unsigned long)snapshot.tx_value);
+            status = Drv_LcdTft_TryDrawString5x7(16U, 72U, text,
+                                                 DRV_LCD_COLOR_WHITE,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 5U:
+            if (snapshot.rx_valid != 0U) {
+                (void)snprintf(text, sizeof(text), "PEER ID:%04X",
+                               (unsigned int)snapshot.peer_id);
+            } else {
+                (void)snprintf(text, sizeof(text), "PEER ID:----");
+            }
+            status = Drv_LcdTft_TryDrawString5x7(16U, 96U, text,
+                                                 DRV_LCD_COLOR_YELLOW,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 6U:
+            if (snapshot.rx_valid != 0U) {
+                (void)snprintf(text, sizeof(text), "RX:%10lu",
+                               (unsigned long)snapshot.rx_value);
+            } else {
+                (void)snprintf(text, sizeof(text), "RX:----------");
+            }
+            status = Drv_LcdTft_TryDrawString5x7(16U, 120U, text,
+                                                 DRV_LCD_COLOR_YELLOW,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 7U:
+            (void)snprintf(text, sizeof(text), "RX COUNT:%8lu",
+                           (unsigned long)snapshot.rx_count);
+            status = Drv_LcdTft_TryDrawString5x7(16U, 144U, text,
+                                                 DRV_LCD_COLOR_WHITE,
+                                                 DRV_LCD_COLOR_BLACK);
+            break;
+
+        case 8U:
+            status = Drv_LcdTft_TryDrawString5x7(
+                16U, 168U,
+                (snapshot.online != 0U) ? "LINK:OK            " : "LINK:WAIT          ",
+                (snapshot.online != 0U) ? DRV_LCD_COLOR_GREEN : DRV_LCD_COLOR_RED,
+                DRV_LCD_COLOR_BLACK);
+            break;
+
+        default:
+            base_ready = 1U;
+            displayed_revision = active_revision;
+            refresh_pending = 0U;
+            return;
+    }
+
+    if (status == BSP_OK) {
+        step++;
+    }
+}
+
+#endif
+
+void Test_E220_Link_Update(void)
+{
+#if VEHICLE_UART1_E220_ENABLE
+    static uint8_t initialized = 0U;
+    static uint8_t rx_frame[TEST_E220_RX_FRAME_MAX_LEN];
+    static uint8_t rx_length = 0U;
+    static uint8_t discard_until_newline = 0U;
+    static uint32_t next_send_ms = 0U;
+    static uint32_t next_value = 1U;
+    uint32_t uid_hash;
+    uint32_t received_value;
+    uint32_t now_ms = BSP_GET_TICK();
+    uint16_t received_id;
+    uint8_t ch;
+    char tx_frame[32];
+    int length;
+
+    if (initialized == 0U) {
+        uid_hash = Test_E220_GetUidHash();
+        s_test_e220_state.self_id = (uint16_t)(uid_hash ^ (uid_hash >> 16U));
+        next_send_ms = now_ms + TEST_E220_START_PHASE_MIN_MS +
+                       (uid_hash % TEST_E220_START_PHASE_SPAN_MS);
+        s_test_e220_state.revision++;
+        initialized = 1U;
+    }
+
+    while (BSP_UART_GetChar(UART_PORT1, &ch) != 0U) {
+        if (ch == (uint8_t)'\n') {
+            if ((discard_until_newline == 0U) &&
+                (Test_E220_ParseFrame(rx_frame, rx_length,
+                                      &received_id, &received_value) != 0U) &&
+                (received_id != s_test_e220_state.self_id)) {
+                s_test_e220_state.peer_id = received_id;
+                s_test_e220_state.rx_value = received_value;
+                s_test_e220_state.rx_count++;
+                s_test_e220_state.last_rx_ms = now_ms;
+                s_test_e220_state.rx_valid = 1U;
+                s_test_e220_state.online = 1U;
+                s_test_e220_state.revision++;
+            }
+            rx_length = 0U;
+            discard_until_newline = 0U;
+        } else if (ch != (uint8_t)'\r') {
+            if ((discard_until_newline == 0U) &&
+                (rx_length < (TEST_E220_RX_FRAME_MAX_LEN - 1U))) {
+                rx_frame[rx_length++] = ch;
+            } else {
+                /* 超长或破损帧一直丢弃到换行，避免把帧尾误当成新帧。 */
+                discard_until_newline = 1U;
+            }
+        }
+    }
+
+    if ((s_test_e220_state.online != 0U) &&
+        ((uint32_t)(now_ms - s_test_e220_state.last_rx_ms) >= TEST_E220_RX_TIMEOUT_MS)) {
+        s_test_e220_state.online = 0U;
+        s_test_e220_state.revision++;
+    }
+
+    if ((int32_t)(now_ms - next_send_ms) >= 0) {
+        length = snprintf(tx_frame, sizeof(tx_frame), "E220,%04X,%lu\r\n",
+                          (unsigned int)s_test_e220_state.self_id,
+                          (unsigned long)next_value);
+        if ((length > 0) && (length < (int)sizeof(tx_frame)) &&
+            (BSP_UART_WriteFrame(UART_PORT1,
+                                 (const uint8_t *)tx_frame,
+                                 (uint16_t)length) == BSP_OK)) {
+            s_test_e220_state.tx_value = next_value;
+            next_value++;
+            if (next_value == 0U) {
+                next_value = 1U;
+            }
+            next_send_ms = now_ms + TEST_E220_SEND_PERIOD_MS;
+            s_test_e220_state.revision++;
+        }
+    }
+
+    Test_E220_OledUpdate();
+    Test_E220_LcdUpdate();
+#endif
+}
+
 //娴嬭瘯i2c
 void Test_I2C_Scan(void)
 {
@@ -1152,6 +1487,48 @@ static void Test_FormatFixed(char *out,
                        fraction_part);
     } else {
         (void)snprintf(out, out_size, "%c%lu", sign, integer_part);
+    }
+}
+
+static void Test_HX711_Print(void)
+{
+    float pressure_g;
+    long pressure_tenth_g;
+    char pressure_text[24];
+    const char *display_text;
+    char line[48];
+    int length;
+
+    /* 自动去皮或传感器未就绪期间保持静默，只输出有效克重。 */
+    if (Sensor_GetPressureGram(&pressure_g) != BSP_OK) {
+        return;
+    }
+
+    pressure_tenth_g = (long)((pressure_g * 10.0f) +
+                              ((pressure_g >= 0.0f) ? 0.5f : -0.5f));
+    Test_FormatFixed(pressure_text,
+                     sizeof(pressure_text),
+                     pressure_tenth_g,
+                     10UL,
+                     1U);
+    display_text = (pressure_text[0] == '+') ? &pressure_text[1] : pressure_text;
+    length = snprintf(line, sizeof(line), "WEIGHT=%s g\r\n", display_text);
+    if ((length > 0) && (length < (int)sizeof(line))) {
+        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)line, (uint16_t)length);
+    }
+}
+
+/*
+ * HX711 克重输出任务。任务表必须同时保留 Sensor_Update 以推进采样。
+ * 本函数不读取串口命令；上电空载自动去皮完成后，每 200 ms 只输出克重。
+ */
+void Test_HX711_Update(void)
+{
+    static uint32_t last_print_ms = 0U;
+
+    if ((uint32_t)(BSP_GET_TICK() - last_print_ms) >= 200U) {
+        last_print_ms = BSP_GET_TICK();
+        Test_HX711_Print();
     }
 }
 

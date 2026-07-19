@@ -107,6 +107,7 @@ SRCS := \
   Driver/drv_gray_mcu_i2c.c \
   Driver/drv_gray_sensor.c \
   Driver/drv_icm20948.c \
+  Driver/drv_hx711.c \
   Driver/drv_lcd_tft.c \
   Driver/drv_lcd_font.c \
   Driver/drv_oled_i2c.c \

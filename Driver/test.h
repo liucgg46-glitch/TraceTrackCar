@@ -15,6 +15,7 @@ void Test_EXTI_Log(void);  //{ Test_EXTI_Log,         200U, 0U },
 
 void Test_UART_Echo(void);//{ Test_UART_Echo,          5U,   0U },
 void Test_UART_Stats(void);//{ Test_UART_Stats,        200U,   0U },
+void Test_E220_Link_Update(void);//E220 双车通信测试；每秒发送递增数字并在 LCD/OLED 显示接收结果
 
 void Test_I2C_Scan(void);//扫描i2c设备，主函数中调用一次即可
 
@@ -40,6 +41,7 @@ void Test_RouteLog(void);//激活路线LCD/OLED调试页；同时注册对应显
 void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和校准后的灰度数据，巡线状态等等）{ Test_LineCmd_Log,     200U,   0U }, 
 
 void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U, 0U },
+void Test_HX711_Update(void);//HX711克重输出 { Test_HX711_Update, 20U, 0U }，内部每200ms打印
 
 void Test_ICM20948_Update(void);//易读IMU日志 { Test_ICM20948_Update, 500U, 0U },
 void Test_ICM20948_Mag_Update(void);//AK09916专项测试 { Test_ICM20948_Mag_Update, 500U, 0U },

@@ -3,6 +3,7 @@
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
+#include "drv_hx711.h"
 #include "attitude_estimator.h"
 
 void SensorManager_Init(void)
@@ -30,6 +31,7 @@ void Sensor_Update(void)
     (void)Attitude_Update();
     (void)Drv_VL53L1X_Update();
     (void)Drv_GraySensor_Update();
+    (void)Drv_HX711_Update();
 }
 
 uint8_t Sensor_IsImuReadyForMotion(void)
@@ -69,6 +71,24 @@ BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm)
      * 该接口不会重新访问 I2C，也不会重复推进 VL53L1X 状态机。
      */
     return Drv_VL53L1X_GetDistanceMm(distance_mm);
+}
+
+BSP_Status_t Sensor_GetPressureGram(float *pressure_g)
+{
+    if (pressure_g == 0) {
+        return BSP_PARAM;
+    }
+    return Drv_HX711_GetGram(pressure_g);
+}
+
+BSP_Status_t Sensor_PressureTare(void)
+{
+    return Drv_HX711_Tare();
+}
+
+BSP_Status_t Sensor_CalibratePressure(float known_weight_g)
+{
+    return Drv_HX711_CalibrateKnownWeight(known_weight_g);
 }
 
 

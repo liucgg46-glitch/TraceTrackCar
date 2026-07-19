@@ -237,6 +237,29 @@ extern "C" {
 #define BSP_GPIO_CH18_SPEED          GPIO_Speed_2MHz
 #define BSP_GPIO_CH18_INIT_LEVEL     0U
 
+/* CH19~CH20：HX711 称重 ADC 两线数字接口。
+ * 当前源码中 PG3/PG4 未被其他已启用外设占用；实际开发板引出位置仍需按板卡核对。
+ * DOUT 是 HX711 推挽输出，内部上拉用于模块断线时保持确定高电平。
+ * PD_SCK 上电必须为低，避免 HX711 进入掉电模式。
+ */
+#define BSP_GPIO_CH19_ENABLE         1
+#define BSP_GPIO_CH19_PORT           GPIOG
+#define BSP_GPIO_CH19_PIN            GPIO_Pin_3
+#define BSP_GPIO_CH19_MODE           GPIO_Mode_IN
+#define BSP_GPIO_CH19_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH19_PUPD           GPIO_PuPd_UP
+#define BSP_GPIO_CH19_SPEED          GPIO_Speed_2MHz
+#define BSP_GPIO_CH19_INIT_LEVEL     0U
+
+#define BSP_GPIO_CH20_ENABLE         1
+#define BSP_GPIO_CH20_PORT           GPIOG
+#define BSP_GPIO_CH20_PIN            GPIO_Pin_4
+#define BSP_GPIO_CH20_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH20_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH20_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH20_SPEED          GPIO_Speed_50MHz
+#define BSP_GPIO_CH20_INIT_LEVEL     0U
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -293,6 +316,12 @@ typedef enum {
 #if BSP_GPIO_CH18_ENABLE
     BSP_GPIO_CH18,
 #endif
+#if BSP_GPIO_CH19_ENABLE
+    BSP_GPIO_CH19,
+#endif
+#if BSP_GPIO_CH20_ENABLE
+    BSP_GPIO_CH20,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -315,6 +344,10 @@ typedef enum {
 #if BSP_GPIO_CH18_ENABLE
 #define BSP_GPIO_E220_AUX     BSP_GPIO_CH18
 #endif
+
+/* HX711 数据输出与时钟/掉电控制脚。 */
+#define BSP_GPIO_HX711_DOUT    BSP_GPIO_CH19
+#define BSP_GPIO_HX711_PD_SCK  BSP_GPIO_CH20
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

@@ -3,6 +3,7 @@
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
+#include "drv_hx711.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 #include "drv_e220.h"
@@ -24,6 +25,9 @@ void Driver_Init(void)
 
     /* ICM-20948 九轴 IMU：初始化 SPI 状态机，实际配置由 Sensor_Update() 推进。 */
     Drv_ICM20948_Init();
+
+    /* HX711 称重 ADC：初始化缓存和 PD_SCK，采样由 Sensor_Update() 非阻塞推进。 */
+    Drv_HX711_Init();
 
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();

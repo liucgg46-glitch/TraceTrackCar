@@ -20,6 +20,7 @@ extern "C" {
  *   - 感为八路灰度传感器；
  *   - VL53L1X 激光测距传感器；
  *   - ICM-20948 九轴 IMU。
+ *   - HX711 称重 ADC。
  */
 
 /**
@@ -37,7 +38,7 @@ void SensorManager_Init(void);
  *
  *     { Sensor_Update, 1U, 0U },
  *
- * 本函数负责推进 ICM-20948、VL53L1X 和灰度传感器状态机。
+ * 本函数负责推进 ICM-20948、VL53L1X、灰度传感器和 HX711 状态机。
  * 上层模块只读取缓存结果，不要再次直接调用各驱动的 Update()。
  */
 void Sensor_Update(void);
@@ -82,6 +83,25 @@ typedef struct {
  *   - 本接口返回的是驱动筛选后的有效距离，不是未经校验的原始距离。
  */
 BSP_Status_t Sensor_GetFrontDistanceMm(uint16_t *distance_mm);
+
+/**
+ * @brief 获取 HX711 最新有效压力/重量，单位为 g。
+ *
+ * 本接口只读取后台缓存，不等待 ADC 转换。驱动已固化实测比例，并在上电后
+ * 自动等待空载数据稳定、完成去皮；自动去皮完成前本接口返回 BSP_ERROR。
+ *
+ * @param pressure_g  克重输出地址。
+ * @retval BSP_OK     成功，*pressure_g 为最新滤波克重。
+ * @retval BSP_PARAM  pressure_g 为空指针。
+ * @retval BSP_ERROR  HX711 离线、尚无有效数据或自动去皮尚未完成。
+ */
+BSP_Status_t Sensor_GetPressureGram(float *pressure_g);
+
+/** @brief 手动以当前空载滤波值作为零点；正常上电流程无需调用。 */
+BSP_Status_t Sensor_PressureTare(void);
+
+/** @brief 重新用当前已放置的已知质量标定 counts/g，参数单位为 g。 */
+BSP_Status_t Sensor_CalibratePressure(float known_weight_g);
 
 /**
  * @brief 获取最新有效的融合姿态角。
