@@ -114,6 +114,7 @@ SRCS := \
   Driver/drv_oled_image.c \
   Driver/drv_vl53l1x.c \
   APP/app_task_port.c \
+  APP/line_calibration.c \
   APP/nb_wait.c \
   APP/scheduler.c \
   APP/chassis.c \
@@ -137,7 +138,6 @@ SRCS := \
   VL53L1_core/vl53l1_wait.c \
   VL53L1_platform/vl53l1_platform.c \
   VL53L1_platform/vl53l1_platform_init.c \
-  Route/route_common.c \
   Route/route_manager.c \
   Route/route_profile_basic.c \
   Route/route_profile_hjduino.c

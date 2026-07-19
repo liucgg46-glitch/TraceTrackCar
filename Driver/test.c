@@ -12,6 +12,8 @@
 #include "drv_motor.h"
 #include "drv_encoder.h"
 #include "chassis.h"
+#include "lcd_ui.h"
+#include "oled_ui.h"
 #include "motion_action.h"
 #include "sensor_manager.h"
 #include "odometer.h"
@@ -244,13 +246,11 @@ static void Test_Key_Send(const char *message, uint16_t length)
 /*
  * 五按键最小测试任务：
  *   KEY1=PE4、KEY2=PE3、KEY3=PE2、KEY4=PE1、KEY5=PA15。
- * 本函数自行完成按键扫描和消抖，不需要额外注册 Sensor_Update。
+ * Key_Update() 统一完成按键扫描和消抖，本函数只消费按下/松开事件。
  */
 void Test_Key_Update(void)
 {
     static uint8_t banner_sent = 0U;
-
-    BSP_Key_UpdateAll();
 
     if (banner_sent == 0U) {
         static const char banner[] =
@@ -481,37 +481,95 @@ void Test_DrvEncoder_Log(void)
     }
 }
 
+#define TEST_CHASSIS_INITIAL_LINEAR_CPS  1600
+#define TEST_CHASSIS_LINEAR_STEP_CPS      200
+#define TEST_CHASSIS_LINEAR_MAX_CPS      4800
+#define TEST_CHASSIS_TURN_CPS            1600
+
 /*
- * 搴曠洏閫熷害闂幆鍛戒护娴嬭瘯銆?
- * 涓插彛鍙戦€侊細
- *   g锛氱洰鏍?linear=600 cps, turn=0锛岀洿琛岄棴鐜?
- *   b锛氱洰鏍?linear=-600 cps, turn=0锛屽悗閫€闂幆
- *   l锛氬師鍦板乏杞?turn=-400 cps
- *   r锛氬師鍦板彸杞?turn=400 cps
- *   x 鎴?0锛氬仠姝?
- *
- * 娴嬭瘯鍓嶆彁锛?
- *   1. 鍥涜矾缂栫爜鍣ㄦ柟鍚戝凡纭锛氬墠杩涙椂 cps 鍧囦负姝ｏ紱
- *   2. 鍥涗釜鐢垫満鏂瑰悜宸茬‘璁わ細姝?PWM 鏃跺皬杞﹀墠杩涳紱
- *   3. 绗竴娆￠棴鐜祴璇曞繀椤绘灦绌哄皬杞︺€?
+ * 五按键底盘开环 PWM 测试，必须先运行 Key_Update()。
+ * KEY1 以 1600 cps 前进并重置加速档位；KEY2 每次增加 200 cps，
+ * 最大 4800 cps；KEY3/KEY4 原地转向；KEY5 立即停止。
  */
 void Test_ChassisCmd_Update(void)
 {
-    uint8_t ch;
+    static int16_t linear_speed_cps = TEST_CHASSIS_INITIAL_LINEAR_CPS;
+    static uint8_t forward_started = 0U;
+    static uint8_t banner_sent = 0U;
+    char message[96];
+    int length;
 
-    while (BSP_UART_GetChar(UART_PORT1, &ch)) {
-        if (ch == 'g') {
-            Chassis_SetSpeed(2000, 0);
-        } else if (ch == 'b') {
-            Chassis_SetSpeed(-2000, 0);
-        } else if (ch == 'l') {
-            Chassis_SetSpeed(0, 1200);
-        } else if (ch == 'r') {
-            Chassis_SetSpeed(0, -1200);
-        } else if (ch == 'x' || ch == '0') {
-            Chassis_Stop();
+    if (banner_sent == 0U) {
+        static const char banner[] =
+            "CHASSIS KEY TEST: K1=FWD1600 K2=+200(MAX4800) K3=LEFT K4=RIGHT K5=STOP\r\n";
+        banner_sent = 1U;
+        LcdUi_ChassisTestBegin();
+        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        linear_speed_cps = TEST_CHASSIS_INITIAL_LINEAR_CPS;
+        forward_started = 1U;
+        Chassis_SetSpeed(linear_speed_cps, 0);
+        length = snprintf(message, sizeof(message),
+                          "CHASSIS KEY1 FORWARD: linear=%d cps\r\n",
+                          (int)linear_speed_cps);
+        if ((length > 0) && (length < (int)sizeof(message))) {
+            Test_Key_Send(message, (uint16_t)length);
         }
     }
+#endif
+
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        if (forward_started == 0U) {
+            static const char response[] =
+                "CHASSIS KEY2 IGNORED: PRESS KEY1 FIRST\r\n";
+            Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        } else {
+            if (linear_speed_cps < TEST_CHASSIS_LINEAR_MAX_CPS) {
+                linear_speed_cps = (int16_t)(linear_speed_cps + TEST_CHASSIS_LINEAR_STEP_CPS);
+                if (linear_speed_cps > TEST_CHASSIS_LINEAR_MAX_CPS) {
+                    linear_speed_cps = TEST_CHASSIS_LINEAR_MAX_CPS;
+                }
+            }
+            Chassis_SetSpeed(linear_speed_cps, 0);
+            length = snprintf(message, sizeof(message),
+                              "CHASSIS KEY2 ACCEL: linear=%d cps%s\r\n",
+                              (int)linear_speed_cps,
+                              (linear_speed_cps >= TEST_CHASSIS_LINEAR_MAX_CPS) ? " (MAX)" : "");
+            if ((length > 0) && (length < (int)sizeof(message))) {
+                Test_Key_Send(message, (uint16_t)length);
+            }
+        }
+    }
+#endif
+
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        static const char response[] = "CHASSIS KEY3: TURN LEFT 1600 cps\r\n";
+        Chassis_SetSpeed(0, TEST_CHASSIS_TURN_CPS);
+        Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+    }
+#endif
+
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        static const char response[] = "CHASSIS KEY4: TURN RIGHT 1600 cps\r\n";
+        Chassis_SetSpeed(0, -TEST_CHASSIS_TURN_CPS);
+        Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+    }
+#endif
+
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        static const char response[] = "CHASSIS KEY5: STOP\r\n";
+        forward_started = 0U;
+        Chassis_Stop();
+        Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+    }
+#endif
 }
 
 void Test_ChassisCmd_Log(void)
@@ -523,14 +581,14 @@ void Test_ChassisCmd_Log(void)
     if (Chassis_GetInfo(&info) != BSP_OK) return;
 
     n = sprintf(buf,
-                "CHS mode=%d tgt L=%d R=%d | fb FL=%d FR=%d RL=%d RR=%d | out %d %d %d %d\r\n",
+                "CHS mode=%d tgt L=%d R=%d | fb FL=%ld FR=%ld RL=%ld RR=%ld | out %d %d %d %d\r\n",
                 (int)info.mode,
                 info.left_target_cps,
                 info.right_target_cps,
-                info.fl_feedback_cps,
-                info.fr_feedback_cps,
-                info.rl_feedback_cps,
-                info.rr_feedback_cps,
+                (long)info.fl_feedback_cps,
+                (long)info.fr_feedback_cps,
+                (long)info.rl_feedback_cps,
+                (long)info.rr_feedback_cps,
                 info.fl_output,
                 info.fr_output,
                 info.rl_output,
@@ -576,33 +634,89 @@ void Test_CountPerRev_Update(void)
 }
 
 /*
- * Part3 闈為樆濉炲姩浣滃簱娴嬭瘯銆?
- * 涓插彛鍙戦€侊細
- *   f锛氬墠杩?500mm
- *   v锛氬悗閫€ 500mm
- *   L锛氬乏杞?90掳
- *   R锛氬彸杞?90掳
- *   x / 0锛氬仠姝㈠姩浣滃苟鍋滆溅
- *
- * 娴嬭瘯浠诲姟琛ㄥ繀椤诲寘鍚細Encoder_Update銆丮otion_Update銆丆hassis_Update銆?
+ * 五按键非阻塞动作库测试，必须先运行 Key_Update()。
+ * KEY1/KEY2 分别左转/右转 90 度；KEY3/KEY4 分别前进/后退
+ * 500 mm；KEY5 取消当前动作并停车。
  */
 void Test_MotionCmd_Update(void)
 {
-    uint8_t ch;
+    static uint8_t banner_sent = 0U;
+    BSP_Status_t status;
 
-    while (BSP_UART_GetChar(UART_PORT1, &ch)) {
-        if (ch == 'f') {
-            (void)Motion_GoDistance(500, 800);
-        } else if (ch == 'v') {
-            (void)Motion_GoDistance(-500, 800);
-        } else if (ch == 'L') {
-            (void)Motion_TurnAngle(90, 1600);
-        } else if (ch == 'R') {
-            (void)Motion_TurnAngle(-90, 1600);
-        } else if (ch == 'x' || ch == '0') {
-            Motion_Stop();
+    if (banner_sent == 0U) {
+        static const char banner[] =
+            "MOTION KEY TEST: K1=LEFT90 K2=RIGHT90 K3=FWD500 K4=BACK500 K5=STOP\r\n";
+        banner_sent = 1U;
+        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        if (Sensor_IsImuReadyForMotion() == 0U) {
+            static const char response[] =
+                "MOTION KEY1 LEFT90 REJECTED: IMU NOT READY\r\n";
+            Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        } else {
+            static const char started[] = "MOTION KEY1: LEFT 90 STARTED\r\n";
+            static const char busy[] = "MOTION KEY1 LEFT90 REJECTED: BUSY\r\n";
+            status = Motion_TurnAngle(90);
+            Test_Key_Send((status == BSP_OK) ? started : busy,
+                          (status == BSP_OK) ?
+                              (uint16_t)(sizeof(started) - 1U) :
+                              (uint16_t)(sizeof(busy) - 1U));
         }
     }
+#endif
+
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        if (Sensor_IsImuReadyForMotion() == 0U) {
+            static const char response[] =
+                "MOTION KEY2 RIGHT90 REJECTED: IMU NOT READY\r\n";
+            Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        } else {
+            static const char started[] = "MOTION KEY2: RIGHT 90 STARTED\r\n";
+            static const char busy[] = "MOTION KEY2 RIGHT90 REJECTED: BUSY\r\n";
+            status = Motion_TurnAngle(-90);
+            Test_Key_Send((status == BSP_OK) ? started : busy,
+                          (status == BSP_OK) ?
+                              (uint16_t)(sizeof(started) - 1U) :
+                              (uint16_t)(sizeof(busy) - 1U));
+        }
+    }
+#endif
+
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        static const char started[] = "MOTION KEY3: FORWARD 500MM STARTED\r\n";
+        static const char busy[] = "MOTION KEY3 FORWARD REJECTED: BUSY\r\n";
+        status = Motion_GoDistance(500, 800);
+        Test_Key_Send((status == BSP_OK) ? started : busy,
+                      (status == BSP_OK) ?
+                          (uint16_t)(sizeof(started) - 1U) :
+                          (uint16_t)(sizeof(busy) - 1U));
+    }
+#endif
+
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        static const char started[] = "MOTION KEY4: BACKWARD 500MM STARTED\r\n";
+        static const char busy[] = "MOTION KEY4 BACKWARD REJECTED: BUSY\r\n";
+        status = Motion_GoDistance(-500, 800);
+        Test_Key_Send((status == BSP_OK) ? started : busy,
+                      (status == BSP_OK) ?
+                          (uint16_t)(sizeof(started) - 1U) :
+                          (uint16_t)(sizeof(busy) - 1U));
+    }
+#endif
+
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        static const char response[] = "MOTION KEY5: STOP\r\n";
+        Motion_Stop();
+        Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+    }
+#endif
 }
 
 void Test_MotionCmd_Log(void)
@@ -867,54 +981,41 @@ void Test_LineCmd_Log(void)
 
 void Test_RouteLog(void)
 {
-    RouteManager_Info_t route;
-    LineFollow_Info_t line;
-    Motion_Info_t motion;
-    char buf[256];
-    int n;
-
-    if (RouteManager_GetInfo(&route) != BSP_OK) return;
-    if (LineFollow_GetInfo(&line) != BSP_OK) return;
-    if (Motion_GetInfo(&motion) != BSP_OK) return;
-
-    n = snprintf(buf, sizeof(buf),
-                 "ROUTE profile=%u state=%u control=%u line=%u "
-                 "motion=%u run_ms=%lu confirm=%u transitions=%lu "
-                 "type=%s mask=%02X out=%d/%d yaw=%d\r\n",
-                 (unsigned int)route.profile,
-                 (unsigned int)route.profile_state,
-                 (unsigned int)route.control_mode,
-                 (unsigned int)line.state,
-                 (unsigned int)route.motion_state,
-                 (unsigned long)route.running_ms,
-                 (unsigned int)route.event_confirm_samples,
-                 (unsigned long)route.transition_count,
-                 LineTypeName(line.detect.type),
-                 (unsigned int)line.detect.black_mask,
-                 (int)line.output.linear_cps,
-                 (int)line.output.turn_cps,
-                 (int)motion.current_yaw_deg);
-
-    if ((n > 0) && (n < (int)sizeof(buf))) {
-        (void)BSP_UART_WriteFrame(UART_PORT1,
-                                  (const uint8_t *)buf,
-                                  (uint16_t)n);
-    }
+    LcdUi_RouteTestBegin();
+    OledUi_RouteTestBegin();
 }
 
 void Test_RouteCmd_Update(void)
 {
     uint8_t ch;
 
+    /* Key_Update() 生成消抖事件，本任务只处理 KEY1 和 KEY4。 */
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        LineFollow_Start();
+        if (LineFollow_GetState() == LINE_FOLLOW_RUN) {
+            static const char message[] = "ROUTE START: KEY1\r\n";
+            Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+        } else {
+            static const char message[] = "ROUTE START REJECTED: IMU NOT READY\r\n";
+            Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+        }
+    }
+#endif
+
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        static const char message[] = "ROUTE STOP: KEY4\r\n";
+        LineFollow_Stop();
+        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+    }
+#endif
+
+    /* USART1 只保留路线复位命令，路线状态改由 LCD 显示。 */
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
-        if ((ch == '1') || (ch == 'l') || (ch == 'L')) {
-            LineFollow_Start();
-        } else if ((ch == '0') || (ch == 'x') || (ch == 'X')) {
-            LineFollow_Stop();
-        } else if ((ch == 'r') || (ch == 'R')) {
+        if ((ch == 'r') || (ch == 'R')) {
             RouteManager_Reset();
-        } else if ((ch == 'p') || (ch == 'P')) {
-            Test_RouteLog();
         }
     }
 }

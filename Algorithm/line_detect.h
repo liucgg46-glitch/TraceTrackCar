@@ -27,22 +27,22 @@ extern "C" {
 
 /* 默认固定阈值。
  * 如果你已经用串口 p 打印出 8 路 TH，可以直接在这里改。
- * 顺序：0~7 对应灰度传感器从左到右。
+ * 顺序：0~7 对应 Driver 输出的物理通道，必须与各探头的标定值保持一致。
+ * 传感器旋转180度时只修改 control_config.h 中的方向开关，不要手工倒序阈值。
  * 默认代码中 LINE_DETECT_BLACK_IS_HIGH = 0U 时：
  *   raw < threshold 判定为黑线；raw > threshold 判定为白底。
  */
 #define LINE_DETECT_DEFAULT_THRESHOLD   2000U
 // 751 1405 1942 2027 1928 1734 1742 1718  无MCU阈值
 //1774 1830 2995 2762 2104 2505 2553 2336  有MCU阈值
-// 1750 1895 2754 2802 2417 3043 2449 2617
-#define LINE_DETECT_DEFAULT_THRESHOLD_0 1750
-#define LINE_DETECT_DEFAULT_THRESHOLD_1 1895
-#define LINE_DETECT_DEFAULT_THRESHOLD_2 2754
-#define LINE_DETECT_DEFAULT_THRESHOLD_3 2802
-#define LINE_DETECT_DEFAULT_THRESHOLD_4 2417
-#define LINE_DETECT_DEFAULT_THRESHOLD_5 3043
-#define LINE_DETECT_DEFAULT_THRESHOLD_6 2449
-#define LINE_DETECT_DEFAULT_THRESHOLD_7 2617
+#define LINE_DETECT_DEFAULT_THRESHOLD_0 1646
+#define LINE_DETECT_DEFAULT_THRESHOLD_1 1846
+#define LINE_DETECT_DEFAULT_THRESHOLD_2 2553
+#define LINE_DETECT_DEFAULT_THRESHOLD_3 2272
+#define LINE_DETECT_DEFAULT_THRESHOLD_4 2063
+#define LINE_DETECT_DEFAULT_THRESHOLD_5 2529
+#define LINE_DETECT_DEFAULT_THRESHOLD_6 2673
+#define LINE_DETECT_DEFAULT_THRESHOLD_7 2537
 
 #define LINE_DETECT_DEFAULT_THRESHOLD_ARRAY \
 {                                             \
@@ -60,7 +60,7 @@ extern "C" {
 #define LINE_DETECT_MIN_DIFF            80U
 
 /* 中线误差权重，单位是“千分位置”。输出范围大约 -3500 ~ +3500。
- * index 0 是最左，index 7 是最右。
+ * 经过方向开关规范化后，负数表示线路在左，正数表示线路在右。
  */
 #define LINE_DETECT_ERR_LEFT_MAX        (-3500)
 #define LINE_DETECT_ERR_RIGHT_MAX       (3500)
@@ -75,10 +75,10 @@ typedef enum {
 } LineType_t;
 
 typedef struct {
-    uint16_t raw[LINE_DETECT_SENSOR_NUM];
-    uint16_t threshold[LINE_DETECT_SENSOR_NUM];
-    uint8_t  black[LINE_DETECT_SENSOR_NUM];
-    uint8_t  black_mask;
+    uint16_t raw[LINE_DETECT_SENSOR_NUM];       /* Driver 物理通道顺序 */
+    uint16_t threshold[LINE_DETECT_SENSOR_NUM]; /* Driver 物理通道顺序 */
+    uint8_t  black[LINE_DETECT_SENSOR_NUM];     /* Driver 物理通道顺序 */
+    uint8_t  black_mask;                        /* 已规范化：bit0左、bit7右 */
     uint8_t  black_count;
     int16_t  error_x1000;
     int16_t  last_error_x1000;

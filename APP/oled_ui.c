@@ -4,10 +4,25 @@
 #include "sensor_manager.h"
 #include "line_follow_app.h"
 #include "chassis.h"
+#include "motion_action.h"
+#include "route_manager.h"
+#include "line_detect.h"
 #include <stdio.h>
+
+typedef enum {
+    OLED_UI_LINE_CAL_READY = 0,
+    OLED_UI_LINE_CAL_WHITE_CAPTURED,
+    OLED_UI_LINE_CAL_BLACK_CAPTURED,
+    OLED_UI_LINE_CAL_RESULT
+} OledUi_LineCalibrationPage_t;
 
 static uint8_t s_oled_boot_visible = 0U;
 static uint32_t s_oled_boot_done_ms = 0U;
+static uint8_t s_oled_route_test_active = 0U;
+static uint8_t s_oled_route_test_page = 0U;
+static uint8_t s_oled_line_cal_active = 0U;
+static OledUi_LineCalibrationPage_t s_oled_line_cal_page = OLED_UI_LINE_CAL_READY;
+static uint16_t s_oled_line_cal_threshold[LINE_DETECT_SENSOR_NUM];
 
 static const char *OledUi_LineTypeName(LineType_t type)
 {
@@ -19,6 +34,18 @@ static const char *OledUi_LineTypeName(LineType_t type)
         case LINE_TYPE_FULL_BLACK:   return "FULL";
         case LINE_TYPE_LOST:
         default:                     return "LOST";
+    }
+}
+
+static const char *OledUi_LineTrackModeName(LineTrack_Mode_t mode)
+{
+    switch (mode) {
+        case LINE_TRACK_MODE_TRACK:        return "TRACK";
+        case LINE_TRACK_MODE_WIDE_LINE:    return "WIDE";
+        case LINE_TRACK_MODE_LOST_CONFIRM: return "LOST";
+        case LINE_TRACK_MODE_SEARCH:       return "SEARCH";
+        case LINE_TRACK_MODE_FAILSAFE:
+        default:                           return "SAFE";
     }
 }
 
@@ -43,9 +70,8 @@ void OledUi_ShowBoot(void)
 {
 #if OLED_UI_ENABLE
     /*
-     * This function only writes the OLED RAM buffer and marks pages dirty.
-     * The real I2C transfer is pushed by Drv_OledI2c_Task(), so it is safe
-     * to call this before the SSD1306 async init has fully finished.
+     * 本函数只更新 OLED RAM 缓冲并标记脏页，实际 I2C 传输由
+     * Drv_OledI2c_Task() 推进，因此可在 SSD1306 异步初始化完成前调用。
      */
     OledUi_DrawBase();
     Drv_OledI2c_Flush();
@@ -57,8 +83,135 @@ void OledUi_ShowBoot(void)
 void OledUi_Init(void)
 {
 #if OLED_UI_ENABLE
+    uint8_t i;
+
+    s_oled_route_test_active = 0U;
+    s_oled_route_test_page = 0U;
+    s_oled_line_cal_active = 0U;
+    s_oled_line_cal_page = OLED_UI_LINE_CAL_READY;
+    for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
+        s_oled_line_cal_threshold[i] = 0U;
+    }
     OledUi_ShowBoot();
 #endif
+}
+
+static void OledUi_ShowLineCalibration(void)
+{
+    uint8_t i;
+    char text[32];
+
+    Drv_OledI2c_Clear();
+    Drv_OledI2c_DrawRect(0U, 0U, 128U, 64U, DRV_OLED_COLOR_ON);
+
+    switch (s_oled_line_cal_page) {
+        case OLED_UI_LINE_CAL_WHITE_CAPTURED:
+            Drv_OledI2c_DrawString5x7(4U, 2U, "WHITE CAPTURED", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 14U, "MOVE TO BLACK", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 26U, "WAIT STABLE", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 38U, "PRESS KEY2", DRV_OLED_COLOR_ON);
+            break;
+
+        case OLED_UI_LINE_CAL_BLACK_CAPTURED:
+            Drv_OledI2c_DrawString5x7(4U, 2U, "BLACK CAPTURED", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 14U, "PRESS KEY3", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 26U, "MAKE THRESHOLDS", DRV_OLED_COLOR_ON);
+            break;
+
+        case OLED_UI_LINE_CAL_RESULT:
+            Drv_OledI2c_DrawString5x7(4U, 2U, "CALIBRATION DONE", DRV_OLED_COLOR_ON);
+            for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i = (uint8_t)(i + 2U)) {
+                (void)snprintf(text, sizeof(text), "T%u:%u T%u:%u",
+                               (unsigned int)i,
+                               (unsigned int)s_oled_line_cal_threshold[i],
+                               (unsigned int)(i + 1U),
+                               (unsigned int)s_oled_line_cal_threshold[i + 1U]);
+                Drv_OledI2c_DrawString5x7(4U,
+                                         (uint8_t)(12U + ((i / 2U) * 10U)),
+                                         text,
+                                         DRV_OLED_COLOR_ON);
+            }
+            Drv_OledI2c_DrawString5x7(4U, 52U, "RAM ONLY UART SAVE", DRV_OLED_COLOR_ON);
+            break;
+
+        case OLED_UI_LINE_CAL_READY:
+        default:
+            Drv_OledI2c_DrawString5x7(4U, 2U, "GRAY CALIBRATION", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 14U, "KEY1: WHITE", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 26U, "KEY2: BLACK", DRV_OLED_COLOR_ON);
+            Drv_OledI2c_DrawString5x7(4U, 38U, "KEY3: CALCULATE", DRV_OLED_COLOR_ON);
+            break;
+    }
+
+    Drv_OledI2c_Flush();
+}
+
+static void OledUi_ShowRouteTest(void)
+{
+    RouteManager_Info_t route;
+    LineFollow_Info_t line;
+    Motion_Info_t motion;
+    char text[32];
+
+    Drv_OledI2c_Clear();
+    Drv_OledI2c_DrawRect(0U, 0U, 128U, 64U, DRV_OLED_COLOR_ON);
+
+    if ((RouteManager_GetInfo(&route) != BSP_OK) ||
+        (LineFollow_GetInfo(&line) != BSP_OK) ||
+        (Motion_GetInfo(&motion) != BSP_OK)) {
+        Drv_OledI2c_DrawString5x7(4U, 2U, "ROUTE TEST", DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 14U, "ROUTE INFO ERROR", DRV_OLED_COLOR_ON);
+        Drv_OledI2c_Flush();
+        return;
+    }
+
+    if (s_oled_route_test_page == 0U) {
+        Drv_OledI2c_DrawString5x7(4U, 2U, "ROUTE TEST A", DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "P:%u S:%u C:%u",
+                       (unsigned int)route.profile,
+                       (unsigned int)route.profile_state,
+                       (unsigned int)route.control_mode);
+        Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "LF:%u M:%u CF:%u",
+                       (unsigned int)line.state,
+                       (unsigned int)route.motion_state,
+                       (unsigned int)route.event_confirm_samples);
+        Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "RUN:%lus TR:%lu",
+                       (unsigned long)(route.running_ms / 1000U),
+                       (unsigned long)route.transition_count);
+        Drv_OledI2c_DrawString5x7(4U, 32U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "T:%s MK:%02X",
+                       OledUi_LineTypeName(line.detect.type),
+                       (unsigned int)line.detect.black_mask);
+        Drv_OledI2c_DrawString5x7(4U, 42U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "E:%d/%d",
+                       (int)line.detect.error_x1000,
+                       (int)route.line_filtered_error);
+        Drv_OledI2c_DrawString5x7(4U, 52U, text, DRV_OLED_COLOR_ON);
+        s_oled_route_test_page = 1U;
+    } else {
+        Drv_OledI2c_DrawString5x7(4U, 2U, "ROUTE TEST B", DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "MD:%s L:%lu",
+                       OledUi_LineTrackModeName(route.line_track_mode),
+                       (unsigned long)route.line_lost_ms);
+        Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "SCAN:%u D:%d",
+                       (unsigned int)route.line_search_phase,
+                       (int)route.line_search_direction);
+        Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "OUT:%d/%d",
+                       (int)line.output.linear_cps,
+                       (int)line.output.turn_cps);
+        Drv_OledI2c_DrawString5x7(4U, 32U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "YAW:%d",
+                       (int)motion.current_yaw_deg);
+        Drv_OledI2c_DrawString5x7(4U, 42U, text, DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 52U, "A/B AUTO SWITCH", DRV_OLED_COLOR_ON);
+        s_oled_route_test_page = 0U;
+    }
+
+    Drv_OledI2c_Flush();
 }
 
 void OledUi_ShowDashboard(void)
@@ -83,6 +236,15 @@ void OledUi_ShowDashboard(void)
     if ((Drv_OledI2c_IsReady() == 0U) ||
         (Drv_OledI2c_IsBusy() != 0U) ||
         (s_oled_boot_visible != 0U)) {
+        return;
+    }
+
+    if (s_oled_line_cal_active != 0U) {
+        OledUi_ShowLineCalibration();
+        return;
+    }
+    if (s_oled_route_test_active != 0U) {
+        OledUi_ShowRouteTest();
         return;
     }
 
@@ -165,6 +327,65 @@ void OledUi_ShowDashboard(void)
     Drv_OledI2c_DrawString5x7(4U, 52U, text, DRV_OLED_COLOR_ON);
 
     Drv_OledI2c_Flush();
+#endif
+}
+
+void OledUi_RouteTestBegin(void)
+{
+#if OLED_UI_ENABLE
+    if (s_oled_route_test_active == 0U) {
+        s_oled_route_test_page = 0U;
+    }
+    s_oled_route_test_active = 1U;
+    s_oled_line_cal_active = 0U;
+#endif
+}
+
+void OledUi_LineCalibrationBegin(void)
+{
+#if OLED_UI_ENABLE
+    s_oled_route_test_active = 0U;
+    s_oled_line_cal_active = 1U;
+    s_oled_line_cal_page = OLED_UI_LINE_CAL_READY;
+#endif
+}
+
+void OledUi_LineCalibrationWhiteCaptured(void)
+{
+#if OLED_UI_ENABLE
+    s_oled_route_test_active = 0U;
+    s_oled_line_cal_active = 1U;
+    s_oled_line_cal_page = OLED_UI_LINE_CAL_WHITE_CAPTURED;
+#endif
+}
+
+void OledUi_LineCalibrationBlackCaptured(void)
+{
+#if OLED_UI_ENABLE
+    s_oled_route_test_active = 0U;
+    s_oled_line_cal_active = 1U;
+    s_oled_line_cal_page = OLED_UI_LINE_CAL_BLACK_CAPTURED;
+#endif
+}
+
+void OledUi_LineCalibrationShowResult(const uint16_t *threshold,
+                                      uint8_t count)
+{
+#if OLED_UI_ENABLE
+    uint8_t i;
+
+    if ((threshold == 0) || (count < LINE_DETECT_SENSOR_NUM)) {
+        return;
+    }
+    for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
+        s_oled_line_cal_threshold[i] = threshold[i];
+    }
+    s_oled_route_test_active = 0U;
+    s_oled_line_cal_active = 1U;
+    s_oled_line_cal_page = OLED_UI_LINE_CAL_RESULT;
+#else
+    (void)threshold;
+    (void)count;
 #endif
 }
 

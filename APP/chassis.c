@@ -1,50 +1,35 @@
 #include "chassis.h"
+#include "control_config.h"
 #include "drv_motor.h"
 #include "drv_encoder.h"
-
-static PID_t s_pid_fl;
-static PID_t s_pid_fr;
-#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-static PID_t s_pid_rl;
-static PID_t s_pid_rr;
-#endif
 
 static Chassis_Info_t s_chassis;
 
 static int16_t Chassis_LimitTarget(int32_t x)
 {
-    if (x > CHASSIS_TARGET_CPS_MAX) return CHASSIS_TARGET_CPS_MAX;
-    if (x < -CHASSIS_TARGET_CPS_MAX) return -CHASSIS_TARGET_CPS_MAX;
+    if (x > CONTROL_CHASSIS_TARGET_MAX_CPS) return CONTROL_CHASSIS_TARGET_MAX_CPS;
+    if (x < -CONTROL_CHASSIS_TARGET_MAX_CPS) return -CONTROL_CHASSIS_TARGET_MAX_CPS;
     return (int16_t)x;
 }
 
-static int16_t Chassis_LimitOutput(float x)
+static int16_t Chassis_TargetToPwm(int16_t target_cps)
 {
-    if (x > CHASSIS_SPEED_PID_OUT_MAX) return (int16_t)CHASSIS_SPEED_PID_OUT_MAX;
-    if (x < -CHASSIS_SPEED_PID_OUT_MAX) return (int16_t)(-CHASSIS_SPEED_PID_OUT_MAX);
-    return (int16_t)x;
+    int32_t pwm;
+
+    pwm = ((int32_t)target_cps * CONTROL_CHASSIS_PWM_MAX_PERMILLE) /
+          CONTROL_CHASSIS_TARGET_MAX_CPS;
+    if (pwm > CONTROL_CHASSIS_PWM_MAX_PERMILLE) {
+        return CONTROL_CHASSIS_PWM_MAX_PERMILLE;
+    }
+    if (pwm < -CONTROL_CHASSIS_PWM_MAX_PERMILLE) {
+        return (int16_t)(-CONTROL_CHASSIS_PWM_MAX_PERMILLE);
+    }
+    return (int16_t)pwm;
 }
 
 void Chassis_Init(void)
 {
-    PID_Config_t cfg;
-
-    cfg.kp = CHASSIS_SPEED_PID_KP;
-    cfg.ki = CHASSIS_SPEED_PID_KI;
-    cfg.kd = CHASSIS_SPEED_PID_KD;
-    cfg.out_min = -CHASSIS_SPEED_PID_OUT_MAX;
-    cfg.out_max =  CHASSIS_SPEED_PID_OUT_MAX;
-    cfg.integral_min = -CHASSIS_SPEED_PID_I_MAX;
-    cfg.integral_max =  CHASSIS_SPEED_PID_I_MAX;
-
     Motor_Init();
-    PID_Init(&s_pid_fl, &cfg);
-    PID_Init(&s_pid_fr, &cfg);
-#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-    PID_Init(&s_pid_rl, &cfg);
-    PID_Init(&s_pid_rr, &cfg);
-#endif
-
     Chassis_Stop();
 }
 
@@ -57,13 +42,6 @@ void Chassis_SetSpeed(int16_t linear_speed_cps, int16_t turn_speed_cps)
     s_chassis.left_target_cps  = Chassis_LimitTarget((int32_t)s_chassis.linear_target_cps - s_chassis.turn_target_cps);
     s_chassis.right_target_cps = Chassis_LimitTarget((int32_t)s_chassis.linear_target_cps + s_chassis.turn_target_cps);
 
-    PID_SetTarget(&s_pid_fl, (float)s_chassis.left_target_cps);
-    PID_SetTarget(&s_pid_fr, (float)s_chassis.right_target_cps);
-#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-    PID_SetTarget(&s_pid_rl, (float)s_chassis.left_target_cps);
-    PID_SetTarget(&s_pid_rr, (float)s_chassis.right_target_cps);
-#endif
-
     s_chassis.mode = CHASSIS_MODE_SPEED;
 }
 
@@ -74,29 +52,11 @@ void Chassis_Stop(void)
     s_chassis.turn_target_cps = 0;
     s_chassis.left_target_cps = 0;
     s_chassis.right_target_cps = 0;
-
-    Chassis_ResetPID();
+    s_chassis.fl_output = 0;
+    s_chassis.fr_output = 0;
+    s_chassis.rl_output = 0;
+    s_chassis.rr_output = 0;
     Motor_StopAll();
-}
-
-void Chassis_ResetPID(void)
-{
-    PID_Reset(&s_pid_fl);
-    PID_Reset(&s_pid_fr);
-#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-    PID_Reset(&s_pid_rl);
-    PID_Reset(&s_pid_rr);
-#endif
-}
-
-void Chassis_SetPIDConfig(const PID_Config_t *cfg)
-{
-    PID_SetConfig(&s_pid_fl, cfg);
-    PID_SetConfig(&s_pid_fr, cfg);
-#if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-    PID_SetConfig(&s_pid_rl, cfg);
-    PID_SetConfig(&s_pid_rr, cfg);
-#endif
 }
 
 Chassis_Mode_t Chassis_GetMode(void)
@@ -121,11 +81,11 @@ void Chassis_Update(void)
     s_chassis.rr_feedback_cps = 0;
 #endif
 
-    s_chassis.fl_output = Chassis_LimitOutput(PID_Update(&s_pid_fl, (float)s_chassis.fl_feedback_cps));
-    s_chassis.fr_output = Chassis_LimitOutput(PID_Update(&s_pid_fr, (float)s_chassis.fr_feedback_cps));
+    s_chassis.fl_output = Chassis_TargetToPwm(s_chassis.left_target_cps);
+    s_chassis.fr_output = Chassis_TargetToPwm(s_chassis.right_target_cps);
 #if (VEHICLE_REAR_DRIVE_ENABLE != 0U)
-    s_chassis.rl_output = Chassis_LimitOutput(PID_Update(&s_pid_rl, (float)s_chassis.rl_feedback_cps));
-    s_chassis.rr_output = Chassis_LimitOutput(PID_Update(&s_pid_rr, (float)s_chassis.rr_feedback_cps));
+    s_chassis.rl_output = Chassis_TargetToPwm(s_chassis.left_target_cps);
+    s_chassis.rr_output = Chassis_TargetToPwm(s_chassis.right_target_cps);
 #else
     s_chassis.rl_output = 0;
     s_chassis.rr_output = 0;

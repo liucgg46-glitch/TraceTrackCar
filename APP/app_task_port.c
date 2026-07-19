@@ -19,6 +19,12 @@ BSP_WEAK void AppTask_BSP_Background(void)
     Driver_Task();
 }
 
+BSP_WEAK void Key_Update(void)
+{
+    /* 统一推进按键GPIO扫描和消抖；业务任务只读取已经锁存的按键事件。 */
+    BSP_Key_UpdateAll();
+}
+
 BSP_WEAK void Encoder_Update(void)
 {
     /* Part1 阶段先直接更新 BSP 编码器；Part2 可由 drv_encoder.c 覆盖。 */
@@ -27,8 +33,7 @@ BSP_WEAK void Encoder_Update(void)
 
 BSP_WEAK void Sensor_Update(void)
 {
-    /* Part1 阶段先放按键扫描；Part4 由 sensor_manager.c 覆盖。 */
-    BSP_Key_UpdateAll();
+    /* Part4 由 sensor_manager.c 覆盖；按键扫描由独立 Key_Update() 负责。 */
 }
 
 BSP_WEAK void Chassis_Update(void)

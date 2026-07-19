@@ -8,7 +8,7 @@ void Test_Encoder_Log(void); //{ Test_Encoder_Log,   200U, 0U },
 void Test_Gray4051_Update(void);//{ Test_Gray4051_Update,  1U,   0U },
 void Test_Gray4051_Log(void);//{ Test_Gray4051_Log,     200U, 0U },
 
-void Test_Key_Update(void);//五按键按下/释放串口测试 { Test_Key_Update, 10U, 0U },
+void Test_Key_Update(void);//五按键事件测试：先注册 { Key_Update, 10U, 0U }，再注册本函数
 
 void Test_EXTI_Init(void); //在主函数BSP_InitAll（）后，Scheduler_Init();前初始化才行
 void Test_EXTI_Log(void);  //{ Test_EXTI_Log,         200U, 0U },
@@ -23,7 +23,7 @@ void Test_SPI2_LCD(void);//主函数调用一次即可
 void Test_MotorCmd_Update(void);// 测试电机方向（开环测试）   { Test_MotorCmd_Update,  10U,  0U },
 void Test_MotorCmd_Log(void);//    { Test_MotorCmd_Log,     200U, 0U },
 
-void Test_ChassisCmd_Update(void);//测试速度闭环    { Test_ChassisCmd_Update,10U,  0U },
+void Test_ChassisCmd_Update(void);//五按键底盘开环测试；必须先注册 { Key_Update,10U,0U }
 void Test_ChassisCmd_Log(void);//打印日志   { Test_ChassisCmd_Log,   200U, 0U },
 
 void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,   200U, 0U },
@@ -31,12 +31,12 @@ void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,
 static void Test_CountPerRev_Print(void);//测试脉冲
 void Test_CountPerRev_Update(void);// 测试一圈的脉冲数{ Test_CountPerRev_Update,10U,  0U },
 
-void Test_MotionCmd_Update(void);//动作库测试 { Test_MotionCmd_Update,  10U,  0U },
+void Test_MotionCmd_Update(void);//五按键动作库测试；必须先注册 { Key_Update,10U,0U }
 void Test_MotionCmd_Log(void);//{ Test_MotionCmd_Log,     200U, 0U },
 
 void Test_LineCmd_Update(void);// { Test_LineCmd_Update,   10U,   0U },
-void Test_RouteCmd_Update(void);// { Test_RouteCmd_Update, 10U, 0U }
-void Test_RouteLog(void);// { Test_RouteLog, 200U, 0U }
+void Test_RouteCmd_Update(void);// KEY1 start, KEY4 stop; requires Key_Update before this task
+void Test_RouteLog(void);//激活路线LCD/OLED调试页；同时注册对应显示刷新任务
 void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和校准后的灰度数据，巡线状态等等）{ Test_LineCmd_Log,     200U,   0U }, 
 
 void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U, 0U },

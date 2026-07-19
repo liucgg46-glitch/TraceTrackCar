@@ -15,6 +15,11 @@ void OledUi_Init(void);
 void OledUi_ShowBoot(void);
 void OledUi_ShowDashboard(void);
 void OledUi_Update(void);
+void OledUi_RouteTestBegin(void);
+void OledUi_LineCalibrationBegin(void);
+void OledUi_LineCalibrationWhiteCaptured(void);
+void OledUi_LineCalibrationBlackCaptured(void);
+void OledUi_LineCalibrationShowResult(const uint16_t *threshold, uint8_t count);
 void OledUi_ShowStatus(const char *line1, const char *line2, const char *line3);
 void OLED_Update(void);
 

@@ -1,4 +1,5 @@
 #include "line_detect.h"
+#include "control_config.h"
 
 static LineDetect_Result_t s_line;
 static uint16_t s_white[LINE_DETECT_SENSOR_NUM];
@@ -9,6 +10,37 @@ static uint8_t s_has_black;
 static const int16_t s_weight[LINE_DETECT_SENSOR_NUM] = {
     -3500, -2500, -1500, -500, 500, 1500, 2500, 3500
 };
+
+/*
+ * 方向开关只规范化算法层的左右含义，不重排各物理通道的阈值。
+ * 这样旋转传感器后，原有逐通道标定值仍与对应探头保持一致。
+ */
+static uint8_t Line_NormalizeMask(uint8_t mask)
+{
+#if CONTROL_LINE_DIRECTION_REVERSE
+    uint8_t i;
+    uint8_t reversed = 0U;
+
+    for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
+        if ((mask & (uint8_t)(1U << i)) != 0U) {
+            reversed |= (uint8_t)(1U <<
+                                  (LINE_DETECT_SENSOR_NUM - 1U - i));
+        }
+    }
+    return reversed;
+#else
+    return mask;
+#endif
+}
+
+static int16_t Line_NormalizeError(int16_t error)
+{
+#if CONTROL_LINE_DIRECTION_REVERSE
+    return (int16_t)(-error);
+#else
+    return error;
+#endif
+}
 
 static uint8_t Line_IsBlack(uint16_t raw, uint16_t threshold)
 {
@@ -95,6 +127,8 @@ void LineDetect_Update(const uint16_t raw[LINE_DETECT_SENSOR_NUM])
     int32_t weighted_sum = 0;
     int32_t count = 0;
     uint8_t mask = 0U;
+    uint8_t normalized_mask;
+    int16_t normalized_error;
 
     if (raw == 0) return;
 
@@ -109,18 +143,21 @@ void LineDetect_Update(const uint16_t raw[LINE_DETECT_SENSOR_NUM])
         }
     }
 
-    s_line.black_mask = mask;
+    normalized_mask = Line_NormalizeMask(mask);
+    s_line.black_mask = normalized_mask;
     s_line.black_count = (uint8_t)count;
 
     if (count > 0) {
+        normalized_error = Line_NormalizeError(
+            (int16_t)(weighted_sum / count));
         s_line.last_error_x1000 = s_line.error_x1000;
-        s_line.error_x1000 = (int16_t)(weighted_sum / count);
+        s_line.error_x1000 = normalized_error;
     } else {
         /* 丢线时保持最后方向，便于 line_track 做找线。 */
         s_line.last_error_x1000 = s_line.error_x1000;
     }
 
-    s_line.type = Line_Classify(mask, (uint8_t)count);
+    s_line.type = Line_Classify(normalized_mask, (uint8_t)count);
 }
 
 BSP_Status_t LineDetect_GetResult(LineDetect_Result_t *out_result)

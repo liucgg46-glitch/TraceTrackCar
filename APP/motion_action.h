@@ -18,7 +18,8 @@ extern "C" {
  *   - Motion_GoDistance() / Motion_TurnAngle() 只启动动作，不等待完成；
  *   - Motion_Update() 必须 10ms 周期调用；
  *   - 任务状态机只查询 Motion_IsDone()，不要直接盯编码器细节；
- *   - TurnAngle 使用 heading_estimator 的相对航向；默认来源是融合 IMU yaw。
+ *   - 定角转弯使用 heading_estimator 的相对航向；默认来源是融合 IMU yaw；
+ *   - 所有定角转弯共用 control_config.h 中的统一速度和回正参数。
  */
 
 typedef enum {
@@ -46,20 +47,11 @@ typedef struct {
     uint32_t timeout_ms;
 } Motion_Info_t;
 
-#define MOTION_DISTANCE_TOLERANCE_MM      8
-#define MOTION_ANGLE_TOLERANCE_DEG        3.0f
-#define MOTION_DEFAULT_TIMEOUT_MS         8000U
-#define MOTION_MIN_ABS_SPEED_CPS          150
-#define MOTION_MAX_ABS_SPEED_CPS          2500
-#define MOTION_TURN_MIN_SPEED_CPS         1000
-#define MOTION_TURN_KP_CPS_PER_DEG        8.0f
-#define MOTION_TURN_SETTLE_SAMPLES        3U
-
 void Motion_Init(void);
 void Motion_Update(void);
 
 BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps);
-BSP_Status_t Motion_TurnAngle(int16_t angle_deg, int16_t speed_cps);
+BSP_Status_t Motion_TurnAngle(int16_t angle_deg);
 void Motion_Stop(void);
 
 uint8_t Motion_IsBusy(void);

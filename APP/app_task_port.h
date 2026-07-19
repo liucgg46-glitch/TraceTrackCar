@@ -21,12 +21,13 @@ extern "C" {
  *   4. 后续 A/B/C 在自己的模块 .c 文件里写同名强函数，即可自动覆盖弱实现。
  *
  * 推荐责任分工：
- *   B：BSP、Encoder_Update、电机底层；
+ *   B：BSP、Key_Update、Encoder_Update、电机底层；
  *   A：Chassis_Update、LineTrack_Update、TaskFSM_Update、Motion_Update；
  *   C：Sensor_Update、DebugMenu_Update、OLED_Update、Log_Update。
  */
 
 void AppTask_BSP_Background(void);  /* B：UART/I2C/SPI 后台维护，1ms */
+void Key_Update(void);              /* B：按键统一扫描和消抖，10ms */
 void Encoder_Update(void);          /* B：编码器增量/速度更新，10ms */
 void Sensor_Update(void);           /* C：灰度/IMU/测距/视觉统一更新，建议1ms */
 void Chassis_Update(void);          /* A：底盘速度闭环，10ms */

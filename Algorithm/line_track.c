@@ -1,122 +1,210 @@
 #include "line_track.h"
+#include "control_config.h"
 
-static uint8_t s_cross_hold_cnt;
-static LineTrack_Config_t s_cfg;
-static int16_t s_last_error;
+/*
+ * 基础版只保留真正需要调节的参数，不再包含边缘模式、宽线模式、
+ * 输出斜坡、多阶段反向扫描等互相叠加的控制逻辑。
+ */
+typedef struct {
+    int16_t base_speed_cps;
+    int16_t cross_speed_cps;
+    int16_t min_track_speed_cps;
+    int16_t turn_max_cps;
+    int16_t search_turn_cps;
+    float kp;
+    float kd;
+    int16_t error_deadband;
+    int16_t speed_full_error;
+    int16_t speed_min_error;
+    uint32_t search_timeout_ms;
+} LineTrack_InternalConfig_t;
+
+static LineTrack_InternalConfig_t s_cfg;
+static LineTrack_Mode_t s_mode;
+static int16_t s_raw_error;
 static int16_t s_error_filt;
+static int16_t s_last_error;
 static int16_t s_last_linear_cmd;
 static int16_t s_last_turn_cmd;
+static int16_t s_target_linear;
+static int16_t s_target_turn;
+static int8_t s_last_line_direction;
+static int8_t s_search_direction;
+static uint16_t s_lost_samples;
+static uint32_t s_lost_start_ms;
 
-static int16_t LimitI16(int32_t x, int16_t min_v, int16_t max_v)
+static int16_t LineTrack_AbsI16(int16_t value)
 {
-    if (x > max_v) return max_v;
-    if (x < min_v) return min_v;
-    return (int16_t)x;
+    return (value >= 0) ? value : (int16_t)(-value);
 }
 
-static int16_t LimitFloatToI16(float x, int16_t min_v, int16_t max_v)
+static int16_t LineTrack_LimitI16(int32_t value,
+                                  int16_t min_value,
+                                  int16_t max_value)
 {
-    if (x > (float)max_v) return max_v;
-    if (x < (float)min_v) return min_v;
-    return (int16_t)x;
+    if (value > max_value) return max_value;
+    if (value < min_value) return min_value;
+    return (int16_t)value;
 }
 
-static int16_t AbsI16(int16_t x)
+static int16_t LineTrack_LimitFloat(float value,
+                                    int16_t min_value,
+                                    int16_t max_value)
 {
-    return (x >= 0) ? x : (int16_t)(-x);
+    if (value > (float)max_value) return max_value;
+    if (value < (float)min_value) return min_value;
+    return (int16_t)value;
 }
 
+/*
+ * 根据线路误差确定找线方向。
+ * 返回 +1 表示左转，-1 表示右转。
+ */
+static int8_t LineTrack_DirectionFromError(int16_t error)
+{
+    if (error < (int16_t)(-s_cfg.error_deadband)) return 1;
+    if (error > s_cfg.error_deadband) return -1;
+    return s_last_line_direction;
+}
+
+/*
+ * 误差越大，直行速度越低。
+ * 只做一次线性计算，不再建立额外的“边缘状态”。
+ */
 static int16_t LineTrack_GetAdaptiveSpeed(int16_t error)
 {
-    int16_t abs_err = AbsI16(error);
+    int16_t abs_error;
+    int32_t error_span;
+    int32_t speed_span;
     int32_t speed;
 
-    /*
-     * base = 3000 时：
-     * abs_err = 0     -> 3000
-     * abs_err = 300   -> 2730
-     * abs_err = 600   -> 2460
-     * abs_err = 1000  -> 2100
-     * abs_err = 1500  -> 1650
-     * abs_err = 2000  -> 1200
-     * abs_err = 2500  -> 750，随后被限到 850
-     */
-    speed = (int32_t)s_cfg.base_speed_cps - ((int32_t)abs_err * 90 / 100);
+    abs_error = LineTrack_AbsI16(error);
 
-    if (speed > s_cfg.base_speed_cps) {
-        speed = s_cfg.base_speed_cps;
+    if (abs_error <= s_cfg.speed_full_error) {
+        return s_cfg.base_speed_cps;
     }
 
-    if (speed < 850) {
-        speed = 850;
+    if (abs_error >= s_cfg.speed_min_error) {
+        return s_cfg.min_track_speed_cps;
     }
 
-    return (int16_t)speed;
-}
-/* 交叉区沿用上一次偏差方向，避免在十字 / 8 字交叉处乱选线 */
-static int16_t LineTrack_HoldTurnByLastError(uint8_t div)
-{
-    if (div == 0U) div = 4U;
-
-    if (s_last_error > 300) {
-        return (int16_t)(-s_cfg.turn_max_cps / div);  /* 上次偏右，轻微右转 */
-    } else if (s_last_error < -300) {
-        return (int16_t)(s_cfg.turn_max_cps / div);   /* 上次偏左，轻微左转 */
-    } else {
-        return 0;
+    error_span = (int32_t)s_cfg.speed_min_error -
+                 (int32_t)s_cfg.speed_full_error;
+    if (error_span <= 0) {
+        return s_cfg.min_track_speed_cps;
     }
+
+    speed_span = (int32_t)s_cfg.base_speed_cps -
+                 (int32_t)s_cfg.min_track_speed_cps;
+
+    speed = (int32_t)s_cfg.base_speed_cps -
+            (((int32_t)abs_error - (int32_t)s_cfg.speed_full_error) *
+             speed_span / error_span);
+
+    return LineTrack_LimitI16(speed,
+                              s_cfg.min_track_speed_cps,
+                              s_cfg.base_speed_cps);
 }
 
-static int16_t LineTrack_RampI16(int16_t last, int16_t target, int16_t step)
+/*
+ * 直接保存并输出命令。
+ * 基础版故意取消输出斜坡限制，使黑线从边缘回到中间后能够立即回正。
+ */
+static void LineTrack_SetOutput(int16_t linear,
+                                int16_t turn,
+                                uint8_t valid,
+                                LineTrack_Output_t *out)
 {
-    int32_t diff = (int32_t)target - (int32_t)last;
+    linear = LineTrack_LimitI16(linear,
+                                0,
+                                CONTROL_CHASSIS_TARGET_MAX_CPS);
+    turn = LineTrack_LimitI16(turn,
+                              (int16_t)(-CONTROL_CHASSIS_TARGET_MAX_CPS),
+                              CONTROL_CHASSIS_TARGET_MAX_CPS);
 
-    if (diff > step) {
-        return (int16_t)(last + step);
-    } else if (diff < -step) {
-        return (int16_t)(last - step);
-    } else {
-        return target;
-    }
+    s_target_linear = linear;
+    s_target_turn = turn;
+    s_last_linear_cmd = linear;
+    s_last_turn_cmd = turn;
+
+    out->linear_cps = linear;
+    out->turn_cps = turn;
+    out->valid = valid;
+}
+
+static void LineTrack_LoadDefaultConfig(void)
+{
+    s_cfg.base_speed_cps = CONTROL_LINE_BASE_SPEED_CPS;
+    s_cfg.cross_speed_cps = CONTROL_LINE_CROSS_SPEED_CPS;
+    s_cfg.min_track_speed_cps = CONTROL_LINE_MIN_TRACK_SPEED_CPS;
+    s_cfg.turn_max_cps = CONTROL_LINE_TURN_MAX_CPS;
+    s_cfg.search_turn_cps = CONTROL_LINE_SEARCH_TURN_CPS;
+    s_cfg.kp = CONTROL_LINE_KP;
+    s_cfg.kd = CONTROL_LINE_KD;
+    s_cfg.error_deadband = CONTROL_LINE_ERROR_DEADBAND;
+    s_cfg.speed_full_error = CONTROL_LINE_SPEED_FULL_ERROR;
+    s_cfg.speed_min_error = CONTROL_LINE_SPEED_MIN_ERROR;
+    s_cfg.search_timeout_ms = CONTROL_LINE_SEARCH_TIMEOUT_MS;
 }
 
 void LineTrack_Init(void)
 {
-    s_cfg.base_speed_cps   = LINE_TRACK_BASE_SPEED_CPS;
-    s_cfg.cross_speed_cps  = LINE_TRACK_CROSS_SPEED_CPS;
-    s_cfg.lost_speed_cps   = LINE_TRACK_LOST_SPEED_CPS;
-    s_cfg.search_turn_cps  = LINE_TRACK_SEARCH_TURN_CPS;
-    s_cfg.turn_max_cps     = LINE_TRACK_TURN_MAX_CPS;
-    s_cfg.kp               = LINE_TRACK_KP;
-    s_cfg.kd               = LINE_TRACK_KD;
+    LineTrack_LoadDefaultConfig();
+    LineTrack_Reset();
+}
 
-    s_last_error      = 0;
-    s_cross_hold_cnt  = 0U;
-    s_error_filt      = 0;
+void LineTrack_Reset(void)
+{
+    s_mode = LINE_TRACK_MODE_TRACK;
+    s_raw_error = 0;
+    s_error_filt = 0;
+    s_last_error = 0;
     s_last_linear_cmd = 0;
-    s_last_turn_cmd   = 0;
+    s_last_turn_cmd = 0;
+    s_target_linear = 0;
+    s_target_turn = 0;
+    s_last_line_direction = 1;
+    s_search_direction = 1;
+    s_lost_samples = 0U;
+    s_lost_start_ms = 0U;
 }
 
-void LineTrack_SetConfig(const LineTrack_Config_t *cfg)
+BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
 {
-    if (cfg == 0) return;
-    s_cfg = *cfg;
-}
+    uint32_t now;
 
-BSP_Status_t LineTrack_GetConfig(LineTrack_Config_t *cfg)
-{
-    if (cfg == 0) return BSP_PARAM;
-    *cfg = s_cfg;
+    if (info == 0) return BSP_PARAM;
+
+    now = BSP_GET_TICK();
+
+    info->mode = s_mode;
+    info->raw_error = s_raw_error;
+    info->filtered_error = s_error_filt;
+    info->target_linear_cps = s_target_linear;
+    info->target_turn_cps = s_target_turn;
+    info->output_linear_cps = s_last_linear_cmd;
+    info->output_turn_cps = s_last_turn_cmd;
+    info->lost_samples = s_lost_samples;
+    info->reacquire_samples = 0U;
+    info->search_phase = 0U;
+    info->search_direction = s_search_direction;
+    info->lost_ms = (s_lost_samples == 0U) ? 0U :
+                    (uint32_t)(now - s_lost_start_ms);
+
     return BSP_OK;
 }
 
-void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out)
+void LineTrack_Compute(const LineDetect_Result_t *line,
+                       LineTrack_Output_t *out)
 {
+    uint32_t now;
+    uint8_t was_searching;
     int16_t error;
     int16_t d_error;
-    float turn_f;
     int16_t target_linear;
     int16_t target_turn;
+    int8_t direction;
+    float turn_f;
 
     if ((line == 0) || (out == 0)) return;
 
@@ -124,115 +212,109 @@ void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out)
     out->turn_cps = 0;
     out->valid = 0U;
 
-    /* 1. 丢线：按最后误差方向原地找线 */
-    if (line->type == LINE_TYPE_LOST) {
-        out->linear_cps = s_cfg.lost_speed_cps;
+    now = BSP_GET_TICK();
+    s_raw_error = line->error_x1000;
 
-        if (s_last_error >= 0) {
-            out->turn_cps = (int16_t)(-s_cfg.search_turn_cps);
-        } else {
-            out->turn_cps = s_cfg.search_turn_cps;
-        }
-
-        out->valid = 1U;
+    /* 找线超时后保持无效输出，必须由上层重新启动循迹。 */
+    if (s_mode == LINE_TRACK_MODE_FAILSAFE) {
         return;
     }
 
-//    /* 2. 交叉保持期：短时间低速穿越，避免 8 字交叉处乱选线 */
-//    if (s_cross_hold_cnt > 0U) {
-//        s_cross_hold_cnt--;
+    /*
+     * 丢线后只做一件事：沿最后一次看到黑线的方向原地找线。
+     * 不反复切换方向，不逐级增加速度，行为简单且便于现场判断。
+     */
+    if (line->type == LINE_TYPE_LOST) {
+        if (s_lost_samples == 0U) {
+            s_lost_start_ms = now;
+            s_search_direction =
+                LineTrack_DirectionFromError(s_last_error);
+            if (s_search_direction == 0) {
+                s_search_direction = 1;
+            }
+        }
 
-//        out->linear_cps = s_cfg.cross_speed_cps;
-//        out->turn_cps = LineTrack_HoldTurnByLastError(4U);
-//        out->valid = 1U;
-//        return;
-//    }
+        if (s_lost_samples < 0xFFFFU) {
+            s_lost_samples++;
+        }
 
-//    /* 3. CROSS / FULL_BLACK：进入交叉保持 */
-//    if ((line->type == LINE_TYPE_CROSS) ||
-//        (line->type == LINE_TYPE_FULL_BLACK)) {
+        if ((uint32_t)(now - s_lost_start_ms) >=
+            s_cfg.search_timeout_ms) {
+            s_mode = LINE_TRACK_MODE_FAILSAFE;
+            LineTrack_SetOutput(0, 0, 0U, out);
+            return;
+        }
 
-//        s_cross_hold_cnt = 25U;   /* 25 * 10ms = 250ms */
+        s_mode = LINE_TRACK_MODE_SEARCH;
+        LineTrack_SetOutput(0,
+                            (int16_t)(s_search_direction *
+                                      s_cfg.search_turn_cps),
+                            1U,
+                            out);
+        return;
+    }
 
-//        out->linear_cps = s_cfg.cross_speed_cps;
-//        out->turn_cps = LineTrack_HoldTurnByLastError(4U);
-//        out->valid = 1U;
-//        return;
-//    }
+    was_searching = (s_mode == LINE_TRACK_MODE_SEARCH) ? 1U : 0U;
+    s_mode = LINE_TRACK_MODE_TRACK;
+    s_lost_samples = 0U;
+    s_lost_start_ms = 0U;
 
-//    /*
-//     * 4. 直角 / 大弯边缘补救
-//     * mask 低位是左侧传感器，高位是右侧传感器。
-//     * 如果实际测试发现左右反了，检查 DRV_GRAY_4051_INDEX_REVERSE。
-//     */
-//    if ((line->black_mask & 0x03U) != 0U) {
-//        /* 最左侧 0 / 1 路看到线：强制左转 */
-//        out->linear_cps = 450;
-//        out->turn_cps = (int16_t)(s_cfg.turn_max_cps * 3 / 4);
-//        out->valid = 1U;
-//        s_last_error = LINE_DETECT_ERR_LEFT_MAX;
-//        return;
-//    }
+    /*
+     * 十字和全黑区域在基础模式下统一低速直行。
+     * 左右分支不在这里强制直行，仍由下面的 P/PD 根据实际误差处理，
+     * 避免把右直角误判成宽线后继续向前冲。
+     */
+    if ((line->type == LINE_TYPE_CROSS) ||
+        (line->type == LINE_TYPE_FULL_BLACK)) {
+        s_error_filt = 0;
+        s_last_error = 0;
+        LineTrack_SetOutput(s_cfg.cross_speed_cps, 0, 1U, out);
+        return;
+    }
 
-//    if ((line->black_mask & 0xC0U) != 0U) {
-//        /* 最右侧 6 / 7 路看到线：强制右转 */
-//        out->linear_cps = 450;
-//        out->turn_cps = (int16_t)(-s_cfg.turn_max_cps * 3 / 4);
-//        out->valid = 1U;
-//        s_last_error = LINE_DETECT_ERR_RIGHT_MAX;
-//        return;
-//    }
+    /*
+     * 基础版不做误差低通滤波，直接使用当前帧误差。
+     * 这样黑线从最外侧返回中间时，不会继续保留旧方向的大误差。
+     */
+    error = line->error_x1000;
+    if ((error > (int16_t)(-s_cfg.error_deadband)) &&
+        (error < s_cfg.error_deadband)) {
+        error = 0;
+    }
 
-//    /*
-//     * 5. LEFT_BRANCH / RIGHT_BRANCH：
-//     * 对这个 HJduino 8 字交叉赛道，先不要直接强制左 / 右选路。
-//     * 先低速保持穿越，避免在中间环形交叉处误入支路。
-//     */
-//    if ((line->type == LINE_TYPE_LEFT_BRANCH) ||
-//        (line->type == LINE_TYPE_RIGHT_BRANCH)) {
+    s_error_filt = error;
 
-//        s_cross_hold_cnt = 12U;   /* 12 * 10ms = 120ms */
+    /* 刚刚重新找到线时不使用搜索前的旧误差计算微分。 */
+    if (was_searching != 0U) {
+        s_last_error = error;
+        d_error = 0;
+    } else {
+        d_error = (int16_t)(error - s_last_error);
+        s_last_error = error;
+    }
 
-//        out->linear_cps = s_cfg.cross_speed_cps;
-//        out->turn_cps = LineTrack_HoldTurnByLastError(4U);
-//        out->valid = 1U;
-//        return;
-//    }
-
-    /* 6. 普通单线 PD 循迹 */
-
-    /* error 一阶低通滤波，减少灰度跳变导致的顿挫 */
-  s_error_filt = (int16_t)((3 * (int32_t)s_error_filt + line->error_x1000) / 4);
-
-error = s_error_filt;
-
-   if ((error > -80) && (error < 80)) {
-    error = 0;
-     }
-
-    d_error = (int16_t)(error - s_last_error);
-    s_last_error = error;
-
-    turn_f = -(s_cfg.kp * (float)error + s_cfg.kd * (float)d_error);
-
-    target_turn = LimitFloatToI16(turn_f,
-                                  (int16_t)(-s_cfg.turn_max_cps),
-                                  s_cfg.turn_max_cps);
+    direction = LineTrack_DirectionFromError(error);
+    if (direction != 0) {
+        s_last_line_direction = direction;
+    }
 
     target_linear = LineTrack_GetAdaptiveSpeed(error);
-    target_linear = LimitI16(target_linear, -3000, 3000);
+    turn_f = -(s_cfg.kp * (float)error +
+               s_cfg.kd * (float)d_error);
+    target_turn = LineTrack_LimitFloat(turn_f,
+                                       (int16_t)(-s_cfg.turn_max_cps),
+                                       s_cfg.turn_max_cps);
 
-    /* 每 10ms 限制变化量，让输出更丝滑 */
-    out->linear_cps = LineTrack_RampI16(s_last_linear_cmd, target_linear, 100);
-    out->turn_cps   = LineTrack_RampI16(s_last_turn_cmd,   target_turn,   140);
+    /*
+     * 普通循迹时不让内侧车轮反转：
+     * |turn| == linear 时内侧轮停止，已经能够形成很强的转向。
+     */
+    if (target_turn > target_linear) {
+        target_turn = target_linear;
+    }
+    if (target_turn < (int16_t)(-target_linear)) {
+        target_turn = (int16_t)(-target_linear);
+    }
 
-    s_last_linear_cmd = out->linear_cps;
-    s_last_turn_cmd   = out->turn_cps;
-
-    out->linear_cps = LimitI16(out->linear_cps, -3000, 3000);
-    out->turn_cps = LimitI16(out->turn_cps,
-                             (int16_t)(-s_cfg.turn_max_cps),
-                             s_cfg.turn_max_cps);
-
-    out->valid = 1U;
+    LineTrack_SetOutput(target_linear, target_turn, 1U, out);
 }

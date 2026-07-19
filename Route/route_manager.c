@@ -4,17 +4,9 @@
 #include "route_profile_hjduino.h"
 #include "motion_action.h"
 
-/* 保存最近一次路线更新后，当前应该由谁控制底盘。 */
-static Route_ControlMode_t s_route_control = ROUTE_CONTROL_STOP;
+static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
 
-/*
- * 根据 route_config.h 中 ROUTE_PROFILE_SELECT 的值，
- * 在编译期选择并初始化一个路线方案。
- *
- * #if/#elif 属于预处理编译选择，不是运行时 if；
- * 最终固件中只会保留被选中的那套调用路径。
- */
-void RouteManager_Init(void)
+static void RouteManager_ProfileInit(void)
 {
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
     BasicRoute_Init();
@@ -23,18 +15,10 @@ void RouteManager_Init(void)
 #else
 #error "Invalid ROUTE_PROFILE_SELECT"
 #endif
-    s_route_control = ROUTE_CONTROL_STOP;
 }
 
-/*
- * 将整个路线模块恢复到初始状态。
- * Motion_Stop() 用来取消路线模块此前启动的非阻塞动作，
- * 然后再复位具体 profile 的内部计数器和状态。
- */
-void RouteManager_Reset(void)
+static void RouteManager_ProfileReset(void)
 {
-    /* Cancel a route-owned action before returning chassis ownership. */
-    Motion_Stop();
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
     BasicRoute_Reset();
 #elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
@@ -42,58 +26,78 @@ void RouteManager_Reset(void)
 #else
 #error "Invalid ROUTE_PROFILE_SELECT"
 #endif
-    s_route_control = ROUTE_CONTROL_STOP;
 }
 
-/*
- * 路线管理器统一入口。
- * 它不直接解析具体赛道，只把调用转发给当前选中的 profile，
- * 并记录该 profile 返回的底盘控制权。
- */
+void RouteManager_Init(void)
+{
+    LineTrack_Init();
+    RouteManager_ProfileInit();
+    s_control_mode = ROUTE_CONTROL_STOP;
+}
+
+void RouteManager_Reset(void)
+{
+    /* Cancel every previous command owner before starting a new route run. */
+    Motion_Stop();
+    LineTrack_Reset();
+    RouteManager_ProfileReset();
+    s_control_mode = ROUTE_CONTROL_STOP;
+}
+
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         LineTrack_Output_t *out)
 {
+    if (out != 0) {
+        out->linear_cps = 0;
+        out->turn_cps = 0;
+        out->valid = 0U;
+    }
+
+    if ((line == 0) || (out == 0)) {
+        s_control_mode = ROUTE_CONTROL_ERROR;
+        return s_control_mode;
+    }
+
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    s_route_control = BasicRoute_Update(line, out);
+    s_control_mode = BasicRoute_Update(line, out);
 #elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    s_route_control = HJduinoRoute_Update(line, out);
+    s_control_mode = HJduinoRoute_Update(line, out);
 #else
 #error "Invalid ROUTE_PROFILE_SELECT"
 #endif
-    return s_route_control;
+
+    return s_control_mode;
 }
 
-/*
- * 获取路线模块运行信息，主要用于调试打印或界面显示。
- * 先填充所有方案共有的信息，再按所选 profile 补充专用字段。
- */
 BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
 {
-    /* 调用者必须提供有效的结构体地址。 */
-    if (info == 0) {
-        return BSP_PARAM;
-    }
+    LineTrack_Info_t line_info;
 
-    /* 先给所有字段设置确定值，防止结构体中残留旧数据。 */
-    info->profile = ROUTE_PROFILE_SELECT;
+    if (info == 0) return BSP_PARAM;
+    if (LineTrack_GetInfo(&line_info) != BSP_OK) return BSP_ERROR;
+
+    info->profile = (uint8_t)ROUTE_PROFILE_SELECT;
     info->profile_state = 0U;
-    info->control_mode = s_route_control;
+    info->control_mode = s_control_mode;
     info->motion_state = (uint8_t)Motion_GetState();
     info->event_confirm_samples = 0U;
     info->running_ms = 0U;
     info->transition_count = 0U;
+    info->line_track_mode = line_info.mode;
+    info->line_filtered_error = line_info.filtered_error;
+    info->line_lost_samples = line_info.lost_samples;
+    info->line_search_phase = line_info.search_phase;
+    info->line_search_direction = line_info.search_direction;
+    info->line_lost_ms = line_info.lost_ms;
 
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
     {
-        /* 获取 HJduino profile 的专用状态，再映射到通用信息结构体。 */
-        HJduinoRoute_Info_t hjd;
-        if (HJduinoRoute_GetInfo(&hjd) != BSP_OK) {
-            return BSP_ERROR;
-        }
-        info->profile_state = (uint8_t)hjd.state;
-        info->event_confirm_samples = hjd.entry_confirm_samples;
-        info->running_ms = hjd.running_ms;
-        info->transition_count = hjd.transition_count;
+        HJduinoRoute_Info_t route_info;
+        if (HJduinoRoute_GetInfo(&route_info) != BSP_OK) return BSP_ERROR;
+        info->profile_state = (uint8_t)route_info.state;
+        info->event_confirm_samples = route_info.entry_confirm_samples;
+        info->running_ms = route_info.running_ms;
+        info->transition_count = route_info.transition_count;
     }
 #endif
 

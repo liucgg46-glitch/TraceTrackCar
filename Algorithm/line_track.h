@@ -11,87 +11,63 @@ extern "C" {
 
 /*
  * ============================================================================
- * 循迹控制算法：line_track
+ * 基础灰度循迹控制器：line_track
  * ============================================================================
- * 定位：纯算法层，不直接读取灰度、不直接控制底盘。
- * 输入：LineDetect_Result_t；输出：linear_cps / turn_cps。
  *
- * 约定：
- *   error_x1000 > 0 表示黑线偏右，车应右转，因此 turn_cps 为负；
- *   error_x1000 < 0 表示黑线偏左，车应左转，因此 turn_cps 为正。
+ * 输入：line_detect 输出的线路位置误差和线路类型。
+ * 输出：底盘直行量 linear_cps、转向量 turn_cps。
+ *
+ * 方向约定：
+ *   error < 0：黑线位于小车左侧，turn > 0，向左修正；
+ *   error > 0：黑线位于小车右侧，turn < 0，向右修正。
+ *
+ * 当前版本只保留三种实际运行状态：
+ *   1. TRACK：正常 P/PD 循迹；
+ *   2. SEARCH：丢线后沿最后看到黑线的方向原地找线；
+ *   3. FAILSAFE：找线超时，输出无效，由上层停车。
+ *
+ * 本模块不直接操作电机和底盘，也不负责环岛、直角或赛道顺序判断。
  */
 
-	/*==================== 循迹速度参数 ====================*/
+typedef enum {
+    LINE_TRACK_MODE_TRACK = 0,
 
-/* 正常循迹基础前进速度，单位 cps
- * 调高：车整体跑得更快，但弯道更容易冲出线
- * 调低：车更稳，但速度慢
- */
-#define LINE_TRACK_BASE_SPEED_CPS        3000
+    /*
+     * 以下三个名称为兼容已有串口日志或旧代码而保留。
+     * 当前基础版不会进入这些状态，不包含边缘模式、宽线模式或丢线确认模式。
+     */
+    LINE_TRACK_MODE_EDGE,
+    LINE_TRACK_MODE_WIDE_LINE,
+    LINE_TRACK_MODE_LOST_CONFIRM,
 
-/* 检测到路口、分支、十字时的前进速度，单位 cps
- * 调高：过路口更快，但容易冲过路口、错过判断
- * 调低：路口更稳，方便识别，但整体节奏变慢
- */
-#define LINE_TRACK_CROSS_SPEED_CPS       800
-
-/* 丢线时的前进速度，单位 cps
- * 一般建议为 0，表示丢线后不继续往前冲
- * 调高：丢线后还会往前走，可能更容易找回线，也可能直接冲出赛道
- * 调低：更安全；设为 0 最稳
- */
-#define LINE_TRACK_LOST_SPEED_CPS        0
-
-/* 丢线找线时的原地搜索转向速度，单位 cps
- * 调高：丢线后转得更快，找线更积极，但容易来回扫过头
- * 调低：找线更慢，更稳，但恢复速度慢
- */
-#define LINE_TRACK_SEARCH_TURN_CPS       400
-
-/* 循迹最大转向速度限制，单位 cps
- * 调高：最大修正能力更强，高速时更能拐回来，但容易急摆
- * 调低：转向更柔和，但速度快时可能转不过来
- */
-#define LINE_TRACK_TURN_MAX_CPS          900
-
-
-/*==================== 循迹 PD 参数 ====================*/
-
-/* 比例系数 Kp：根据当前偏差产生转向修正
- * 调高：看到偏差后修正更猛，拐弯更积极，但太高会左右蛇形摆动
- * 调低：修正更柔和，但太低会跟线慢、弯道冲出去
- */
-#define LINE_TRACK_KP                    0.8f
-
-/* 微分系数 Kd：根据偏差变化速度抑制摆动
- * 调高：可以减少左右振荡，让车更稳，但太高会反应迟钝、抖动或噪声敏感
- * 调低：车反应更直接，但高速时更容易来回摆
- */
-#define LINE_TRACK_KD                    0.14f
-
-/* 路口是否减速。比赛任务层后续会根据路口类型决定转弯/直行。 */
-#define LINE_TRACK_SLOW_ON_CROSS         0U
+    LINE_TRACK_MODE_SEARCH,
+    LINE_TRACK_MODE_FAILSAFE
+} LineTrack_Mode_t;
 
 typedef struct {
-    int16_t linear_cps;
-    int16_t turn_cps;
-    uint8_t valid;
+    int16_t linear_cps;  /* 底盘直行目标；当前开环底盘中属于“虚拟速度命令” */
+    int16_t turn_cps;    /* 底盘转向目标；正数左转，负数右转 */
+    uint8_t valid;       /* 1：输出有效；0：上层应停止底盘 */
 } LineTrack_Output_t;
 
 typedef struct {
-    int16_t base_speed_cps;
-    int16_t cross_speed_cps;
-    int16_t lost_speed_cps;
-    int16_t search_turn_cps;
-    int16_t turn_max_cps;
-    float kp;
-    float kd;
-} LineTrack_Config_t;
+    LineTrack_Mode_t mode;
+    int16_t raw_error;
+    int16_t filtered_error;      /* 基础版不做低通滤波，等于 raw_error */
+    int16_t target_linear_cps;
+    int16_t target_turn_cps;
+    int16_t output_linear_cps;
+    int16_t output_turn_cps;
+    uint16_t lost_samples;
+    uint16_t reacquire_samples;  /* 兼容字段，基础版固定为 0 */
+    uint16_t search_phase;       /* 兼容字段，基础版固定为 0 */
+    int8_t search_direction;
+    uint32_t lost_ms;
+} LineTrack_Info_t;
 
 void LineTrack_Init(void);
-void LineTrack_SetConfig(const LineTrack_Config_t *cfg);
-BSP_Status_t LineTrack_GetConfig(LineTrack_Config_t *cfg);
-
+void LineTrack_Reset(void);
+BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info);
 void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out);
 
 #ifdef __cplusplus

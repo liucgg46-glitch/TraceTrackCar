@@ -2,7 +2,6 @@
 #define __CHASSIS_H
 
 #include "bsp_common.h"
-#include "pid.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -11,15 +10,14 @@ extern "C" {
 
 /*
  * ============================================================================
- * 差速底盘速度闭环：chassis
+ * 差速底盘开环 PWM 控制：chassis
  * ============================================================================
- * 定位：根据 linear_speed + turn_speed 生成左右目标速度，再用四个轮子的
- * 速度 PID 输出四路电机 PWM。
+ * 定位：根据 linear_speed + turn_speed 生成左右目标值，再按固定比例直接
+ * 换算为四路电机 PWM，不使用编码器速度反馈修正。
  *
  * 本模块不直接读 TIM、不直接操作 GPIO 引脚，只调用：
- *   - drv_encoder：获取四轮反馈速度；
- *   - drv_motor：输出四轮 PWM；
- *   - pid：计算速度闭环。
+ *   - drv_encoder：保留四轮速度监测和里程累计；
+ *   - drv_motor：输出四轮 PWM。
  *
  * 使用约定：
  *   - Chassis_Update() 固定 10ms 调用；
@@ -48,21 +46,9 @@ typedef struct {
     int16_t rr_output;
 } Chassis_Info_t;
 
-/* 默认速度环 PID。刚开始建议只用 Kp，Ki/Kd 先为 0。 */
-#define CHASSIS_SPEED_PID_KP          0.8f
-#define CHASSIS_SPEED_PID_KI          0.0f
-#define CHASSIS_SPEED_PID_KD          0.0f
-#define CHASSIS_SPEED_PID_OUT_MAX     800.0f
-#define CHASSIS_SPEED_PID_I_MAX       300.0f
-
-/* 目标速度限幅，单位 count/s。 */
-#define CHASSIS_TARGET_CPS_MAX        3000
-
 void         Chassis_Init(void);
 void         Chassis_SetSpeed(int16_t linear_speed_cps, int16_t turn_speed_cps);
 void         Chassis_Stop(void);
-void         Chassis_ResetPID(void);
-void         Chassis_SetPIDConfig(const PID_Config_t *cfg);
 Chassis_Mode_t Chassis_GetMode(void);
 BSP_Status_t Chassis_GetInfo(Chassis_Info_t *info);
 

@@ -17,7 +17,7 @@ extern "C" {
  *
  * 使用方法：
  *   1. BSP_Key_InitAll();
- *   2. 每 5~10ms 调一次 BSP_Key_UpdateAll();
+ *   2. 应用层每 5~10ms 调一次 BSP_Key_UpdateAll()；当前工程由 Key_Update() 统一调用；
  *   3. 用 BSP_Key_WasPressed() 获取“按下沿事件”。
  *
  * 移植方法：只改本文件配置区，bsp_key.c 不需要改。

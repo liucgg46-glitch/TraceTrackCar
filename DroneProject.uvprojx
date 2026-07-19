@@ -794,6 +794,11 @@
               <FilePath>.\Algorithm\line_track.h</FilePath>
             </File>
             <File>
+              <FileName>control_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\control_config.h</FilePath>
+            </File>
+            <File>
               <FileName>heading_estimator.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Algorithm\heading_estimator.c</FilePath>
@@ -1004,6 +1009,16 @@
               <FilePath>.\APP\app_task_port.h</FilePath>
             </File>
             <File>
+              <FileName>line_calibration.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\line_calibration.c</FilePath>
+            </File>
+            <File>
+              <FileName>line_calibration.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\line_calibration.h</FilePath>
+            </File>
+            <File>
               <FileName>nb_wait.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\APP\nb_wait.c</FilePath>
@@ -1108,11 +1123,6 @@
         <Group>
           <GroupName>Route</GroupName>
           <Files>
-            <File>
-              <FileName>route_common.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Route\route_common.c</FilePath>
-            </File>
             <File>
               <FileName>route_common.h</FileName>
               <FileType>5</FileType>

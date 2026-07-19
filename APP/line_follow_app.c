@@ -22,7 +22,6 @@ void LineFollow_Init(void)
     s_lf.output.valid = 0U;
 
     LineDetect_Init();
-    LineTrack_Init();
     RouteManager_Init();
 }
 
