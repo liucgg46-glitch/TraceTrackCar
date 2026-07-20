@@ -24,6 +24,10 @@ static LineTrack_Mode_t s_mode;
 static int16_t s_raw_error;
 static int16_t s_error_filt;
 static int16_t s_last_error;
+static int16_t s_derivative_error;
+static int16_t s_adaptive_linear;
+static int32_t s_turn_unclamped;
+static uint8_t s_turn_saturated;
 static int16_t s_last_linear_cmd;
 static int16_t s_last_turn_cmd;
 static int16_t s_target_linear;
@@ -159,6 +163,10 @@ void LineTrack_Reset(void)
     s_raw_error = 0;
     s_error_filt = 0;
     s_last_error = 0;
+    s_derivative_error = 0;
+    s_adaptive_linear = 0;
+    s_turn_unclamped = 0;
+    s_turn_saturated = 0U;
     s_last_linear_cmd = 0;
     s_last_turn_cmd = 0;
     s_target_linear = 0;
@@ -180,6 +188,10 @@ BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
     info->mode = s_mode;
     info->raw_error = s_raw_error;
     info->filtered_error = s_error_filt;
+    info->derivative_error = s_derivative_error;
+    info->adaptive_linear_cps = s_adaptive_linear;
+    info->turn_unclamped_cps = s_turn_unclamped;
+    info->turn_saturated = s_turn_saturated;
     info->target_linear_cps = s_target_linear;
     info->target_turn_cps = s_target_turn;
     info->output_linear_cps = s_last_linear_cmd;
@@ -214,6 +226,10 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
 
     now = BSP_GET_TICK();
     s_raw_error = line->error_x1000;
+    s_derivative_error = 0;
+    s_adaptive_linear = 0;
+    s_turn_unclamped = 0;
+    s_turn_saturated = 0U;
 
     /* 找线超时后保持无效输出，必须由上层重新启动循迹。 */
     if (s_mode == LINE_TRACK_MODE_FAILSAFE) {
@@ -246,6 +262,8 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
         }
 
         s_mode = LINE_TRACK_MODE_SEARCH;
+        s_turn_unclamped = (int32_t)s_search_direction *
+                           (int32_t)s_cfg.search_turn_cps;
         LineTrack_SetOutput(0,
                             (int16_t)(s_search_direction *
                                       s_cfg.search_turn_cps),
@@ -268,6 +286,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
         (line->type == LINE_TYPE_FULL_BLACK)) {
         s_error_filt = 0;
         s_last_error = 0;
+        s_adaptive_linear = s_cfg.cross_speed_cps;
         LineTrack_SetOutput(s_cfg.cross_speed_cps, 0, 1U, out);
         return;
     }
@@ -292,6 +311,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
         d_error = (int16_t)(error - s_last_error);
         s_last_error = error;
     }
+    s_derivative_error = d_error;
 
     direction = LineTrack_DirectionFromError(error);
     if (direction != 0) {
@@ -299,8 +319,14 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     }
 
     target_linear = LineTrack_GetAdaptiveSpeed(error);
+    s_adaptive_linear = target_linear;
     turn_f = -(s_cfg.kp * (float)error +
                s_cfg.kd * (float)d_error);
+    s_turn_unclamped = (int32_t)turn_f;
+    if ((turn_f > (float)s_cfg.turn_max_cps) ||
+        (turn_f < (float)(-s_cfg.turn_max_cps))) {
+        s_turn_saturated = 1U;
+    }
     target_turn = LineTrack_LimitFloat(turn_f,
                                        (int16_t)(-s_cfg.turn_max_cps),
                                        s_cfg.turn_max_cps);
@@ -311,9 +337,11 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
      */
     if (target_turn > target_linear) {
         target_turn = target_linear;
+        s_turn_saturated = 1U;
     }
     if (target_turn < (int16_t)(-target_linear)) {
         target_turn = (int16_t)(-target_linear);
+        s_turn_saturated = 1U;
     }
 
     LineTrack_SetOutput(target_linear, target_turn, 1U, out);

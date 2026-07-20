@@ -54,6 +54,10 @@ typedef struct {
     LineTrack_Mode_t mode;
     int16_t raw_error;
     int16_t filtered_error;      /* 基础版不做低通滤波，等于 raw_error */
+    int16_t derivative_error;    /* 当前周期误差变化量，仅用于诊断 */
+    int16_t adaptive_linear_cps; /* 按误差计算出的直行量，仅用于诊断 */
+    int32_t turn_unclamped_cps;  /* PD限幅前转向量，仅用于诊断 */
+    uint8_t turn_saturated;      /* 1：转向受到任一级限幅 */
     int16_t target_linear_cps;
     int16_t target_turn_cps;
     int16_t output_linear_cps;

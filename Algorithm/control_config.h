@@ -39,6 +39,51 @@
 #define CONTROL_LINE_SEARCH_TURN_CPS              1000    /* 丢线后原地找线的转向量 */
 #define CONTROL_LINE_SEARCH_TIMEOUT_MS            2500U   /* 连续找线超时后输出无效并停车 */
 
+/*
+ * 编译期只检查整数参数之间的安全关系，避免错误配置进入实车测试。
+ * KP、KD 为浮点参数，仍需通过诊断页面和路测确认。
+ */
+#if ((CONTROL_CHASSIS_PWM_MAX_PERMILLE <= 0) || \
+     (CONTROL_CHASSIS_PWM_MAX_PERMILLE > 1000))
+#error "CONTROL_CHASSIS_PWM_MAX_PERMILLE must be in 1..1000"
+#endif
+
+#if (CONTROL_CHASSIS_TARGET_MAX_CPS <= 0)
+#error "CONTROL_CHASSIS_TARGET_MAX_CPS must be positive"
+#endif
+
+#if ((CONTROL_LINE_BASE_SPEED_CPS < 0) || \
+     (CONTROL_LINE_BASE_SPEED_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS))
+#error "CONTROL_LINE_BASE_SPEED_CPS is out of range"
+#endif
+
+#if ((CONTROL_LINE_CROSS_SPEED_CPS < 0) || \
+     (CONTROL_LINE_CROSS_SPEED_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS))
+#error "CONTROL_LINE_CROSS_SPEED_CPS is out of range"
+#endif
+
+#if ((CONTROL_LINE_MIN_TRACK_SPEED_CPS < 0) || \
+     (CONTROL_LINE_MIN_TRACK_SPEED_CPS > CONTROL_LINE_BASE_SPEED_CPS))
+#error "CONTROL_LINE_MIN_TRACK_SPEED_CPS must be in 0..BASE_SPEED"
+#endif
+
+#if ((CONTROL_LINE_TURN_MAX_CPS < 0) || \
+     (CONTROL_LINE_TURN_MAX_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS))
+#error "CONTROL_LINE_TURN_MAX_CPS is out of range"
+#endif
+
+#if ((CONTROL_LINE_ERROR_DEADBAND < 0) || \
+     (CONTROL_LINE_SPEED_FULL_ERROR < 0) || \
+     (CONTROL_LINE_SPEED_MIN_ERROR <= CONTROL_LINE_SPEED_FULL_ERROR))
+#error "Line error thresholds are invalid"
+#endif
+
+#if ((CONTROL_LINE_SEARCH_TURN_CPS <= 0) || \
+     (CONTROL_LINE_SEARCH_TURN_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_LINE_SEARCH_TIMEOUT_MS == 0U))
+#error "Line search parameters are invalid"
+#endif
+
 /* 动作库统一参数（待实测）。 */
 #define CONTROL_MOTION_DISTANCE_TOLERANCE_MM      8       /* 直行距离容差：差8mm内算完成 */
 #define CONTROL_MOTION_ANGLE_TOLERANCE_DEG        3.0f    /* 转角容差：误差≤3°进入稳定确认 */

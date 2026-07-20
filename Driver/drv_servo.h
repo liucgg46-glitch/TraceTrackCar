@@ -1,6 +1,7 @@
 #ifndef __DRV_SERVO_H
 #define __DRV_SERVO_H
 
+#include "bsp_common.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -8,48 +9,50 @@ extern "C" {
 #endif
 
 /*
- * Ë®Æ½¶æ»ú£ºPF8 / TIM13_CH1
+ * äºŒç»´èˆµæœºé©±åŠ¨å±‚ã€‚
  *
- * Âö¿í¼õĞ¡£ºÏòÓÒ
- * Âö¿íÔö´ó£ºÏò×ó
- */
-#define SERVO_HORIZONTAL_RIGHT_LIMIT_US    1000U
-#define SERVO_HORIZONTAL_CENTER_US         1248U
-#define SERVO_HORIZONTAL_LEFT_LIMIT_US     1500U
-
-/*
- * ¸©Ñö¶æ»ú£ºPF9 / TIM14_CH1
+ * å¯¹ä¸Šå±‚åªæš´éœ²å½’ä¸€åŒ–æœºæ¢°æ–¹å‘ï¼š
+ *   æ°´å¹³ -1000 è¡¨ç¤ºæœ€å³ï¼Œ0 è¡¨ç¤ºä¸­ä½ï¼Œ1000 è¡¨ç¤ºæœ€å·¦ï¼›
+ *   ä¿¯ä»° -1000 è¡¨ç¤ºæœ€ä¸Šï¼Œ0 è¡¨ç¤ºä¸­ä½ï¼Œ1000 è¡¨ç¤ºæœ€ä¸‹ã€‚
  *
- * Âö¿í¼õĞ¡£ºÌ§Í·
- * Âö¿íÔö´ó£ºµÍÍ·
+ * è„‰å®½ã€æœºæ¢°é™ä½å’Œä¸­ä½æ ‡å®šå‡ç”± drv_servo.c ç§æœ‰ä¿å­˜ï¼ŒAPP ä¸ä¾èµ– PWM å•ä½ã€‚
  */
-#define SERVO_PITCH_UP_LIMIT_US            1200U
-#define SERVO_PITCH_CENTER_US              1450U
-#define SERVO_PITCH_DOWN_LIMIT_US          1830U
+#define DRV_SERVO_POSITION_MIN_PERMILLE    (-1000)
+#define DRV_SERVO_POSITION_MAX_PERMILLE    1000
 
-/*
- * Ã¿´Î¸üĞÂ×î¶à¸Ä±ä1us¡£
- * ºóĞøÃ¿20msµ÷ÓÃÒ»´ÎDrv_Servo_Update()¡£
- */
-#define SERVO_MOVE_STEP_US                  1U
+typedef struct {
+    int16_t horizontal_permille;
+    int16_t pitch_permille;
+} Drv_Servo_Position_t;
+
+typedef struct {
+    Drv_Servo_Position_t current;
+    Drv_Servo_Position_t target;
+    /* ä»…è¡¨ç¤ºè½¯ä»¶è¾“å‡ºå‘½ä»¤å·²åˆ°è¾¾ç›®æ ‡ï¼Œä¸ä»£è¡¨èˆµæœºå…·æœ‰ä½ç½®åé¦ˆã€‚ */
+    uint8_t command_reached;
+} Drv_Servo_Info_t;
 
 void Drv_Servo_Init(void);
+
+/* ç”± Driver_Task() é«˜é¢‘è°ƒç”¨ï¼Œå†…éƒ¨æŒ‰å›ºå®šå‘¨æœŸæ¨è¿›éé˜»å¡ç¼“åŠ¨ã€‚ */
+void Drv_Servo_Task(void);
+
+/* è®¾ç½®éé˜»å¡ç›®æ ‡ï¼Œç”± Drv_Servo_Task() é€æ­¥ç§»åŠ¨ã€‚ */
+BSP_Status_t Drv_Servo_SetTargetPosition(
+    const Drv_Servo_Position_t *position
+);
+
+/*
+ * ç«‹å³è¾“å‡ºå½’ä¸€åŒ–ä½ç½®ï¼Œä¾›å·²ç»è‡ªè¡Œç”Ÿæˆè½¨è¿¹çš„æ§åˆ¶æ¨¡å—ä½¿ç”¨ã€‚
+ * æœ¬æ¥å£ä»æ‰§è¡Œå½’ä¸€åŒ–é™ä½ä¸è„‰å®½é™ä½ï¼Œä¸Šå±‚ä¸èƒ½ç»•è¿‡ Driver ç›´æ¥è®¿é—® BSPã€‚
+ */
+BSP_Status_t Drv_Servo_SetImmediatePosition(
+    const Drv_Servo_Position_t *position
+);
+
 void Drv_Servo_Center(void);
-
-/* Á¢¼´Êä³öÖ¸¶¨Âö¿í£¬Ö÷ÒªÓÃÓÚ²âÊÔºÍ±ê¶¨¡£ */
-void Drv_Servo_SetHorizontalPulse(uint16_t pulse_us);
-void Drv_Servo_SetPitchPulse(uint16_t pulse_us);
-
-/* ÉèÖÃ·Ç×èÈûÔË¶¯Ä¿±ê¡£ */
-void Drv_Servo_SetTarget(uint16_t horizontal_target_us,
-                         uint16_t pitch_target_us);
-void Drv_Servo_Update(void);
-
-uint16_t Drv_Servo_GetHorizontalPulse(void);
-uint16_t Drv_Servo_GetPitchPulse(void);
-uint16_t Drv_Servo_GetHorizontalTarget(void);
-uint16_t Drv_Servo_GetPitchTarget(void);
-uint8_t Drv_Servo_IsAtTarget(void);
+BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info);
+uint8_t Drv_Servo_IsCommandReached(void);
 
 #ifdef __cplusplus
 }

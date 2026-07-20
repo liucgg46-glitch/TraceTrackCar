@@ -85,6 +85,10 @@ BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->transition_count = 0U;
     info->line_track_mode = line_info.mode;
     info->line_filtered_error = line_info.filtered_error;
+    info->line_derivative_error = line_info.derivative_error;
+    info->line_adaptive_linear_cps = line_info.adaptive_linear_cps;
+    info->line_turn_unclamped_cps = line_info.turn_unclamped_cps;
+    info->line_turn_saturated = line_info.turn_saturated;
     info->line_lost_samples = line_info.lost_samples;
     info->line_search_phase = line_info.search_phase;
     info->line_search_direction = line_info.search_direction;

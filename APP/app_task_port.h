@@ -33,6 +33,7 @@ void Sensor_Update(void);           /* C：灰度/IMU/测距/视觉统一更新�
 void Chassis_Update(void);          /* A：底盘速度闭环，10ms */
 void Motion_Update(void);           /* A：底盘动作库，10ms */
 void LineTrack_Update(void);        /* A：循迹控制，10ms */
+void Gimbal_Update(void);           /* 云台轨迹业务，20ms */
 void TaskFSM_Update(void);          /* A：总任务状态机，10ms */
 void DebugMenu_Update(void);        /* C：按键/OLED 调参菜单，20ms */
 void OLED_Update(void);             /* C：OLED 页面刷新，100ms */

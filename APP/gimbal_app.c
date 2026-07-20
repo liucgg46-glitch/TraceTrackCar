@@ -2,177 +2,150 @@
 #include "drv_servo.h"
 #include "drv_laser.h"
 
-/* ==================== Êµ²âËÄ½ÇÊý¾Ý ==================== */
-
-/* ×óÉÏ */
-#define SQUARE_TL_HORIZONTAL_US    1340U
-#define SQUARE_TL_PITCH_US         1332U
-
-/* ÓÒÉÏ */
-#define SQUARE_TR_HORIZONTAL_US    1145U
-#define SQUARE_TR_PITCH_US         1320U
-
-/* ÓÒÏÂ */
-#define SQUARE_BR_HORIZONTAL_US    1140U
-#define SQUARE_BR_PITCH_US         1607U
-
-/* ×óÏÂ */
-#define SQUARE_BL_HORIZONTAL_US    1350U
-#define SQUARE_BL_PITCH_US         1605U
-
 /*
- * Ã¿ÌõÕý·½ÐÎ±ß·Ö³É200²½¡£
- * GimbalApp_Update()Ã¿20msµ÷ÓÃÒ»´Î£º
- *
- * 200 ¡Á 20ms = 4000ms
- *
- * Ã¿Ìõ±ßÔ¼4Ãë£¬Õý·½ÐÎÒ»ÖÜÔ¼16Ãë¡£
+ * å››è§’ä½¿ç”¨å½’ä¸€åŒ–ä½ç½®è¡¨ç¤ºï¼Œä¸æš´éœ² PWM è„‰å®½ã€‚
+ * ä¸‹åˆ—æ•°å€¼ç”±åŽŸå®žæµ‹å››è§’è„‰å®½ç­‰ä»·æ¢ç®—ï¼Œæ˜ å°„åŽçš„ç«¯ç‚¹ä¿æŒä¸å˜ã€‚
  */
-#define SQUARE_EDGE_STEPS          200U
+#define SQUARE_TL_HORIZONTAL_PERMILLE      366
+#define SQUARE_TL_PITCH_PERMILLE          (-472)
 
-/*
- * ÖÐÐÄÓë×óÉÏ½ÇÖ®¼äµÄ¶¨Î»ÒÆ¶¯·Ö³É100²½¡£
- */
-#define SQUARE_POSITION_STEPS      100U
+#define SQUARE_TR_HORIZONTAL_PERMILLE      (-416)
+#define SQUARE_TR_PITCH_PERMILLE          (-520)
 
-typedef struct {
-    uint16_t horizontal_us;
-    uint16_t pitch_us;
-} GimbalPoint_t;
+#define SQUARE_BR_HORIZONTAL_PERMILLE      (-436)
+#define SQUARE_BR_PITCH_PERMILLE          414
 
-static const GimbalPoint_t s_square_end_points[] = {
-    /* ¶Î0£ºµ±Ç°Î»ÖÃ/ÖÐÐÄ -> ×óÉÏ£¬¼¤¹â¹Ø±Õ */
-    {SQUARE_TL_HORIZONTAL_US, SQUARE_TL_PITCH_US},
+#define SQUARE_BL_HORIZONTAL_PERMILLE      405
+#define SQUARE_BL_PITCH_PERMILLE          408
 
-    /* ¶Î1£º×óÉÏ -> ÓÒÉÏ */
-    {SQUARE_TR_HORIZONTAL_US, SQUARE_TR_PITCH_US},
+/* æ¯æ¡è¾¹ 200 ä¸ª 20 ms æ’å€¼ç‚¹ï¼Œä¿æŒåŽŸæ¥çº¦ 4 s/è¾¹çš„é€Ÿåº¦ã€‚ */
+#define SQUARE_EDGE_STEPS                  200U
 
-    /* ¶Î2£ºÓÒÉÏ -> ÓÒÏÂ */
-    {SQUARE_BR_HORIZONTAL_US, SQUARE_BR_PITCH_US},
+/* ä¸­ä½åˆ°å·¦ä¸Šè§’ã€å·¦ä¸Šè§’å›žä¸­ä½å„ä½¿ç”¨ 100 ä¸ªæ’å€¼ç‚¹ã€‚ */
+#define SQUARE_POSITION_STEPS              100U
 
-    /* ¶Î3£ºÓÒÏÂ -> ×óÏÂ */
-    {SQUARE_BL_HORIZONTAL_US, SQUARE_BL_PITCH_US},
-
-    /* ¶Î4£º×óÏÂ -> ×óÉÏ£¬±ÕºÏÕý·½ÐÎ */
-    {SQUARE_TL_HORIZONTAL_US, SQUARE_TL_PITCH_US},
-
-    /* ¶Î5£º×óÉÏ -> ÖÐÐÄ£¬¼¤¹â¹Ø±Õ */
-    {SERVO_HORIZONTAL_CENTER_US, SERVO_PITCH_CENTER_US}
+static const Drv_Servo_Position_t s_square_end_points[] = {
+    /* æ®µ 0ï¼šå½“å‰ä½ç½®/ä¸­ä½åˆ°å·¦ä¸Šï¼Œæ¿€å…‰å…³é—­ã€‚ */
+    {SQUARE_TL_HORIZONTAL_PERMILLE, SQUARE_TL_PITCH_PERMILLE},
+    /* æ®µ 1ï¼šå·¦ä¸Šåˆ°å³ä¸Šã€‚ */
+    {SQUARE_TR_HORIZONTAL_PERMILLE, SQUARE_TR_PITCH_PERMILLE},
+    /* æ®µ 2ï¼šå³ä¸Šåˆ°å³ä¸‹ã€‚ */
+    {SQUARE_BR_HORIZONTAL_PERMILLE, SQUARE_BR_PITCH_PERMILLE},
+    /* æ®µ 3ï¼šå³ä¸‹åˆ°å·¦ä¸‹ã€‚ */
+    {SQUARE_BL_HORIZONTAL_PERMILLE, SQUARE_BL_PITCH_PERMILLE},
+    /* æ®µ 4ï¼šå·¦ä¸‹åˆ°å·¦ä¸Šï¼Œé—­åˆæ­£æ–¹å½¢ã€‚ */
+    {SQUARE_TL_HORIZONTAL_PERMILLE, SQUARE_TL_PITCH_PERMILLE},
+    /* æ®µ 5ï¼šå·¦ä¸Šå›žä¸­ä½ï¼Œæ¿€å…‰å…³é—­ã€‚ */
+    {0, 0}
 };
 
-#define SQUARE_SEGMENT_COUNT    \
+#define SQUARE_SEGMENT_COUNT \
     ((uint8_t)(sizeof(s_square_end_points) / \
                sizeof(s_square_end_points[0])))
 
 static GimbalApp_State_t s_state = GIMBAL_APP_IDLE;
 static uint8_t s_square_segment;
 static uint16_t s_square_step;
-static GimbalPoint_t s_segment_start;
+static Drv_Servo_Position_t s_segment_start;
 
 static uint16_t GimbalApp_GetSegmentSteps(uint8_t segment)
 {
     if ((segment == 0U) || (segment == 5U)) {
         return SQUARE_POSITION_STEPS;
     }
-
     return SQUARE_EDGE_STEPS;
 }
 
-static void GimbalApp_StartCurrentSegment(void)
+static uint8_t GimbalApp_StartCurrentSegment(void)
 {
-    s_segment_start.horizontal_us =
-        Drv_Servo_GetHorizontalPulse();
+    Drv_Servo_Info_t info;
 
-    s_segment_start.pitch_us =
-        Drv_Servo_GetPitchPulse();
+    if (Drv_Servo_GetInfo(&info) != BSP_OK) {
+        return 0U;
+    }
 
+    s_segment_start = info.current;
     s_square_step = 0U;
+    return 1U;
+}
+
+static void GimbalApp_EnterSafeStop(void)
+{
+    Drv_Laser_Off();
+    Drv_Servo_Center();
+    s_state = GIMBAL_APP_STOP;
 }
 
 static void GimbalApp_UpdateSquare(void)
 {
-    const GimbalPoint_t *end;
+    const Drv_Servo_Position_t *end;
+    Drv_Servo_Position_t output;
+    Drv_Laser_Info_t laser_info;
     uint16_t total_steps;
     int32_t horizontal_delta;
     int32_t pitch_delta;
-    int32_t horizontal_output;
-    int32_t pitch_output;
+
+    if ((Drv_Laser_GetInfo(&laser_info) != BSP_OK) ||
+        (laser_info.timeout_tripped != 0U)) {
+        GimbalApp_EnterSafeStop();
+        return;
+    }
 
     if (s_square_segment >= SQUARE_SEGMENT_COUNT) {
         Drv_Laser_Off();
-        Drv_Servo_SetHorizontalPulse(
-            SERVO_HORIZONTAL_CENTER_US
-        );
-        Drv_Servo_SetPitchPulse(
-            SERVO_PITCH_CENTER_US
-        );
-
+        Drv_Servo_Center();
         s_state = GIMBAL_APP_IDLE;
         return;
     }
 
     end = &s_square_end_points[s_square_segment];
-    total_steps = GimbalApp_GetSegmentSteps(
-        s_square_segment
-    );
-
+    total_steps = GimbalApp_GetSegmentSteps(s_square_segment);
     if (s_square_step < total_steps) {
         s_square_step++;
     }
 
     horizontal_delta =
-        (int32_t)end->horizontal_us -
-        (int32_t)s_segment_start.horizontal_us;
-
+        (int32_t)end->horizontal_permille -
+        (int32_t)s_segment_start.horizontal_permille;
     pitch_delta =
-        (int32_t)end->pitch_us -
-        (int32_t)s_segment_start.pitch_us;
+        (int32_t)end->pitch_permille -
+        (int32_t)s_segment_start.pitch_permille;
 
-    horizontal_output =
-        (int32_t)s_segment_start.horizontal_us +
+    output.horizontal_permille = (int16_t)(
+        (int32_t)s_segment_start.horizontal_permille +
         (horizontal_delta * (int32_t)s_square_step) /
-        (int32_t)total_steps;
-
-    pitch_output =
-        (int32_t)s_segment_start.pitch_us +
+        (int32_t)total_steps
+    );
+    output.pitch_permille = (int16_t)(
+        (int32_t)s_segment_start.pitch_permille +
         (pitch_delta * (int32_t)s_square_step) /
-        (int32_t)total_steps;
-
-    /*
-     * ¹ì¼£²åÖµÖ±½ÓÊä³öÂö¿í¡£
-     * Ã¿20msÖ»Êä³öÒ»¸öÐÂµÄ²åÖµµã£¬²»Ê¹ÓÃ×èÈûDelay¡£
-     */
-    Drv_Servo_SetHorizontalPulse(
-        (uint16_t)horizontal_output
+        (int32_t)total_steps
     );
 
-    Drv_Servo_SetPitchPulse(
-        (uint16_t)pitch_output
-    );
+    if (Drv_Servo_SetImmediatePosition(&output) != BSP_OK) {
+        GimbalApp_EnterSafeStop();
+        return;
+    }
 
-    if (s_square_step >= total_steps) {
-        /*
-         * ¶Î0Íê³É£ºÒÑµ½×óÉÏ½Ç£¬¿ªÊ¼µãÁÁ¼¤¹â¡£
-         */
-        if (s_square_segment == 0U) {
-            Drv_Laser_On();
-        }
+    if (s_square_step < total_steps) {
+        return;
+    }
 
-        /*
-         * ¶Î4Íê³É£ºÕý·½ÐÎÒÑ¾­±ÕºÏ£¬¹Ø±Õ¼¤¹â¡£
-         */
-        if (s_square_segment == 4U) {
-            Drv_Laser_Off();
-        }
+    if (s_square_segment == 0U) {
+        Drv_Laser_On();
+    } else if (s_square_segment == 4U) {
+        Drv_Laser_Off();
+    }
 
-        s_square_segment++;
+    s_square_segment++;
+    if (s_square_segment >= SQUARE_SEGMENT_COUNT) {
+        Drv_Laser_Off();
+        s_state = GIMBAL_APP_IDLE;
+        return;
+    }
 
-        if (s_square_segment < SQUARE_SEGMENT_COUNT) {
-            GimbalApp_StartCurrentSegment();
-        } else {
-            Drv_Laser_Off();
-            s_state = GIMBAL_APP_IDLE;
-        }
+    if (GimbalApp_StartCurrentSegment() == 0U) {
+        GimbalApp_EnterSafeStop();
     }
 }
 
@@ -181,38 +154,49 @@ void GimbalApp_Init(void)
     s_state = GIMBAL_APP_IDLE;
     s_square_segment = 0U;
     s_square_step = 0U;
-
     Drv_Laser_Off();
-
-    /*
-     * ÉèÖÃ·Ç×èÈû»ØÖÐÄ¿±ê¡£
-     */
     Drv_Servo_Center();
 }
 
 void GimbalApp_StartSquareTest(void)
 {
     Drv_Laser_Off();
-
-    s_state = GIMBAL_APP_SQUARE_TEST;
+    Drv_Laser_ClearTimeoutFlag();
     s_square_segment = 0U;
     s_square_step = 0U;
 
-    GimbalApp_StartCurrentSegment();
-}
-
-void GimbalApp_StartTrack(void)
-{
-    Drv_Laser_Off();
-    s_state = GIMBAL_APP_TRACK;
+    if (GimbalApp_StartCurrentSegment() == 0U) {
+        GimbalApp_EnterSafeStop();
+        return;
+    }
+    s_state = GIMBAL_APP_SQUARE_TEST;
 }
 
 void GimbalApp_Stop(void)
 {
-    Drv_Laser_Off();
-    Drv_Servo_Center();
+    GimbalApp_EnterSafeStop();
+}
 
-    s_state = GIMBAL_APP_STOP;
+void GimbalApp_Update(void)
+{
+    switch (s_state) {
+        case GIMBAL_APP_IDLE:
+        case GIMBAL_APP_STOP:
+            break;
+
+        case GIMBAL_APP_SQUARE_TEST:
+            GimbalApp_UpdateSquare();
+            break;
+
+        default:
+            GimbalApp_EnterSafeStop();
+            break;
+    }
+}
+
+void Gimbal_Update(void)
+{
+    GimbalApp_Update();
 }
 
 GimbalApp_State_t GimbalApp_GetState(void)
@@ -223,32 +207,4 @@ GimbalApp_State_t GimbalApp_GetState(void)
 uint8_t GimbalApp_GetSquareSegment(void)
 {
     return s_square_segment;
-}
-
-void GimbalApp_Update(void)
-{
-    switch (s_state) {
-        case GIMBAL_APP_IDLE:
-            break;
-
-        case GIMBAL_APP_SQUARE_TEST:
-            GimbalApp_UpdateSquare();
-            break;
-
-        case GIMBAL_APP_TRACK:
-            /*
-             * ÏÂÒ»½×¶Î¼ÓÈëK210ÊÓ¾õ±Õ»·¡£
-             */
-            break;
-
-        case GIMBAL_APP_STOP:
-        default:
-            break;
-    }
-
-    /*
-     * ´¦ÀíDrv_Servo_Center()µÈ·Ç×èÈûÄ¿±ê¡£
-     * Õý·½ÐÎ×´Ì¬Ê¹ÓÃÁ¢¼´Âö¿íÊä³ö£¬ÕâÀï²»»áÖØ¸´ÒÆ¶¯¡£
-     */
-    Drv_Servo_Update();
 }

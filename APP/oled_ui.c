@@ -196,18 +196,21 @@ static void OledUi_ShowRouteTest(void)
                        OledUi_LineTrackModeName(route.line_track_mode),
                        (unsigned long)route.line_lost_ms);
         Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
-        (void)snprintf(text, sizeof(text), "SCAN:%u D:%d",
-                       (unsigned int)route.line_search_phase,
-                       (int)route.line_search_direction);
+        (void)snprintf(text, sizeof(text), "DE:%d SAT:%u",
+                       (int)route.line_derivative_error,
+                       (unsigned int)route.line_turn_saturated);
         Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
+        (void)snprintf(text, sizeof(text), "AD:%d U:%ld",
+                       (int)route.line_adaptive_linear_cps,
+                       (long)route.line_turn_unclamped_cps);
+        Drv_OledI2c_DrawString5x7(4U, 32U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "OUT:%d/%d",
                        (int)line.output.linear_cps,
                        (int)line.output.turn_cps);
-        Drv_OledI2c_DrawString5x7(4U, 32U, text, DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 42U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "YAW:%d",
                        (int)motion.current_yaw_deg);
-        Drv_OledI2c_DrawString5x7(4U, 42U, text, DRV_OLED_COLOR_ON);
-        Drv_OledI2c_DrawString5x7(4U, 52U, "A/B AUTO SWITCH", DRV_OLED_COLOR_ON);
+        Drv_OledI2c_DrawString5x7(4U, 52U, text, DRV_OLED_COLOR_ON);
         s_oled_route_test_page = 0U;
     }
 

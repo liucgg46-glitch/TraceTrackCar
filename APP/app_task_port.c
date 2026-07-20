@@ -51,6 +51,11 @@ BSP_WEAK void LineTrack_Update(void)
     /* Part4 由 line_follow_app.c 覆盖：灰度识别 + 循迹输出到底盘。 */
 }
 
+BSP_WEAK void Gimbal_Update(void)
+{
+    /* 由 gimbal_app.c 覆盖：只推进云台业务状态机。 */
+}
+
 BSP_WEAK void TaskFSM_Update(void)
 {
     /* Part7 由 task_fsm.c 覆盖：比赛任务状态切换。 */

@@ -10,6 +10,7 @@
 #include "lcd_ui.h"
 #include "oled_ui.h"
 #include "k210_comm.h"
+#include "gimbal_app.h"
 
 void App_Init(void)
 {
@@ -22,6 +23,7 @@ void App_Init(void)
     LineFollow_Init();
     LcdUi_Init();
     OledUi_Init();
+    GimbalApp_Init();
 
      /* 这里只请求显示启动页，不重新初始化 LCD/OLED 驱动 */
     /*
