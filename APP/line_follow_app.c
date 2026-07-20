@@ -6,7 +6,6 @@
 #include "chassis.h"
 #include "motion_action.h"
 #include "route_manager.h"
-#include "sensor_manager.h"
 
 static LineFollow_Info_t s_lf;
 
@@ -65,10 +64,6 @@ void LineFollow_Start(void)
         LineFollow_Stop();
     }
 
-    if (Sensor_IsImuReadyForMotion() == 0U) {
-        return;
-    }
-
     /* 每次启动都清除上一次路线动作和路线状态。 */
     Motion_Stop();
     RouteManager_Reset();
@@ -99,12 +94,6 @@ void LineFollow_Update(void)
     Route_ActionFeedback_t feedback;
     Route_ActionRequest_t request;
 
-    if ((s_lf.state == LINE_FOLLOW_RUN) &&
-        (Sensor_IsImuReadyForMotion() == 0U)) {
-        LineFollow_Stop();
-        return;
-    }
-
     if (Drv_GraySensor_IsOnline() == 0U) {
         if (s_lf.state == LINE_FOLLOW_RUN) {
             LineFollow_Stop();
@@ -117,8 +106,7 @@ void LineFollow_Update(void)
     res = LineDetect_GetResultPtr();
     s_lf.detect = *res;
 
-    /* Keep detection available for UI while stopped, but do not advance the
-     * route state machine until the vehicle is actually running. */
+    /* 停车时继续刷新识别结果供界面查看，但不推进赛道状态机。 */
     if (s_lf.state != LINE_FOLLOW_RUN) {
         s_lf.output.linear_cps = 0;
         s_lf.output.turn_cps = 0;
@@ -129,7 +117,7 @@ void LineFollow_Update(void)
     /*
      * 只通过 RouteManager 输出。
      * 当前 ROUTE_PROFILE_BASIC 内部会调用 LineTrack_Compute。
-     * 以后切换到 HJduino 状态机，也从这里统一接管。
+     * 后续赛道方案也从这里统一接管，不直接操作底盘或 Motion。
      */
     feedback.state = LineFollow_GetRouteActionState();
     control = RouteManager_Update(res,

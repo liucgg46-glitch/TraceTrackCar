@@ -1,18 +1,13 @@
 #ifndef __ROUTE_CONFIG_H
 #define __ROUTE_CONFIG_H
 
-/* Compile-time route profile selection. */
-#define ROUTE_PROFILE_BASIC                         0U
-#define ROUTE_PROFILE_HJDUINO                       1U
-/* 当前版本固定使用基础循迹，不启用右侧环岛定角转弯。 */
-#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
-
 /*
- * HJduino track-specific event parameters. Vehicle control gains and speeds
- * are all in Algorithm/control_config.h.
+ * 赛道方案编号和编译期选择入口。
+ * 新增赛道时先分配唯一编号，再在 route_profile_select.c 中接入实现。
  */
-#define HJDUINO_ROUTE_START_GUARD_MS                3000U
-#define HJDUINO_ROUTE_ENTRY_CONFIRM_SAMPLES         3U
-#define HJDUINO_ROUTE_ENTRY_TURN_ANGLE_DEG          (-90)
+#define ROUTE_PROFILE_BASIC                         0U
+
+/* 当前使用的赛道方案。 */
+#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
 
 #endif /* __ROUTE_CONFIG_H */

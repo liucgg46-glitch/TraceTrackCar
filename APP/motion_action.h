@@ -19,6 +19,7 @@ extern "C" {
  *   - Motion_Update() 必须 10ms 周期调用；
  *   - 任务状态机只查询 Motion_IsDone()，不要直接盯编码器细节；
  *   - 定角转弯使用 heading_estimator 的相对航向；默认来源是融合 IMU yaw；
+ *   - Motion_TurnAngle() 内部检查 IMU，未就绪时返回 BSP_ERROR；
  *   - 所有定角转弯共用 control_config.h 中的统一速度和回正参数。
  */
 

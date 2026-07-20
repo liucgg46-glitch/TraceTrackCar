@@ -34,9 +34,6 @@ void App_Init(void)
      */
     K210_Comm_Init();
 
-    /*
-     * Do not auto-start motors here. LineFollow_Start() is called only by a
-     * later task/state transition after Sensor_IsImuReadyForMotion() is true.
-     */
+    /* 初始化阶段不自动启动电机，运行任务根据用户命令进入循迹或动作。 */
 }
 

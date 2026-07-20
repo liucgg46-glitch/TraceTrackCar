@@ -3,6 +3,7 @@
 #include "odometer.h"
 #include "heading_estimator.h"
 #include "chassis.h"
+#include "sensor_manager.h"
 #include "bsp_common.h"
 
 static Motion_Info_t s_motion;
@@ -99,6 +100,7 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg)
 {
     if (s_motion.state == MOTION_RUNNING) return BSP_BUSY;
     if (angle_deg == 0) return BSP_PARAM;
+    if (Sensor_IsImuReadyForMotion() == 0U) return BSP_ERROR;
     if (Chassis_AcquireControl(CHASSIS_OWNER_MOTION) != BSP_OK) {
         return BSP_BUSY;
     }

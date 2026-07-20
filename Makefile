@@ -140,8 +140,8 @@ SRCS := \
   VL53L1_platform/vl53l1_platform.c \
   VL53L1_platform/vl53l1_platform_init.c \
   Route/route_manager.c \
-  Route/route_profile_basic.c \
-  Route/route_profile_hjduino.c
+  Route/route_profile_select.c \
+  Route/route_profile_basic.c
 
 OBJS := $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
 OBJS += $(BUILD_DIR)/$(STARTUP:.s=.o)

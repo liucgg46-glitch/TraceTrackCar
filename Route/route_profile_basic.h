@@ -13,6 +13,7 @@ Route_ControlMode_t BasicRoute_Update(const LineDetect_Result_t *line,
                                       const Route_ActionFeedback_t *feedback,
                                       LineTrack_Output_t *out,
                                       Route_ActionRequest_t *request);
+BSP_Status_t BasicRoute_GetInfo(RouteProfile_Info_t *info);
 
 #ifdef __cplusplus
 }

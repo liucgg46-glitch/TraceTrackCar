@@ -1174,6 +1174,16 @@
               <FilePath>.\Route\route_config.h</FilePath>
             </File>
             <File>
+              <FileName>route_profile_select.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Route\route_profile_select.h</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_select.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Route\route_profile_select.c</FilePath>
+            </File>
+            <File>
               <FileName>route_manager.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Route\route_manager.c</FilePath>
@@ -1192,16 +1202,6 @@
               <FileName>route_profile_basic.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Route\route_profile_basic.h</FilePath>
-            </File>
-            <File>
-              <FileName>route_profile_hjduino.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Route\route_profile_hjduino.c</FilePath>
-            </File>
-            <File>
-              <FileName>route_profile_hjduino.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Route\route_profile_hjduino.h</FilePath>
             </File>
           </Files>
         </Group>

@@ -42,6 +42,14 @@ typedef struct {
     int16_t speed_cps;
 } Route_ActionRequest_t;
 
+/* 各赛道方案向 RouteManager 提供的统一状态快照。 */
+typedef struct {
+    uint8_t state;
+    uint16_t event_confirm_samples;
+    uint32_t running_ms;
+    uint32_t transition_count;
+} RouteProfile_Info_t;
+
 #ifdef __cplusplus
 }
 #endif

@@ -1026,36 +1026,36 @@ void Test_MotionCmd_Update(void)
 
 #if BSP_KEY1_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY1)) {
-        if (Sensor_IsImuReadyForMotion() == 0U) {
-            static const char response[] =
-                "MOTION KEY1 LEFT90 REJECTED: IMU NOT READY\r\n";
-            Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        static const char started[] = "MOTION KEY1: LEFT 90 STARTED\r\n";
+        static const char not_ready[] =
+            "MOTION KEY1 LEFT90 REJECTED: IMU NOT READY\r\n";
+        static const char busy[] = "MOTION KEY1 LEFT90 REJECTED: BUSY\r\n";
+
+        status = Motion_TurnAngle(90);
+        if (status == BSP_OK) {
+            Test_Key_Send(started, (uint16_t)(sizeof(started) - 1U));
+        } else if (status == BSP_ERROR) {
+            Test_Key_Send(not_ready, (uint16_t)(sizeof(not_ready) - 1U));
         } else {
-            static const char started[] = "MOTION KEY1: LEFT 90 STARTED\r\n";
-            static const char busy[] = "MOTION KEY1 LEFT90 REJECTED: BUSY\r\n";
-            status = Motion_TurnAngle(90);
-            Test_Key_Send((status == BSP_OK) ? started : busy,
-                          (status == BSP_OK) ?
-                              (uint16_t)(sizeof(started) - 1U) :
-                              (uint16_t)(sizeof(busy) - 1U));
+            Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
         }
     }
 #endif
 
 #if BSP_KEY2_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY2)) {
-        if (Sensor_IsImuReadyForMotion() == 0U) {
-            static const char response[] =
-                "MOTION KEY2 RIGHT90 REJECTED: IMU NOT READY\r\n";
-            Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        static const char started[] = "MOTION KEY2: RIGHT 90 STARTED\r\n";
+        static const char not_ready[] =
+            "MOTION KEY2 RIGHT90 REJECTED: IMU NOT READY\r\n";
+        static const char busy[] = "MOTION KEY2 RIGHT90 REJECTED: BUSY\r\n";
+
+        status = Motion_TurnAngle(-90);
+        if (status == BSP_OK) {
+            Test_Key_Send(started, (uint16_t)(sizeof(started) - 1U));
+        } else if (status == BSP_ERROR) {
+            Test_Key_Send(not_ready, (uint16_t)(sizeof(not_ready) - 1U));
         } else {
-            static const char started[] = "MOTION KEY2: RIGHT 90 STARTED\r\n";
-            static const char busy[] = "MOTION KEY2 RIGHT90 REJECTED: BUSY\r\n";
-            status = Motion_TurnAngle(-90);
-            Test_Key_Send((status == BSP_OK) ? started : busy,
-                          (status == BSP_OK) ?
-                              (uint16_t)(sizeof(started) - 1U) :
-                              (uint16_t)(sizeof(busy) - 1U));
+            Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
         }
     }
 #endif
@@ -1372,7 +1372,7 @@ void Test_RouteCmd_Update(void)
             static const char message[] = "ROUTE START: KEY1\r\n";
             Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
         } else {
-            static const char message[] = "ROUTE START REJECTED: IMU NOT READY\r\n";
+            static const char message[] = "ROUTE START REJECTED: CONTROL BUSY\r\n";
             Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
         }
     }

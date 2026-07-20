@@ -1,37 +1,14 @@
 #include "route_manager.h"
 #include "route_config.h"
-#include "route_profile_basic.h"
-#include "route_profile_hjduino.h"
+#include "route_profile_select.h"
 
 static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
 static Route_ActionState_t s_action_state = ROUTE_ACTION_STATE_IDLE;
 
-static void RouteManager_ProfileInit(void)
-{
-#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    BasicRoute_Init();
-#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    HJduinoRoute_Init();
-#else
-#error "Invalid ROUTE_PROFILE_SELECT"
-#endif
-}
-
-static void RouteManager_ProfileReset(void)
-{
-#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    BasicRoute_Reset();
-#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    HJduinoRoute_Reset();
-#else
-#error "Invalid ROUTE_PROFILE_SELECT"
-#endif
-}
-
 void RouteManager_Init(void)
 {
     LineTrack_Init();
-    RouteManager_ProfileInit();
+    RouteProfile_Init();
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
@@ -39,7 +16,7 @@ void RouteManager_Init(void)
 void RouteManager_Reset(void)
 {
     LineTrack_Reset();
-    RouteManager_ProfileReset();
+    RouteProfile_Reset();
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
@@ -69,13 +46,7 @@ Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
 
     s_action_state = feedback->state;
 
-#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    s_control_mode = BasicRoute_Update(line, feedback, out, request);
-#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    s_control_mode = HJduinoRoute_Update(line, feedback, out, request);
-#else
-#error "Invalid ROUTE_PROFILE_SELECT"
-#endif
+    s_control_mode = RouteProfile_Update(line, feedback, out, request);
 
     return s_control_mode;
 }
@@ -83,34 +54,25 @@ Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
 BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
 {
     LineTrack_Info_t line_info;
+    RouteProfile_Info_t profile_info;
 
     if (info == 0) return BSP_PARAM;
     if (LineTrack_GetInfo(&line_info) != BSP_OK) return BSP_ERROR;
+    if (RouteProfile_GetInfo(&profile_info) != BSP_OK) return BSP_ERROR;
 
     info->profile = (uint8_t)ROUTE_PROFILE_SELECT;
-    info->profile_state = 0U;
+    info->profile_state = profile_info.state;
     info->control_mode = s_control_mode;
     info->action_state = s_action_state;
-    info->event_confirm_samples = 0U;
-    info->running_ms = 0U;
-    info->transition_count = 0U;
+    info->event_confirm_samples = profile_info.event_confirm_samples;
+    info->running_ms = profile_info.running_ms;
+    info->transition_count = profile_info.transition_count;
     info->line_track_mode = line_info.mode;
     info->line_filtered_error = line_info.filtered_error;
     info->line_lost_samples = line_info.lost_samples;
     info->line_search_phase = line_info.search_phase;
     info->line_search_direction = line_info.search_direction;
     info->line_lost_ms = line_info.lost_ms;
-
-#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    {
-        HJduinoRoute_Info_t route_info;
-        if (HJduinoRoute_GetInfo(&route_info) != BSP_OK) return BSP_ERROR;
-        info->profile_state = (uint8_t)route_info.state;
-        info->event_confirm_samples = route_info.entry_confirm_samples;
-        info->running_ms = route_info.running_ms;
-        info->transition_count = route_info.transition_count;
-    }
-#endif
 
     return BSP_OK;
 }
