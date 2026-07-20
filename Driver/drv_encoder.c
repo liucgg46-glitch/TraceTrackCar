@@ -19,6 +19,18 @@ static const Drv_Encoder_Cfg_t s_drv_enc_cfg[WHEEL_COUNT] = {
 #endif
 };
 
+static int32_t s_speed_filtered_cps[WHEEL_COUNT];
+static uint8_t s_speed_filter_valid[WHEEL_COUNT];
+
+static int32_t Encoder_GetRawSpeedCps(Wheel_Id_t wheel)
+{
+    if ((wheel >= WHEEL_COUNT) ||
+        (s_drv_enc_cfg[wheel].enabled == 0U)) {
+        return 0;
+    }
+    return BSP_Encoder_GetSpeedCps(s_drv_enc_cfg[wheel].bsp_id);
+}
+
 static int32_t Encoder_CpsToMmS(int32_t cps)
 {
     float circumference = DRV_ENCODER_PI * DRV_ENCODER_WHEEL_DIAMETER_MM;
@@ -45,12 +57,50 @@ static int32_t Avg2(int32_t a, uint8_t use_a, int32_t b, uint8_t use_b)
 
 void Drv_Encoder_Init(void)
 {
-    BSP_Encoder_InitAll();
+    Wheel_Id_t wheel;
+
+    /* BSP_InitAll()已经初始化硬件计数器，本层只初始化映射后的滤波状态。 */
+    for (wheel = WHEEL_FL; wheel < WHEEL_COUNT;
+         wheel = (Wheel_Id_t)(wheel + 1)) {
+        s_speed_filtered_cps[wheel] = 0;
+        s_speed_filter_valid[wheel] = 0U;
+    }
 }
 
 void Drv_Encoder_Update(void)
 {
+    Wheel_Id_t wheel;
+    int32_t raw_speed;
+#if (DRV_ENCODER_SPEED_FILTER_ENABLE != 0U)
+    int32_t delta_speed;
+#endif
+
     BSP_Encoder_UpdateAll();
+
+    for (wheel = WHEEL_FL; wheel < WHEEL_COUNT;
+         wheel = (Wheel_Id_t)(wheel + 1)) {
+        if (s_drv_enc_cfg[wheel].enabled == 0U) {
+            s_speed_filtered_cps[wheel] = 0;
+            s_speed_filter_valid[wheel] = 0U;
+            continue;
+        }
+
+        raw_speed = Encoder_GetRawSpeedCps(wheel);
+#if (DRV_ENCODER_SPEED_FILTER_ENABLE != 0U)
+        if (s_speed_filter_valid[wheel] == 0U) {
+            s_speed_filtered_cps[wheel] = raw_speed;
+            s_speed_filter_valid[wheel] = 1U;
+        } else {
+            delta_speed = raw_speed - s_speed_filtered_cps[wheel];
+            s_speed_filtered_cps[wheel] +=
+                (delta_speed * DRV_ENCODER_SPEED_FILTER_ALPHA_NUM) /
+                DRV_ENCODER_SPEED_FILTER_ALPHA_DEN;
+        }
+#else
+        s_speed_filtered_cps[wheel] = raw_speed;
+        s_speed_filter_valid[wheel] = 1U;
+#endif
+    }
 }
 
 int16_t Drv_Encoder_GetWheelDelta(Wheel_Id_t wheel)
@@ -59,10 +109,21 @@ int16_t Drv_Encoder_GetWheelDelta(Wheel_Id_t wheel)
     return BSP_Encoder_GetDelta(s_drv_enc_cfg[wheel].bsp_id);
 }
 
+int32_t Drv_Encoder_GetWheelRawSpeedCps(Wheel_Id_t wheel)
+{
+    return Encoder_GetRawSpeedCps(wheel);
+}
+
 int32_t Drv_Encoder_GetWheelSpeedCps(Wheel_Id_t wheel)
 {
-    if ((wheel >= WHEEL_COUNT) || (s_drv_enc_cfg[wheel].enabled == 0U)) return 0;
-    return BSP_Encoder_GetSpeedCps(s_drv_enc_cfg[wheel].bsp_id);
+    if ((wheel >= WHEEL_COUNT) ||
+        (s_drv_enc_cfg[wheel].enabled == 0U)) {
+        return 0;
+    }
+    if (s_speed_filter_valid[wheel] == 0U) {
+        return Encoder_GetRawSpeedCps(wheel);
+    }
+    return s_speed_filtered_cps[wheel];
 }
 
 int32_t Drv_Encoder_GetWheelTotalCount(Wheel_Id_t wheel)
@@ -134,6 +195,7 @@ BSP_Status_t Drv_Encoder_GetWheelInfo(Wheel_Id_t wheel, Drv_Encoder_WheelInfo_t 
     if (s_drv_enc_cfg[wheel].enabled == 0U) return BSP_ERROR;
 
     info->delta_count = Drv_Encoder_GetWheelDelta(wheel);
+    info->raw_speed_cps = Drv_Encoder_GetWheelRawSpeedCps(wheel);
     info->speed_cps   = Drv_Encoder_GetWheelSpeedCps(wheel);
     info->total_count = Drv_Encoder_GetWheelTotalCount(wheel);
     info->speed_mm_s  = Drv_Encoder_GetWheelSpeedMmS(wheel);

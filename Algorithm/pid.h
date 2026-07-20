@@ -40,6 +40,7 @@ typedef struct {
     float last_error;
     float integral;
     float derivative;
+    float feedforward;
     float output;
 
     uint8_t first_update;
@@ -50,6 +51,10 @@ void  PID_Reset(PID_t *pid);
 void  PID_SetConfig(PID_t *pid, const PID_Config_t *cfg);
 void  PID_SetTarget(PID_t *pid, float target);
 float PID_Update(PID_t *pid, float feedback);
+/* 前馈与PID共用最终输出限幅，并在饱和方向上暂停积分，减少积分饱和。 */
+float PID_UpdateWithFeedforward(PID_t *pid,
+                                float feedback,
+                                float feedforward);
 float PID_GetOutput(const PID_t *pid);
 float PID_GetError(const PID_t *pid);
 

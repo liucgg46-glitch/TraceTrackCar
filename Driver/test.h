@@ -24,7 +24,7 @@ void Test_SPI2_LCD(void);//主函数调用一次即可
 void Test_MotorCmd_Update(void);// 测试电机方向（开环测试）   { Test_MotorCmd_Update,  10U,  0U },
 void Test_MotorCmd_Log(void);//    { Test_MotorCmd_Log,     200U, 0U },
 
-void Test_ChassisCmd_Update(void);//五按键底盘开环测试；必须先注册 { Key_Update,10U,0U }
+void Test_ChassisCmd_Update(void);//五按键底盘速度控制测试；必须先注册Key_Update和Encoder_Update
 void Test_ChassisCmd_Log(void);//打印日志   { Test_ChassisCmd_Log,   200U, 0U },
 
 void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,   200U, 0U },

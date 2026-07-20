@@ -45,6 +45,29 @@ typedef enum {
 #define DRV_ENCODER_WHEEL_DIAMETER_MM     65.0f
 #define DRV_ENCODER_COUNTS_PER_REV        1450.0f
 
+/*
+ * 速度低通：filtered += (raw - filtered) * NUM / DEN。
+ * 当前10 ms测速周期下1/4为较轻滤波，兼顾PI稳定性和响应速度。
+ */
+#ifndef DRV_ENCODER_SPEED_FILTER_ENABLE
+#define DRV_ENCODER_SPEED_FILTER_ENABLE       1U
+#endif
+#define DRV_ENCODER_SPEED_FILTER_ALPHA_NUM    1L
+#define DRV_ENCODER_SPEED_FILTER_ALPHA_DEN    4L
+
+#if ((DRV_ENCODER_SPEED_FILTER_ENABLE != 0U) && \
+     (DRV_ENCODER_SPEED_FILTER_ENABLE != 1U))
+#error "DRV_ENCODER_SPEED_FILTER_ENABLE must be 0 or 1"
+#endif
+
+#if (DRV_ENCODER_SPEED_FILTER_ALPHA_DEN <= 0L)
+#error "DRV_ENCODER_SPEED_FILTER_ALPHA_DEN must be positive"
+#endif
+#if ((DRV_ENCODER_SPEED_FILTER_ALPHA_NUM <= 0L) || \
+     (DRV_ENCODER_SPEED_FILTER_ALPHA_NUM > DRV_ENCODER_SPEED_FILTER_ALPHA_DEN))
+#error "DRV_ENCODER_SPEED_FILTER_ALPHA_NUM must be in (0, DEN]"
+#endif
+
 /* 是否使用四路平均。若只想临时用后轮反馈，可改下面两个宏。 */
 #define DRV_ENCODER_LEFT_USE_FRONT        1
 #define DRV_ENCODER_LEFT_USE_REAR         VEHICLE_REAR_DRIVE_ENABLE
@@ -53,7 +76,8 @@ typedef enum {
 
 typedef struct {
     int16_t delta_count;
-    int32_t speed_cps;
+    int32_t raw_speed_cps;
+    int32_t speed_cps;       /* 供控制层使用的滤波速度 */
     int32_t total_count;
     int32_t speed_mm_s;
     int32_t total_mm;
@@ -63,6 +87,7 @@ void    Drv_Encoder_Init(void);
 void    Drv_Encoder_Update(void);
 
 int16_t Drv_Encoder_GetWheelDelta(Wheel_Id_t wheel);
+int32_t Drv_Encoder_GetWheelRawSpeedCps(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelSpeedCps(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelTotalCount(Wheel_Id_t wheel);
 int32_t Drv_Encoder_GetWheelSpeedMmS(Wheel_Id_t wheel);

@@ -8,9 +8,69 @@
  * 不同控制环，输入和输出单位不同，因此必须分别调节。
  */
 
-/* 底盘开环 PWM：上层目标按固定比例直接换算为占空比，不使用速度反馈修正。 */
+/* 底盘PWM前馈和车轮速度PI闭环。设为0可退回原固定比例开环输出。 */
+#ifndef CONTROL_CHASSIS_SPEED_LOOP_ENABLE
+#define CONTROL_CHASSIS_SPEED_LOOP_ENABLE          1U
+#endif
 #define CONTROL_CHASSIS_PWM_MAX_PERMILLE          800     /* 最大输出 ±800‰（80%占空比） */
-#define CONTROL_CHASSIS_TARGET_MAX_CPS            5000    /* 此目标值对应最大 PWM 输出 */
+#define CONTROL_CHASSIS_TARGET_MAX_CPS            5000    /* 上层左右轮目标的安全限幅 */
+#define CONTROL_CHASSIS_FEEDFORWARD_FULL_SPEED_CPS 5000   /* 前馈标定：该速度对应最大PWM */
+
+#if ((CONTROL_CHASSIS_SPEED_LOOP_ENABLE != 0U) && \
+     (CONTROL_CHASSIS_SPEED_LOOP_ENABLE != 1U))
+#error "CONTROL_CHASSIS_SPEED_LOOP_ENABLE must be 0U or 1U"
+#endif
+#if (CONTROL_CHASSIS_FEEDFORWARD_FULL_SPEED_CPS <= 0)
+#error "CONTROL_CHASSIS_FEEDFORWARD_FULL_SPEED_CPS must be positive"
+#endif
+
+/*
+ * 速度环每10 ms更新一次。输出 = 固定比例PWM前馈 + PI修正。
+ * KI按“每次调用”累计，修改Chassis_Update周期后必须重新调节。
+ */
+#define CONTROL_CHASSIS_SPEED_KP                   0.08f
+#define CONTROL_CHASSIS_SPEED_KI                   0.002f
+#define CONTROL_CHASSIS_SPEED_KD                   0.0f
+#define CONTROL_CHASSIS_SPEED_INTEGRAL_LIMIT       20000.0f
+
+/* 每10 ms最多改变的左右轮控制目标，限制命令阶跃带来的机械冲击。 */
+#define CONTROL_CHASSIS_TARGET_SLEW_STEP_CPS       200
+
+/*
+ * 编码器安全保护仅在速度闭环开启时生效。
+ * 高于监控目标和输出后，反馈过低或方向持续相反会锁存故障并停车。
+ */
+#ifndef CONTROL_CHASSIS_ENCODER_FAULT_ENABLE
+#define CONTROL_CHASSIS_ENCODER_FAULT_ENABLE       1U
+#endif
+#define CONTROL_CHASSIS_FAULT_MIN_TARGET_CPS       800
+#define CONTROL_CHASSIS_FAULT_MIN_OUTPUT_PERMILLE  160
+#define CONTROL_CHASSIS_FAULT_MAX_FEEDBACK_CPS     200
+#define CONTROL_CHASSIS_NO_FEEDBACK_TIMEOUT_MS     500U
+#define CONTROL_CHASSIS_DIRECTION_MIN_FEEDBACK_CPS 300
+#define CONTROL_CHASSIS_DIRECTION_TIMEOUT_MS       500U
+#define CONTROL_CHASSIS_FAULT_CLEAR_MAX_CPS        100
+
+#if (CONTROL_CHASSIS_TARGET_SLEW_STEP_CPS <= 0)
+#error "CONTROL_CHASSIS_TARGET_SLEW_STEP_CPS must be positive"
+#endif
+#if ((CONTROL_CHASSIS_ENCODER_FAULT_ENABLE != 0U) && \
+     (CONTROL_CHASSIS_ENCODER_FAULT_ENABLE != 1U))
+#error "CONTROL_CHASSIS_ENCODER_FAULT_ENABLE must be 0U or 1U"
+#endif
+#if ((CONTROL_CHASSIS_FAULT_MIN_TARGET_CPS <= 0) || \
+     (CONTROL_CHASSIS_FAULT_MIN_OUTPUT_PERMILLE <= 0) || \
+     (CONTROL_CHASSIS_FAULT_MAX_FEEDBACK_CPS < 0) || \
+     (CONTROL_CHASSIS_DIRECTION_MIN_FEEDBACK_CPS <= 0) || \
+     (CONTROL_CHASSIS_FAULT_CLEAR_MAX_CPS < 0) || \
+     (CONTROL_CHASSIS_NO_FEEDBACK_TIMEOUT_MS == 0U) || \
+     (CONTROL_CHASSIS_DIRECTION_TIMEOUT_MS == 0U))
+#error "chassis encoder fault thresholds must be valid"
+#endif
+#if ((CONTROL_CHASSIS_FAULT_MIN_TARGET_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_CHASSIS_FAULT_MIN_OUTPUT_PERMILLE > CONTROL_CHASSIS_PWM_MAX_PERMILLE))
+#error "chassis encoder fault monitor threshold exceeds chassis limit"
+#endif
 
 /*
  * 基础灰度循迹参数。
@@ -25,9 +85,9 @@
 #error "CONTROL_LINE_DIRECTION_REVERSE must be 0U or 1U"
 #endif
 
-#define CONTROL_LINE_BASE_SPEED_CPS               3000    /* 中线正常循迹速度 */
-#define CONTROL_LINE_CROSS_SPEED_CPS              2500    /* 十字/全黑区域低速直行 */
-#define CONTROL_LINE_MIN_TRACK_SPEED_CPS          2500    /* 大偏差时最低直行速度 */
+#define CONTROL_LINE_BASE_SPEED_CPS               2000    /* 中线正常循迹速度 */
+#define CONTROL_LINE_CROSS_SPEED_CPS              1500    /* 十字/全黑区域低速直行 */
+#define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
 #define CONTROL_LINE_TURN_MAX_CPS                 400    /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
 #define CONTROL_LINE_KP                           0.3f   /* 比例增大：转弯更积极；过大易摆动 */

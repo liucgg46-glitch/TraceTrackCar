@@ -1,5 +1,6 @@
 #include "driver_all.h"
 #include "drv_motor.h"
+#include "drv_encoder.h"
 #include "drv_gray_sensor.h"
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
@@ -19,6 +20,8 @@ void Driver_Init(void)
     Motor_Init();
 
     /* 四轮编码器映射层。BSP_InitAll() 已经初始化底层 TIM 编码器。 */
+    Drv_Encoder_Init();
+
     /* 灰度模块驱动层：根据 drv_gray_sensor.h 选择 4051 或 MCU-I2C。 */
     Drv_GraySensor_Init();
 

@@ -834,9 +834,9 @@ static BSP_Status_t Test_ChassisSetCommand(int16_t linear_cps,
 }
 
 /*
- * 五按键底盘开环 PWM 测试，必须先运行 Key_Update()。
+ * 五按键底盘速度控制测试，必须先运行Key_Update()和Encoder_Update()。
  * KEY1 以 1600 cps 前进并重置加速档位；KEY2 每次增加 200 cps，
- * 最大 4800 cps；KEY3/KEY4 原地转向；KEY5 立即停止。
+ * 最大 4800 cps；KEY3/KEY4 原地转向；KEY5 立即停止并尝试清除故障。
  */
 void Test_ChassisCmd_Update(void)
 {
@@ -849,7 +849,7 @@ void Test_ChassisCmd_Update(void)
 
     if (banner_sent == 0U) {
         static const char banner[] =
-            "CHASSIS KEY TEST: K1=FWD1600 K2=+200(MAX4800) K3=LEFT K4=RIGHT K5=STOP\r\n";
+            "CHASSIS KEY TEST: K1=FWD1600 K2=+200(MAX4800) K3=LEFT K4=RIGHT K5=STOP/CLEAR\r\n";
         banner_sent = 1U;
         LcdUi_ChassisTestBegin();
         Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
@@ -861,7 +861,7 @@ void Test_ChassisCmd_Update(void)
         status = Test_ChassisSetCommand(linear_speed_cps, 0);
         if (status != BSP_OK) {
             static const char busy[] =
-                "CHASSIS KEY1 REJECTED: CONTROL BUSY\r\n";
+                "CHASSIS KEY1 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
             forward_started = 0U;
             return;
@@ -892,7 +892,7 @@ void Test_ChassisCmd_Update(void)
             status = Test_ChassisSetCommand(linear_speed_cps, 0);
             if (status != BSP_OK) {
                 static const char busy[] =
-                    "CHASSIS KEY2 REJECTED: CONTROL BUSY\r\n";
+                    "CHASSIS KEY2 REJECTED: CONTROL BUSY OR FAULT\r\n";
                 Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
                 return;
             }
@@ -913,7 +913,7 @@ void Test_ChassisCmd_Update(void)
         status = Test_ChassisSetCommand(0, TEST_CHASSIS_TURN_CPS);
         if (status != BSP_OK) {
             static const char busy[] =
-                "CHASSIS KEY3 REJECTED: CONTROL BUSY\r\n";
+                "CHASSIS KEY3 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
             return;
         }
@@ -927,7 +927,7 @@ void Test_ChassisCmd_Update(void)
         status = Test_ChassisSetCommand(0, -TEST_CHASSIS_TURN_CPS);
         if (status != BSP_OK) {
             static const char busy[] =
-                "CHASSIS KEY4 REJECTED: CONTROL BUSY\r\n";
+                "CHASSIS KEY4 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
             return;
         }
@@ -937,10 +937,18 @@ void Test_ChassisCmd_Update(void)
 
 #if BSP_KEY5_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY5)) {
-        static const char response[] = "CHASSIS KEY5: STOP\r\n";
+        static const char cleared[] =
+            "CHASSIS KEY5: STOPPED / FAULT CLEARED\r\n";
+        static const char wait_stop[] =
+            "CHASSIS KEY5: STOPPED / WAIT WHEELS THEN CLEAR AGAIN\r\n";
         forward_started = 0U;
         Chassis_EmergencyStop();
-        Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
+        status = Chassis_ClearFault();
+        if (status == BSP_OK) {
+            Test_Key_Send(cleared, (uint16_t)(sizeof(cleared) - 1U));
+        } else {
+            Test_Key_Send(wait_stop, (uint16_t)(sizeof(wait_stop) - 1U));
+        }
     }
 #endif
 }
@@ -948,21 +956,42 @@ void Test_ChassisCmd_Update(void)
 void Test_ChassisCmd_Log(void)
 {
     Chassis_Info_t info;
-    char buf[192];
+    char buf[400];
     int n;
 
     if (Chassis_GetInfo(&info) != BSP_OK) return;
 
-    n = sprintf(buf,
-                "CHS owner=%d mode=%d tgt L=%d R=%d | fb FL=%ld FR=%ld RL=%ld RR=%ld | out %d %d %d %d\r\n",
+    n = snprintf(buf, sizeof(buf),
+                "CHS loop=%u fault=%d mask=%02X owner=%d mode=%d "
+                "cmd=%d/%d tgt=%d/%d "
+                "raw=%ld/%ld/%ld/%ld fb=%ld/%ld/%ld/%ld "
+                "ff=%d/%d/%d/%d "
+                "pi=%d/%d/%d/%d out=%d/%d/%d/%d\r\n",
+                (unsigned int)info.speed_loop_enabled,
+                (int)info.fault,
+                (unsigned int)info.fault_wheel_mask,
                 (int)info.owner,
                 (int)info.mode,
                 info.left_target_cps,
                 info.right_target_cps,
+                info.left_applied_target_cps,
+                info.right_applied_target_cps,
+                (long)Drv_Encoder_GetWheelRawSpeedCps(WHEEL_FL),
+                (long)Drv_Encoder_GetWheelRawSpeedCps(WHEEL_FR),
+                (long)Drv_Encoder_GetWheelRawSpeedCps(WHEEL_RL),
+                (long)Drv_Encoder_GetWheelRawSpeedCps(WHEEL_RR),
                 (long)info.fl_feedback_cps,
                 (long)info.fr_feedback_cps,
                 (long)info.rl_feedback_cps,
                 (long)info.rr_feedback_cps,
+                info.fl_feedforward,
+                info.fr_feedforward,
+                info.rl_feedforward,
+                info.rr_feedforward,
+                info.fl_pid_correction,
+                info.fr_pid_correction,
+                info.rl_pid_correction,
+                info.rr_pid_correction,
                 info.fl_output,
                 info.fr_output,
                 info.rl_output,
