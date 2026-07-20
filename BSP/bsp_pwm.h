@@ -16,9 +16,11 @@ extern "C" {
  * ============================================================================
  * 定位：只负责 TIM PWM 输出，不负责“哪个电机该转多快”。
  *
- * 移植方法：
- *   只改本文件配置区：TIM、通道、GPIO、AF、预分频、周期。
- *   bsp_pwm.c 不需要改。
+  * 移植方法：
+ *   1. 在本文件配置TIM、通道、GPIO、AF、预分频和周期；
+ *   2. 在BSP_PWM_Id_t中加入对应通道；
+ *   3. 在bsp_pwm.c的s_pwm_cfg[]中加入对应配置项；
+ *   4. Driver层使用设备别名，不直接使用CH编号。
  *
  * 建议：
  *   - 直流电机 PWM、舵机 PWM、蜂鸣器 PWM 都可以用这个模块；
@@ -87,7 +89,15 @@ extern "C" {
 #define BSP_PWM_CH4_INIT_COMPARE          0U
 #define BSP_PWM_CH4_ACTIVE_HIGH           BSP_PWM_DEFAULT_ACTIVE_HIGH
 
-/* Gimbal servos: enabled in both 2WD and 4WD modes, 50 Hz output. */
+/*
+ * 二维云台舵机：
+ *   CH5：PF8 / TIM13_CH1，水平舵机；
+ *   CH6：PF9 / TIM14_CH1，俯仰舵机。
+ *
+ * TIM13/TIM14位于APB1，定时器时钟为84MHz：
+ *   84MHz / 84 = 1MHz，每个计数为1us；
+ *   ARR=19999，PWM周期为20000us，即50Hz。
+ */
 #define BSP_PWM_CH5_ENABLE                1
 #define BSP_PWM_CH5_TIM                   TIM13
 #define BSP_PWM_CH5_TIM_CLOCK_FN          RCC_APB1PeriphClockCmd
@@ -137,7 +147,10 @@ typedef enum {
 #endif
     BSP_PWM_COUNT
 } BSP_PWM_Id_t;
-
+/*
+ * 舵机设备别名。
+ * Driver层只允许使用以下别名，不直接使用BSP_PWM_CH5/CH6。
+ */
 #define BSP_PWM_SERVO_HORIZONTAL          BSP_PWM_CH5
 #define BSP_PWM_SERVO_PITCH               BSP_PWM_CH6
 

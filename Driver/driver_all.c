@@ -5,6 +5,7 @@
 #include "drv_icm20948.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
+#include "drv_servo.h"
 
 void Driver_Init(void)
 {
@@ -25,6 +26,8 @@ void Driver_Init(void)
     Drv_OledI2c_Init();
 
     /* 后续 Driver 层模块统一从这里继续添加 Init。 */
+	 Drv_Laser_Init();
+   Drv_Servo_Init();
 }
 
 void Driver_Task(void)
