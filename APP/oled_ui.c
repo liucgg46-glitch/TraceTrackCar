@@ -196,9 +196,10 @@ static void OledUi_ShowRouteTest(void)
                        OledUi_LineTrackModeName(route.line_track_mode),
                        (unsigned long)route.line_lost_ms);
         Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
-        (void)snprintf(text, sizeof(text), "SCAN:%u D:%d",
+        (void)snprintf(text, sizeof(text), "SC:%u D:%d R:%u",
                        (unsigned int)route.line_search_phase,
-                       (int)route.line_search_direction);
+                       (int)route.line_search_direction,
+                       (unsigned int)route.line_reacquire_samples);
         Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "OUT:%d/%d",
                        (int)line.output.linear_cps,

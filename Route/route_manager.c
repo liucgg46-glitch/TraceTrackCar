@@ -70,6 +70,7 @@ BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->line_track_mode = line_info.mode;
     info->line_filtered_error = line_info.filtered_error;
     info->line_lost_samples = line_info.lost_samples;
+    info->line_reacquire_samples = line_info.reacquire_samples;
     info->line_search_phase = line_info.search_phase;
     info->line_search_direction = line_info.search_direction;
     info->line_lost_ms = line_info.lost_ms;

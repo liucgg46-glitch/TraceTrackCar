@@ -29,6 +29,17 @@ static void LineFollow_ReleaseOwnedControl(void)
     }
 }
 
+/*
+ * 异常退出时保留Route和LineTrack诊断状态，便于显示FAILSAFE等原因。
+ * 下一次成功启动前，LineFollow_Start()仍会统一复位全部路线状态。
+ */
+static void LineFollow_Abort(void)
+{
+    s_lf.state = LINE_FOLLOW_STOP;
+    LineFollow_ReleaseOwnedControl();
+    LineFollow_ClearOutput();
+}
+
 static Route_ActionState_t LineFollow_GetRouteActionState(void)
 {
     if (s_route_action_active == 0U) {
@@ -150,21 +161,21 @@ void LineFollow_Update(void)
     if (control == ROUTE_CONTROL_MOTION) {
         if (request.type != ROUTE_ACTION_NONE) {
             if (s_route_action_active != 0U) {
-                LineFollow_Stop();
+                LineFollow_Abort();
                 return;
             }
             if (Chassis_ReleaseControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
-                LineFollow_Stop();
+                LineFollow_Abort();
                 return;
             }
             if (LineFollow_StartRouteAction(&request) != BSP_OK) {
-                LineFollow_Stop();
+                LineFollow_Abort();
                 return;
             }
             s_route_action_active = 1U;
         } else if (s_route_action_active == 0U) {
             /* 首次切入动作控制时必须同时给出有效动作请求。 */
-            LineFollow_Stop();
+            LineFollow_Abort();
         }
         return;
     }
@@ -173,26 +184,26 @@ void LineFollow_Update(void)
         (s_lf.output.valid != 0U)) {
         if (s_route_action_active != 0U) {
             if (Motion_GetState() != MOTION_DONE) {
-                LineFollow_Stop();
+                LineFollow_Abort();
                 return;
             }
             Motion_Stop();
             s_route_action_active = 0U;
         }
         if (Chassis_AcquireControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
-            LineFollow_Stop();
+            LineFollow_Abort();
             return;
         }
         if (Chassis_SetSpeed(CHASSIS_OWNER_LINE_FOLLOW,
                              s_lf.output.linear_cps,
                              s_lf.output.turn_cps) != BSP_OK) {
-            LineFollow_Stop();
+            LineFollow_Abort();
         }
         return;
     }
 
     /* 路线输出无效或动作失败时进入安全停车。 */
-    LineFollow_Stop();
+    LineFollow_Abort();
 }
 
 LineFollow_State_t LineFollow_GetState(void)

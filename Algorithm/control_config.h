@@ -23,6 +23,11 @@
 #if (CONTROL_CHASSIS_FEEDFORWARD_FULL_SPEED_CPS <= 0)
 #error "CONTROL_CHASSIS_FEEDFORWARD_FULL_SPEED_CPS must be positive"
 #endif
+#if ((CONTROL_CHASSIS_PWM_MAX_PERMILLE <= 0) || \
+     (CONTROL_CHASSIS_PWM_MAX_PERMILLE > 1000) || \
+     (CONTROL_CHASSIS_TARGET_MAX_CPS <= 0))
+#error "chassis output limits are invalid"
+#endif
 
 /*
  * 速度环每10 ms更新一次。输出 = 固定比例PWM前馈 + PI修正。
@@ -75,8 +80,8 @@
 /*
  * 基础灰度循迹参数。
  *
- * 当前版本只使用：P/PD 循迹、按误差减速、固定方向丢线搜索。
- * 不再使用边缘模式、宽线模式、输出斜坡和多阶段反向扫描。
+ * 正常状态使用P/PD循迹和按误差减速；丢线后先消抖确认，再沿最后线路
+ * 方向开始分阶段扫描。扫描方向交替，持续时间和转向量逐步增加。
  */
 #define CONTROL_LINE_DIRECTION_REVERSE            1U      /* 传感器旋转180度后设1，统一反转循迹左右方向 */
 
@@ -88,16 +93,57 @@
 #define CONTROL_LINE_BASE_SPEED_CPS               2000    /* 中线正常循迹速度 */
 #define CONTROL_LINE_CROSS_SPEED_CPS              1500    /* 十字/全黑区域低速直行 */
 #define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
-#define CONTROL_LINE_TURN_MAX_CPS                 400    /* 最大转向量；实际还会限制到不让内侧轮反转 */
+#define CONTROL_LINE_TURN_MAX_CPS                 400     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
-#define CONTROL_LINE_KP                           0.3f   /* 比例增大：转弯更积极；过大易摆动 */
-#define CONTROL_LINE_KD                           0.2f   /* 微分增大：回正更快、抑制过冲；过大易抖动 */
+#define CONTROL_LINE_KP                           0.3f    /* 比例增大：转弯更积极；过大易摆动 */
+#define CONTROL_LINE_KD                           0.2f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
 #define CONTROL_LINE_ERROR_DEADBAND               80      /* 误差死区：±80 内按 0 处理 */
-#define CONTROL_LINE_SPEED_FULL_ERROR             200     /* |误差|≤500 保持全速 */
-#define CONTROL_LINE_SPEED_MIN_ERROR              1500    /* |误差|≥2500 降到最低速度 */
+#define CONTROL_LINE_SPEED_FULL_ERROR             200     /* |误差|≤200 保持全速 */
+#define CONTROL_LINE_SPEED_MIN_ERROR              1500    /* |误差|≥1500 降到最低速度 */
 
-#define CONTROL_LINE_SEARCH_TURN_CPS              1000    /* 丢线后原地找线的转向量 */
-#define CONTROL_LINE_SEARCH_TIMEOUT_MS            2500U   /* 连续找线超时后输出无效并停车 */
+#define CONTROL_LINE_LOST_CONFIRM_SAMPLES         2U      /* 连续丢线达到该帧数才进入搜索 */
+#define CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES    3U      /* 搜索时连续看到线达到该帧数才恢复循迹 */
+#define CONTROL_LINE_SEARCH_TURN_CPS              1000    /* 第一阶段原地找线转向量 */
+#define CONTROL_LINE_SEARCH_TURN_STEP_CPS         200     /* 每阶段增加的找线转向量 */
+#define CONTROL_LINE_SEARCH_TURN_MAX_CPS          1800    /* 找线转向量上限 */
+#define CONTROL_LINE_SEARCH_INITIAL_PHASE_MS      300U    /* 第一阶段沿最后线路方向扫描时间 */
+#define CONTROL_LINE_SEARCH_PHASE_STEP_MS         200U    /* 每阶段增加的扫描时间 */
+#define CONTROL_LINE_SEARCH_PHASE_MAX_MS          900U    /* 单阶段扫描时间上限 */
+#define CONTROL_LINE_SEARCH_TIMEOUT_MS            10000U  /* 从首次丢线开始计时，超时后停车 */
+
+/*
+ * 编译期检查循迹参数之间的基本安全关系，避免错误配置进入实车测试。
+ * KP、KD为浮点参数，仍需通过诊断页面和路测确认。
+ */
+#if ((CONTROL_LINE_BASE_SPEED_CPS < 0) || \
+     (CONTROL_LINE_BASE_SPEED_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_LINE_CROSS_SPEED_CPS < 0) || \
+     (CONTROL_LINE_CROSS_SPEED_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_LINE_MIN_TRACK_SPEED_CPS < 0) || \
+     (CONTROL_LINE_MIN_TRACK_SPEED_CPS > CONTROL_LINE_BASE_SPEED_CPS) || \
+     (CONTROL_LINE_TURN_MAX_CPS < 0) || \
+     (CONTROL_LINE_TURN_MAX_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS))
+#error "line speed parameters are invalid"
+#endif
+
+#if ((CONTROL_LINE_ERROR_DEADBAND < 0) || \
+     (CONTROL_LINE_SPEED_FULL_ERROR < 0) || \
+     (CONTROL_LINE_SPEED_MIN_ERROR <= CONTROL_LINE_SPEED_FULL_ERROR))
+#error "line error thresholds are invalid"
+#endif
+
+#if ((CONTROL_LINE_LOST_CONFIRM_SAMPLES == 0U) || \
+     (CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES == 0U) || \
+     (CONTROL_LINE_SEARCH_TURN_CPS <= 0) || \
+     (CONTROL_LINE_SEARCH_TURN_STEP_CPS < 0) || \
+     (CONTROL_LINE_SEARCH_TURN_MAX_CPS < CONTROL_LINE_SEARCH_TURN_CPS) || \
+     (CONTROL_LINE_SEARCH_TURN_MAX_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_LINE_SEARCH_INITIAL_PHASE_MS == 0U) || \
+     (CONTROL_LINE_SEARCH_PHASE_STEP_MS == 0U) || \
+     (CONTROL_LINE_SEARCH_PHASE_MAX_MS < CONTROL_LINE_SEARCH_INITIAL_PHASE_MS) || \
+     (CONTROL_LINE_SEARCH_TIMEOUT_MS <= CONTROL_LINE_SEARCH_INITIAL_PHASE_MS))
+#error "line loss recovery parameters are invalid"
+#endif
 
 /* 动作库统一参数（待实测）。 */
 #define CONTROL_MOTION_DISTANCE_TOLERANCE_MM      8       /* 直行距离容差：差8mm内算完成 */

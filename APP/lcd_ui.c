@@ -556,9 +556,10 @@ static void LcdUi_BuildRouteTestDashboard(void)
                    LcdUi_LineTrackModeName(route.line_track_mode),
                    (unsigned long)route.line_lost_ms);
     LcdUi_CopyDashboardLine(6U, text);
-    (void)snprintf(text, sizeof(text), "SCAN P:%u D:%d",
+    (void)snprintf(text, sizeof(text), "SCAN P:%u D:%d R:%u",
                    (unsigned int)route.line_search_phase,
-                   (int)route.line_search_direction);
+                   (int)route.line_search_direction,
+                   (unsigned int)route.line_reacquire_samples);
     LcdUi_CopyDashboardLine(7U, text);
     (void)snprintf(text, sizeof(text), "OUT L:%d T:%d",
                    (int)line.output.linear_cps,

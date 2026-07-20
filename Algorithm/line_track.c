@@ -1,10 +1,6 @@
 #include "line_track.h"
 #include "control_config.h"
 
-/*
- * 基础版只保留真正需要调节的参数，不再包含边缘模式、宽线模式、
- * 输出斜坡、多阶段反向扫描等互相叠加的控制逻辑。
- */
 typedef struct {
     int16_t base_speed_cps;
     int16_t cross_speed_cps;
@@ -16,6 +12,13 @@ typedef struct {
     int16_t error_deadband;
     int16_t speed_full_error;
     int16_t speed_min_error;
+    uint16_t lost_confirm_samples;
+    uint16_t reacquire_confirm_samples;
+    int16_t search_turn_step_cps;
+    int16_t search_turn_max_cps;
+    uint32_t search_initial_phase_ms;
+    uint32_t search_phase_step_ms;
+    uint32_t search_phase_max_ms;
     uint32_t search_timeout_ms;
 } LineTrack_InternalConfig_t;
 
@@ -31,7 +34,15 @@ static int16_t s_target_turn;
 static int8_t s_last_line_direction;
 static int8_t s_search_direction;
 static uint16_t s_lost_samples;
+static uint16_t s_reacquire_samples;
+static uint16_t s_search_phase;
 static uint32_t s_lost_start_ms;
+static uint32_t s_search_phase_start_ms;
+
+static void LineTrack_SetOutput(int16_t linear,
+                                int16_t turn,
+                                uint8_t valid,
+                                LineTrack_Output_t *out);
 
 static int16_t LineTrack_AbsI16(int16_t value)
 {
@@ -56,6 +67,11 @@ static int16_t LineTrack_LimitFloat(float value,
     return (int16_t)value;
 }
 
+static uint16_t LineTrack_IncrementU16(uint16_t value)
+{
+    return (value < 0xFFFFU) ? (uint16_t)(value + 1U) : value;
+}
+
 /*
  * 根据线路误差确定找线方向。
  * 返回 +1 表示左转，-1 表示右转。
@@ -65,6 +81,90 @@ static int8_t LineTrack_DirectionFromError(int16_t error)
     if (error < (int16_t)(-s_cfg.error_deadband)) return 1;
     if (error > s_cfg.error_deadband) return -1;
     return s_last_line_direction;
+}
+
+static int16_t LineTrack_GetSearchTurnCps(uint16_t phase)
+{
+    uint32_t step_count;
+    uint32_t max_step_count;
+
+    if ((s_cfg.search_turn_step_cps <= 0) ||
+        (s_cfg.search_turn_cps >= s_cfg.search_turn_max_cps)) {
+        return s_cfg.search_turn_cps;
+    }
+
+    max_step_count = (uint32_t)(s_cfg.search_turn_max_cps -
+                                s_cfg.search_turn_cps) /
+                     (uint32_t)s_cfg.search_turn_step_cps;
+    step_count = (uint32_t)phase;
+    if (step_count > max_step_count) {
+        step_count = max_step_count;
+    }
+
+    return (int16_t)((int32_t)s_cfg.search_turn_cps +
+                     (int32_t)step_count *
+                     (int32_t)s_cfg.search_turn_step_cps);
+}
+
+static uint32_t LineTrack_GetSearchPhaseMs(uint16_t phase)
+{
+    uint32_t step_count;
+    uint32_t max_step_count;
+
+    max_step_count = (s_cfg.search_phase_max_ms -
+                      s_cfg.search_initial_phase_ms) /
+                     s_cfg.search_phase_step_ms;
+    step_count = (uint32_t)phase;
+    if (step_count > max_step_count) {
+        step_count = max_step_count;
+    }
+
+    return s_cfg.search_initial_phase_ms +
+           step_count * s_cfg.search_phase_step_ms;
+}
+
+static void LineTrack_ClearLossRecovery(void)
+{
+    s_lost_samples = 0U;
+    s_search_phase = 0U;
+    s_lost_start_ms = 0U;
+    s_search_phase_start_ms = 0U;
+}
+
+static void LineTrack_StartSearch(uint32_t now)
+{
+    s_mode = LINE_TRACK_MODE_SEARCH;
+    s_reacquire_samples = 0U;
+    s_search_phase = 0U;
+    s_search_phase_start_ms = now;
+    s_search_direction = LineTrack_DirectionFromError(s_last_error);
+    if (s_search_direction == 0) {
+        s_search_direction = 1;
+    }
+}
+
+static void LineTrack_UpdateSearchPhase(uint32_t now)
+{
+    uint32_t phase_ms;
+
+    phase_ms = LineTrack_GetSearchPhaseMs(s_search_phase);
+    while ((uint32_t)(now - s_search_phase_start_ms) >= phase_ms) {
+        s_search_phase_start_ms += phase_ms;
+        s_search_phase = LineTrack_IncrementU16(s_search_phase);
+        s_search_direction = (int8_t)(-s_search_direction);
+        phase_ms = LineTrack_GetSearchPhaseMs(s_search_phase);
+    }
+}
+
+static void LineTrack_OutputSearch(LineTrack_Output_t *out)
+{
+    int16_t turn_cps;
+
+    turn_cps = LineTrack_GetSearchTurnCps(s_search_phase);
+    LineTrack_SetOutput(0,
+                        (int16_t)(s_search_direction * turn_cps),
+                        1U,
+                        out);
 }
 
 /*
@@ -107,8 +207,8 @@ static int16_t LineTrack_GetAdaptiveSpeed(int16_t error)
 }
 
 /*
- * 直接保存并输出命令。
- * 基础版故意取消输出斜坡限制，使黑线从边缘回到中间后能够立即回正。
+ * 算法层直接保存目标，不再叠加第二套斜坡；所有上层命令统一由底盘层
+ * 的目标斜坡处理，避免两层限速导致响应时间难以判断。
  */
 static void LineTrack_SetOutput(int16_t linear,
                                 int16_t turn,
@@ -144,6 +244,15 @@ static void LineTrack_LoadDefaultConfig(void)
     s_cfg.error_deadband = CONTROL_LINE_ERROR_DEADBAND;
     s_cfg.speed_full_error = CONTROL_LINE_SPEED_FULL_ERROR;
     s_cfg.speed_min_error = CONTROL_LINE_SPEED_MIN_ERROR;
+    s_cfg.lost_confirm_samples = CONTROL_LINE_LOST_CONFIRM_SAMPLES;
+    s_cfg.reacquire_confirm_samples =
+        CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES;
+    s_cfg.search_turn_step_cps = CONTROL_LINE_SEARCH_TURN_STEP_CPS;
+    s_cfg.search_turn_max_cps = CONTROL_LINE_SEARCH_TURN_MAX_CPS;
+    s_cfg.search_initial_phase_ms =
+        CONTROL_LINE_SEARCH_INITIAL_PHASE_MS;
+    s_cfg.search_phase_step_ms = CONTROL_LINE_SEARCH_PHASE_STEP_MS;
+    s_cfg.search_phase_max_ms = CONTROL_LINE_SEARCH_PHASE_MAX_MS;
     s_cfg.search_timeout_ms = CONTROL_LINE_SEARCH_TIMEOUT_MS;
 }
 
@@ -165,8 +274,8 @@ void LineTrack_Reset(void)
     s_target_turn = 0;
     s_last_line_direction = 1;
     s_search_direction = 1;
-    s_lost_samples = 0U;
-    s_lost_start_ms = 0U;
+    s_reacquire_samples = 0U;
+    LineTrack_ClearLossRecovery();
 }
 
 BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
@@ -185,8 +294,8 @@ BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
     info->output_linear_cps = s_last_linear_cmd;
     info->output_turn_cps = s_last_turn_cmd;
     info->lost_samples = s_lost_samples;
-    info->reacquire_samples = 0U;
-    info->search_phase = 0U;
+    info->reacquire_samples = s_reacquire_samples;
+    info->search_phase = s_search_phase;
     info->search_direction = s_search_direction;
     info->lost_ms = (s_lost_samples == 0U) ? 0U :
                     (uint32_t)(now - s_lost_start_ms);
@@ -198,7 +307,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
                        LineTrack_Output_t *out)
 {
     uint32_t now;
-    uint8_t was_searching;
+    uint8_t was_recovering;
     int16_t error;
     int16_t d_error;
     int16_t target_linear;
@@ -221,22 +330,16 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     }
 
     /*
-     * 丢线后只做一件事：沿最后一次看到黑线的方向原地找线。
-     * 不反复切换方向，不逐级增加速度，行为简单且便于现场判断。
+     * 先连续确认丢线，避免单帧噪声触发原地搜索。进入搜索后从最后一次
+     * 线路方向开始，随后交替方向并逐步增加单阶段时间和转向量。
      */
     if (line->type == LINE_TYPE_LOST) {
         if (s_lost_samples == 0U) {
             s_lost_start_ms = now;
-            s_search_direction =
-                LineTrack_DirectionFromError(s_last_error);
-            if (s_search_direction == 0) {
-                s_search_direction = 1;
-            }
         }
 
-        if (s_lost_samples < 0xFFFFU) {
-            s_lost_samples++;
-        }
+        s_lost_samples = LineTrack_IncrementU16(s_lost_samples);
+        s_reacquire_samples = 0U;
 
         if ((uint32_t)(now - s_lost_start_ms) >=
             s_cfg.search_timeout_ms) {
@@ -245,19 +348,41 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
             return;
         }
 
-        s_mode = LINE_TRACK_MODE_SEARCH;
-        LineTrack_SetOutput(0,
-                            (int16_t)(s_search_direction *
-                                      s_cfg.search_turn_cps),
-                            1U,
-                            out);
+        if (s_mode != LINE_TRACK_MODE_SEARCH) {
+            if (s_lost_samples < s_cfg.lost_confirm_samples) {
+                s_mode = LINE_TRACK_MODE_LOST_CONFIRM;
+                LineTrack_SetOutput(s_last_linear_cmd,
+                                    s_last_turn_cmd,
+                                    1U,
+                                    out);
+                return;
+            }
+            LineTrack_StartSearch(now);
+        } else {
+            LineTrack_UpdateSearchPhase(now);
+        }
+
+        LineTrack_OutputSearch(out);
         return;
     }
 
-    was_searching = (s_mode == LINE_TRACK_MODE_SEARCH) ? 1U : 0U;
+    was_recovering = (s_mode != LINE_TRACK_MODE_TRACK) ? 1U : 0U;
+
+    /*
+     * 搜索过程中看到线路后先停止扫描，必须连续确认多帧才恢复PD。
+     * 中间再次丢线会清零确认计数并继续原扫描阶段。
+     */
+    if (s_mode == LINE_TRACK_MODE_SEARCH) {
+        s_reacquire_samples =
+            LineTrack_IncrementU16(s_reacquire_samples);
+        if (s_reacquire_samples < s_cfg.reacquire_confirm_samples) {
+            LineTrack_SetOutput(0, 0, 1U, out);
+            return;
+        }
+    }
+
     s_mode = LINE_TRACK_MODE_TRACK;
-    s_lost_samples = 0U;
-    s_lost_start_ms = 0U;
+    LineTrack_ClearLossRecovery();
 
     /*
      * 十字和全黑区域在基础模式下统一低速直行。
@@ -285,7 +410,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     s_error_filt = error;
 
     /* 刚刚重新找到线时不使用搜索前的旧误差计算微分。 */
-    if (was_searching != 0U) {
+    if (was_recovering != 0U) {
         s_last_error = error;
         d_error = 0;
     } else {

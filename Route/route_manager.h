@@ -18,6 +18,7 @@ typedef struct {
     LineTrack_Mode_t line_track_mode;
     int16_t line_filtered_error;
     uint16_t line_lost_samples;
+    uint16_t line_reacquire_samples;
     uint16_t line_search_phase;
     int8_t line_search_direction;
     uint32_t line_lost_ms;
