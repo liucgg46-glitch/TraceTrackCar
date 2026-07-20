@@ -1308,18 +1308,23 @@ void Test_LineCmd_Update(void)
 {
     uint8_t ch;
     uint16_t raw[LINE_DETECT_SENSOR_NUM];
+    BSP_Status_t status;
 
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
         if ((ch == '1') || (ch == 'l') || (ch == 'L')) {
-            LineFollow_Start();
-            if (LineFollow_GetState() == LINE_FOLLOW_RUN) {
+            status = LineFollow_Start();
+            if (status == BSP_OK) {
                 (void)BSP_UART_WriteFrame(UART_PORT1,
                                           (const uint8_t *)"line follow RUN\r\n",
                                           (uint16_t)(sizeof("line follow RUN\r\n") - 1U));
+            } else if (status == BSP_ERROR) {
+                (void)BSP_UART_WriteFrame(UART_PORT1,
+                                          (const uint8_t *)"line follow rejected: gray sensor offline\r\n",
+                                          (uint16_t)(sizeof("line follow rejected: gray sensor offline\r\n") - 1U));
             } else {
                 (void)BSP_UART_WriteFrame(UART_PORT1,
-                                          (const uint8_t *)"line follow rejected: wait for IMU calibration\r\n",
-                                          (uint16_t)(sizeof("line follow rejected: wait for IMU calibration\r\n") - 1U));
+                                          (const uint8_t *)"line follow rejected: control busy\r\n",
+                                          (uint16_t)(sizeof("line follow rejected: control busy\r\n") - 1U));
             }
         } else if (ch == '0' || ch == 'x') {
             LineFollow_Stop();
@@ -1362,14 +1367,18 @@ void Test_RouteLog(void)
 void Test_RouteCmd_Update(void)
 {
     uint8_t ch;
+    BSP_Status_t status;
 
     /* Key_Update() 生成消抖事件，本任务只处理 KEY1 和 KEY4。 */
 
 #if BSP_KEY1_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY1)) {
-        LineFollow_Start();
-        if (LineFollow_GetState() == LINE_FOLLOW_RUN) {
+        status = LineFollow_Start();
+        if (status == BSP_OK) {
             static const char message[] = "ROUTE START: KEY1\r\n";
+            Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
+        } else if (status == BSP_ERROR) {
+            static const char message[] = "ROUTE START REJECTED: GRAY OFFLINE\r\n";
             Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
         } else {
             static const char message[] = "ROUTE START REJECTED: CONTROL BUSY\r\n";

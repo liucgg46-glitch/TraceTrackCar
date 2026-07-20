@@ -8,9 +8,33 @@
 #include "route_manager.h"
 
 static LineFollow_Info_t s_lf;
+static uint8_t s_route_action_active;
+
+static void LineFollow_ClearOutput(void)
+{
+    s_lf.output.linear_cps = 0;
+    s_lf.output.turn_cps = 0;
+    s_lf.output.valid = 0U;
+}
+
+static void LineFollow_ReleaseOwnedControl(void)
+{
+    if (s_route_action_active != 0U) {
+        Motion_Stop();
+        s_route_action_active = 0U;
+    }
+
+    if (Chassis_GetOwner() == CHASSIS_OWNER_LINE_FOLLOW) {
+        (void)Chassis_ReleaseControl(CHASSIS_OWNER_LINE_FOLLOW);
+    }
+}
 
 static Route_ActionState_t LineFollow_GetRouteActionState(void)
 {
+    if (s_route_action_active == 0U) {
+        return ROUTE_ACTION_STATE_IDLE;
+    }
+
     switch (Motion_GetState()) {
     case MOTION_RUNNING:
         return ROUTE_ACTION_STATE_RUNNING;
@@ -50,41 +74,41 @@ void LineFollow_Init(void)
     for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
         s_lf.raw[i] = 0U;
     }
-    s_lf.output.linear_cps = 0;
-    s_lf.output.turn_cps = 0;
-    s_lf.output.valid = 0U;
+    LineFollow_ClearOutput();
+    s_route_action_active = 0U;
 
     LineDetect_Init();
     RouteManager_Init();
 }
 
-void LineFollow_Start(void)
+BSP_Status_t LineFollow_Start(void)
 {
     if (s_lf.state == LINE_FOLLOW_RUN) {
-        LineFollow_Stop();
+        return BSP_BUSY;
     }
 
-    /* 每次启动都清除上一次路线动作和路线状态。 */
-    Motion_Stop();
-    RouteManager_Reset();
-    if (Chassis_AcquireControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
-        return;
+    if (Drv_GraySensor_IsOnline() == 0U) {
+        return BSP_ERROR;
     }
-    s_lf.output.linear_cps = 0;
-    s_lf.output.turn_cps = 0;
-    s_lf.output.valid = 0U;
+
+    if (Chassis_AcquireControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
+        return BSP_BUSY;
+    }
+
+    /* 成功取得底盘后才复位本模块状态，不影响其他控制者。 */
+    RouteManager_Reset();
+    LineFollow_ClearOutput();
+    s_route_action_active = 0U;
     s_lf.state = LINE_FOLLOW_RUN;
+    return BSP_OK;
 }
 
 void LineFollow_Stop(void)
 {
     s_lf.state = LINE_FOLLOW_STOP;
-    Motion_Stop();
-    Chassis_EmergencyStop();
+    LineFollow_ReleaseOwnedControl();
     RouteManager_Reset();
-    s_lf.output.linear_cps = 0;
-    s_lf.output.turn_cps = 0;
-    s_lf.output.valid = 0U;
+    LineFollow_ClearOutput();
 }
 
 void LineFollow_Update(void)
@@ -108,9 +132,7 @@ void LineFollow_Update(void)
 
     /* 停车时继续刷新识别结果供界面查看，但不推进赛道状态机。 */
     if (s_lf.state != LINE_FOLLOW_RUN) {
-        s_lf.output.linear_cps = 0;
-        s_lf.output.turn_cps = 0;
-        s_lf.output.valid = 0U;
+        LineFollow_ClearOutput();
         return;
     }
 
@@ -127,6 +149,10 @@ void LineFollow_Update(void)
 
     if (control == ROUTE_CONTROL_MOTION) {
         if (request.type != ROUTE_ACTION_NONE) {
+            if (s_route_action_active != 0U) {
+                LineFollow_Stop();
+                return;
+            }
             if (Chassis_ReleaseControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
                 LineFollow_Stop();
                 return;
@@ -135,12 +161,24 @@ void LineFollow_Update(void)
                 LineFollow_Stop();
                 return;
             }
+            s_route_action_active = 1U;
+        } else if (s_route_action_active == 0U) {
+            /* 首次切入动作控制时必须同时给出有效动作请求。 */
+            LineFollow_Stop();
         }
         return;
     }
 
     if ((control == ROUTE_CONTROL_LINE_TRACK) &&
         (s_lf.output.valid != 0U)) {
+        if (s_route_action_active != 0U) {
+            if (Motion_GetState() != MOTION_DONE) {
+                LineFollow_Stop();
+                return;
+            }
+            Motion_Stop();
+            s_route_action_active = 0U;
+        }
         if (Chassis_AcquireControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
             LineFollow_Stop();
             return;

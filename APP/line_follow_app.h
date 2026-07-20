@@ -31,7 +31,9 @@ typedef struct {
 } LineFollow_Info_t;
 
 void LineFollow_Init(void);
-void LineFollow_Start(void);
+/* 返回BSP_OK表示已启动，BSP_BUSY表示正在运行或控制权被占用，BSP_ERROR表示灰度离线。 */
+BSP_Status_t LineFollow_Start(void);
+/* 只停止循迹及其发起的动作，不清除其他模块的底盘控制权。 */
 void LineFollow_Stop(void);
 void LineFollow_Update(void);
 LineFollow_State_t LineFollow_GetState(void);
