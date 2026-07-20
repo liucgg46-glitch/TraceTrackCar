@@ -17,10 +17,6 @@ typedef struct {
     uint32_t transition_count;
     LineTrack_Mode_t line_track_mode;
     int16_t line_filtered_error;
-    int16_t line_derivative_error;
-    int16_t line_adaptive_linear_cps;
-    int32_t line_turn_unclamped_cps;
-    uint8_t line_turn_saturated;
     uint16_t line_lost_samples;
     uint16_t line_search_phase;
     int8_t line_search_direction;

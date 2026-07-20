@@ -548,19 +548,17 @@ static void LcdUi_BuildRouteTestDashboard(void)
                    LcdUi_LineTypeName(line.detect.type),
                    (unsigned int)line.detect.black_mask);
     LcdUi_CopyDashboardLine(4U, text);
-    (void)snprintf(text, sizeof(text), "E:%d DE:%d",
-                   (int)route.line_filtered_error,
-                   (int)route.line_derivative_error);
+    (void)snprintf(text, sizeof(text), "RAW:%d FIL:%d",
+                   (int)line.detect.error_x1000,
+                   (int)route.line_filtered_error);
     LcdUi_CopyDashboardLine(5U, text);
-    (void)snprintf(text, sizeof(text), "MODE:%s L:%lu D:%d",
+    (void)snprintf(text, sizeof(text), "MODE:%s L:%lu",
                    LcdUi_LineTrackModeName(route.line_track_mode),
-                   (unsigned long)route.line_lost_ms,
-                   (int)route.line_search_direction);
+                   (unsigned long)route.line_lost_ms);
     LcdUi_CopyDashboardLine(6U, text);
-    (void)snprintf(text, sizeof(text), "AD:%d U:%ld SAT:%u",
-                   (int)route.line_adaptive_linear_cps,
-                   (long)route.line_turn_unclamped_cps,
-                   (unsigned int)route.line_turn_saturated);
+    (void)snprintf(text, sizeof(text), "SCAN P:%u D:%d",
+                   (unsigned int)route.line_search_phase,
+                   (int)route.line_search_direction);
     LcdUi_CopyDashboardLine(7U, text);
     (void)snprintf(text, sizeof(text), "OUT L:%d T:%d",
                    (int)line.output.linear_cps,

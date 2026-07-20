@@ -44,7 +44,6 @@ Task_t task_list[] = {                                                          
 	{ LineTrack_Update,        10U, 0U },                   \
 	{ Motion_Update,           10U, 0U },                   \
 	{ Chassis_Update,          10U, 0U },                   \
-	{ Gimbal_Update,           20U, 0U }, /* 云台非阻塞轨迹 */ \
 	{ Test_RouteLog,          200U, 0U },                   \
 	{ LCD_Update,              20U, 0U },                   \
 	{ OLED_Update,             20U, 0U },                   \
