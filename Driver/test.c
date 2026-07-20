@@ -841,6 +841,9 @@ static BSP_Status_t Test_ChassisSetCommand(int16_t linear_cps,
 void Test_ChassisCmd_Update(void)
 {
     static int16_t linear_speed_cps = TEST_CHASSIS_INITIAL_LINEAR_CPS;
+    static int16_t active_linear_cps = 0;
+    static int16_t active_turn_cps = 0;
+    static uint8_t command_active = 0U;
     static uint8_t forward_started = 0U;
     static uint8_t banner_sent = 0U;
     char message[96];
@@ -855,6 +858,17 @@ void Test_ChassisCmd_Update(void)
         Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
     }
 
+    /* 正式测试入口每10 ms刷新一次命令租约，按键只改变当前命令。 */
+    if (command_active != 0U) {
+        status = Chassis_SetSpeed(CHASSIS_OWNER_TEST,
+                                  active_linear_cps,
+                                  active_turn_cps);
+        if (status != BSP_OK) {
+            command_active = 0U;
+            forward_started = 0U;
+        }
+    }
+
 #if BSP_KEY1_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY1)) {
         linear_speed_cps = TEST_CHASSIS_INITIAL_LINEAR_CPS;
@@ -864,9 +878,13 @@ void Test_ChassisCmd_Update(void)
                 "CHASSIS KEY1 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
             forward_started = 0U;
+            command_active = 0U;
             return;
         }
         forward_started = 1U;
+        active_linear_cps = linear_speed_cps;
+        active_turn_cps = 0;
+        command_active = 1U;
         length = snprintf(message, sizeof(message),
                           "CHASSIS KEY1 FORWARD: linear=%d cps\r\n",
                           (int)linear_speed_cps);
@@ -894,8 +912,12 @@ void Test_ChassisCmd_Update(void)
                 static const char busy[] =
                     "CHASSIS KEY2 REJECTED: CONTROL BUSY OR FAULT\r\n";
                 Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+                command_active = 0U;
                 return;
             }
+            active_linear_cps = linear_speed_cps;
+            active_turn_cps = 0;
+            command_active = 1U;
             length = snprintf(message, sizeof(message),
                               "CHASSIS KEY2 ACCEL: linear=%d cps%s\r\n",
                               (int)linear_speed_cps,
@@ -915,8 +937,12 @@ void Test_ChassisCmd_Update(void)
             static const char busy[] =
                 "CHASSIS KEY3 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+            command_active = 0U;
             return;
         }
+        active_linear_cps = 0;
+        active_turn_cps = TEST_CHASSIS_TURN_CPS;
+        command_active = 1U;
         Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
     }
 #endif
@@ -929,8 +955,12 @@ void Test_ChassisCmd_Update(void)
             static const char busy[] =
                 "CHASSIS KEY4 REJECTED: CONTROL BUSY OR FAULT\r\n";
             Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+            command_active = 0U;
             return;
         }
+        active_linear_cps = 0;
+        active_turn_cps = (int16_t)(-TEST_CHASSIS_TURN_CPS);
+        command_active = 1U;
         Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
     }
 #endif
@@ -942,6 +972,60 @@ void Test_ChassisCmd_Update(void)
         static const char wait_stop[] =
             "CHASSIS KEY5: STOPPED / WAIT WHEELS THEN CLEAR AGAIN\r\n";
         forward_started = 0U;
+        command_active = 0U;
+        active_linear_cps = 0;
+        active_turn_cps = 0;
+        Chassis_EmergencyStop();
+        status = Chassis_ClearFault();
+        if (status == BSP_OK) {
+            Test_Key_Send(cleared, (uint16_t)(sizeof(cleared) - 1U));
+        } else {
+            Test_Key_Send(wait_stop, (uint16_t)(sizeof(wait_stop) - 1U));
+        }
+    }
+#endif
+}
+
+/*
+ * 命令租约看门狗专项测试：KEY1只发送一次速度命令，故意不再刷新；
+ * KEY5急停并尝试清除故障。必须与普通底盘按键测试二选一注册。
+ */
+void Test_ChassisWatchdog_Update(void)
+{
+    static uint8_t banner_sent = 0U;
+    BSP_Status_t status;
+
+    if (banner_sent == 0U) {
+        static const char banner[] =
+            "CHASSIS WATCHDOG TEST: K1=ONE SHOT K5=STOP/CLEAR\r\n";
+        banner_sent = 1U;
+        LcdUi_ChassisTestBegin();
+        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        static const char started[] =
+            "CHASSIS WATCHDOG: ONE SHOT 1600 cps\r\n";
+        static const char rejected[] =
+            "CHASSIS WATCHDOG: START REJECTED\r\n";
+
+        status = Test_ChassisSetCommand(TEST_CHASSIS_INITIAL_LINEAR_CPS, 0);
+        if (status == BSP_OK) {
+            Test_Key_Send(started, (uint16_t)(sizeof(started) - 1U));
+        } else {
+            Test_Key_Send(rejected, (uint16_t)(sizeof(rejected) - 1U));
+        }
+    }
+#endif
+
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        static const char cleared[] =
+            "CHASSIS WATCHDOG: STOPPED / FAULT CLEARED\r\n";
+        static const char wait_stop[] =
+            "CHASSIS WATCHDOG: WAIT WHEELS THEN CLEAR AGAIN\r\n";
+
         Chassis_EmergencyStop();
         status = Chassis_ClearFault();
         if (status == BSP_OK) {
@@ -962,7 +1046,7 @@ void Test_ChassisCmd_Log(void)
     if (Chassis_GetInfo(&info) != BSP_OK) return;
 
     n = snprintf(buf, sizeof(buf),
-                "CHS loop=%u fault=%d mask=%02X owner=%d mode=%d "
+                "CHS loop=%u fault=%d mask=%02X age=%lu owner=%d mode=%d "
                 "cmd=%d/%d tgt=%d/%d "
                 "raw=%ld/%ld/%ld/%ld fb=%ld/%ld/%ld/%ld "
                 "ff=%d/%d/%d/%d "
@@ -970,6 +1054,7 @@ void Test_ChassisCmd_Log(void)
                 (unsigned int)info.speed_loop_enabled,
                 (int)info.fault,
                 (unsigned int)info.fault_wheel_mask,
+                (unsigned long)info.command_age_ms,
                 (int)info.owner,
                 (int)info.mode,
                 info.left_target_cps,

@@ -25,6 +25,7 @@ void Test_MotorCmd_Update(void);// 测试电机方向（开环测试）   { Test
 void Test_MotorCmd_Log(void);//    { Test_MotorCmd_Log,     200U, 0U },
 
 void Test_ChassisCmd_Update(void);//五按键底盘速度控制测试；必须先注册Key_Update和Encoder_Update
+void Test_ChassisWatchdog_Update(void);//底盘命令租约专项测试；与Test_ChassisCmd_Update二选一
 void Test_ChassisCmd_Log(void);//打印日志   { Test_ChassisCmd_Log,   200U, 0U },
 
 void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,   200U, 0U },

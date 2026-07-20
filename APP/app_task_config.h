@@ -35,18 +35,15 @@ extern "C" {
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
-	{ Test_GPIO_Toggle,        10U, 0U }, /* 运行指示灯 */   \
-	{ AppTask_BSP_Background,   1U, 0U },                   \
-	{ Key_Update,              10U, 0U },                   \
-	{ Sensor_Update,            1U, 0U },                   \
-	{ Encoder_Update,          10U, 0U },                   \
-	{ Test_RouteCmd_Update,    10U, 0U },                   \
-	{ LineTrack_Update,        10U, 0U },                   \
-	{ Motion_Update,           10U, 0U },                   \
-	{ Chassis_Update,          10U, 0U },                   \
-	{ Test_RouteLog,          200U, 0U },                   \
-	{ LCD_Update,              20U, 0U },                   \
-	{ OLED_Update,             20U, 0U },                   \
+	{ Test_GPIO_Toggle,         10U, 0U },   \
+	{ AppTask_BSP_Background,    1U,   0U },  \
+	{ Key_Update,               10U,   0U },  \
+	{ Sensor_Update,             1U,   0U },  \
+	{ Encoder_Update,           10U,   0U },  \
+	{ Test_MotionCmd_Update,    10U,   0U },  \
+	{ Motion_Update,            10U,   0U },  \
+	{ Chassis_Update,           10U,   0U },  \
+	{ Test_MotionCmd_Log,      200U,   0U },  \
 };                                                                                  \
 const uint8_t TASK_NUM = (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 

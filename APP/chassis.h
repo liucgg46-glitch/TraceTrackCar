@@ -23,6 +23,7 @@ extern "C" {
  *   - Chassis_Update() 固定 10ms 调用；
  *   - 控制模块必须先获取控制权，再使用带 owner 的接口提交命令；
  *   - 未持有控制权的模块不能覆盖当前底盘命令；
+ *   - 速度模式下必须周期性刷新命令，命令租约超时会锁存故障并停车；
  *   - 编码器无反馈或方向持续异常会锁存故障、停车并释放控制权；
  *   - 故障不会被普通急停自动清除，修复原因后必须显式清除；
  *   - 所有速度单位默认用 count/s，先便于调车；后续可切换到 mm/s。
@@ -43,7 +44,8 @@ typedef enum {
 typedef enum {
     CHASSIS_FAULT_NONE = 0,
     CHASSIS_FAULT_ENCODER_NO_FEEDBACK,
-    CHASSIS_FAULT_ENCODER_DIRECTION
+    CHASSIS_FAULT_ENCODER_DIRECTION,
+    CHASSIS_FAULT_COMMAND_TIMEOUT
 } Chassis_Fault_t;
 
 #define CHASSIS_FAULT_WHEEL_FL   (1U << 0)
@@ -58,6 +60,7 @@ typedef struct {
     Chassis_Fault_t fault;
     uint8_t fault_wheel_mask;
     uint32_t fault_time_ms;
+    uint32_t command_age_ms;
     int16_t linear_target_cps;
     int16_t turn_target_cps;
     int16_t left_target_cps;
@@ -85,7 +88,7 @@ typedef struct {
 void         Chassis_Init(void);
 /* 同一 owner 重复获取视为成功；已有其他 owner 时返回 BSP_BUSY。 */
 BSP_Status_t Chassis_AcquireControl(Chassis_ControlOwner_t owner);
-/* 只有当前 owner 可以更新目标，函数只保存命令，不阻塞等待执行。 */
+/* 只有当前owner可以更新目标；速度模式下必须在命令超时前周期性调用。 */
 BSP_Status_t Chassis_SetSpeed(Chassis_ControlOwner_t owner,
                               int16_t linear_speed_cps,
                               int16_t turn_speed_cps);

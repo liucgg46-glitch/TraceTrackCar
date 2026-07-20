@@ -11,6 +11,7 @@ static uint32_t s_no_feedback_start_ms[WHEEL_COUNT];
 static uint32_t s_wrong_direction_start_ms[WHEEL_COUNT];
 static uint8_t s_no_feedback_active[WHEEL_COUNT];
 static uint8_t s_wrong_direction_active[WHEEL_COUNT];
+static uint32_t s_last_command_ms;
 
 static int32_t Chassis_Abs32(int32_t value)
 {
@@ -68,6 +69,17 @@ static void Chassis_StopOutput(void)
     Chassis_ResetFaultMonitors();
     Chassis_ResetSpeedControllers();
     Motor_StopAll();
+}
+
+static void Chassis_LatchFault(Chassis_Fault_t fault,
+                               uint8_t wheel_mask,
+                               uint32_t now_ms)
+{
+    Chassis_StopOutput();
+    s_chassis.owner = CHASSIS_OWNER_NONE;
+    s_chassis.fault = fault;
+    s_chassis.fault_wheel_mask = wheel_mask;
+    s_chassis.fault_time_ms = now_ms;
 }
 
 static int16_t Chassis_LimitTarget(int32_t x)
@@ -237,11 +249,7 @@ static uint8_t Chassis_CheckFaults(uint32_t now_ms)
     }
 
     if (first_fault != CHASSIS_FAULT_NONE) {
-        Chassis_StopOutput();
-        s_chassis.owner = CHASSIS_OWNER_NONE;
-        s_chassis.fault = first_fault;
-        s_chassis.fault_wheel_mask = fault_wheel_mask;
-        s_chassis.fault_time_ms = now_ms;
+        Chassis_LatchFault(first_fault, fault_wheel_mask, now_ms);
         return 1U;
     }
 
@@ -311,6 +319,8 @@ void Chassis_Init(void)
     s_chassis.fault = CHASSIS_FAULT_NONE;
     s_chassis.fault_wheel_mask = 0U;
     s_chassis.fault_time_ms = 0U;
+    s_chassis.command_age_ms = 0U;
+    s_last_command_ms = 0U;
     Chassis_StopOutput();
 }
 
@@ -327,6 +337,10 @@ BSP_Status_t Chassis_AcquireControl(Chassis_ControlOwner_t owner)
         return BSP_BUSY;
     }
 
+    if (s_chassis.owner == CHASSIS_OWNER_NONE) {
+        s_last_command_ms = BSP_GET_TICK();
+        s_chassis.command_age_ms = 0U;
+    }
     s_chassis.owner = owner;
     return BSP_OK;
 }
@@ -358,6 +372,8 @@ BSP_Status_t Chassis_SetSpeed(Chassis_ControlOwner_t owner,
     s_chassis.right_target_cps = new_right_target;
 
     s_chassis.mode = CHASSIS_MODE_SPEED;
+    s_last_command_ms = BSP_GET_TICK();
+    s_chassis.command_age_ms = 0U;
     return BSP_OK;
 }
 
@@ -368,6 +384,8 @@ BSP_Status_t Chassis_Stop(Chassis_ControlOwner_t owner)
     }
 
     Chassis_StopOutput();
+    s_last_command_ms = BSP_GET_TICK();
+    s_chassis.command_age_ms = 0U;
     return BSP_OK;
 }
 
@@ -379,6 +397,8 @@ BSP_Status_t Chassis_ReleaseControl(Chassis_ControlOwner_t owner)
 
     Chassis_StopOutput();
     s_chassis.owner = CHASSIS_OWNER_NONE;
+    s_last_command_ms = 0U;
+    s_chassis.command_age_ms = 0U;
     return BSP_OK;
 }
 
@@ -386,6 +406,8 @@ void Chassis_EmergencyStop(void)
 {
     Chassis_StopOutput();
     s_chassis.owner = CHASSIS_OWNER_NONE;
+    s_last_command_ms = 0U;
+    s_chassis.command_age_ms = 0U;
 }
 
 BSP_Status_t Chassis_ClearFault(void)
@@ -411,6 +433,8 @@ BSP_Status_t Chassis_ClearFault(void)
     s_chassis.fault = CHASSIS_FAULT_NONE;
     s_chassis.fault_wheel_mask = 0U;
     s_chassis.fault_time_ms = 0U;
+    s_last_command_ms = 0U;
+    s_chassis.command_age_ms = 0U;
     Chassis_ResetFaultMonitors();
     Chassis_ResetSpeedControllers();
     return BSP_OK;
@@ -433,6 +457,7 @@ Chassis_ControlOwner_t Chassis_GetOwner(void)
 
 void Chassis_Update(void)
 {
+    uint32_t now_ms;
     int16_t new_left_applied;
     int16_t new_right_applied;
 
@@ -440,6 +465,16 @@ void Chassis_Update(void)
         Motor_StopAll();
         return;
     }
+
+    now_ms = BSP_GET_TICK();
+    s_chassis.command_age_ms = (uint32_t)(now_ms - s_last_command_ms);
+#if (CONTROL_CHASSIS_COMMAND_WATCHDOG_ENABLE != 0U)
+    if (s_chassis.command_age_ms >=
+        CONTROL_CHASSIS_COMMAND_TIMEOUT_MS) {
+        Chassis_LatchFault(CHASSIS_FAULT_COMMAND_TIMEOUT, 0U, now_ms);
+        return;
+    }
+#endif
 
     new_left_applied = Chassis_SlewTarget(
         s_chassis.left_applied_target_cps,
@@ -505,7 +540,7 @@ void Chassis_Update(void)
     s_chassis.rr_output = 0;
 #endif
 
-    if (Chassis_CheckFaults(BSP_GET_TICK()) != 0U) {
+    if (Chassis_CheckFaults(now_ms) != 0U) {
         return;
     }
 
