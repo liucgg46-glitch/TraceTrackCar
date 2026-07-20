@@ -209,13 +209,13 @@ extern "C" {
 #define BSP_GPIO_CH16_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH16_INIT_LEVEL     1U
 
-/* CH17: laser enable in both drive modes, PG2 push-pull, default OFF. */
+/* CH17：激光MOS模块使能，PG2，高电平打开 */
 #define BSP_GPIO_CH17_ENABLE         1
 #define BSP_GPIO_CH17_PORT           GPIOG
 #define BSP_GPIO_CH17_PIN            GPIO_Pin_2
 #define BSP_GPIO_CH17_MODE           GPIO_Mode_OUT
 #define BSP_GPIO_CH17_OTYPE          GPIO_OType_PP
-#define BSP_GPIO_CH17_PUPD           GPIO_PuPd_NOPULL
+#define BSP_GPIO_CH17_PUPD           GPIO_PuPd_DOWN
 #define BSP_GPIO_CH17_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH17_INIT_LEVEL     0U
 
