@@ -11,9 +11,16 @@ void BasicRoute_Reset(void)
 }
 
 Route_ControlMode_t BasicRoute_Update(const LineDetect_Result_t *line,
-                                      LineTrack_Output_t *out)
+                                      const Route_ActionFeedback_t *feedback,
+                                      LineTrack_Output_t *out,
+                                      Route_ActionRequest_t *request)
 {
-    if ((line == 0) || (out == 0)) return ROUTE_CONTROL_ERROR;
+    if ((line == 0) || (feedback == 0) ||
+        (out == 0) || (request == 0)) {
+        return ROUTE_CONTROL_ERROR;
+    }
+
+    (void)feedback;
 
     LineTrack_Compute(line, out);
     return (out->valid != 0U) ? ROUTE_CONTROL_LINE_TRACK

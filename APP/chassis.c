@@ -5,6 +5,20 @@
 
 static Chassis_Info_t s_chassis;
 
+static void Chassis_StopOutput(void)
+{
+    s_chassis.mode = CHASSIS_MODE_STOP;
+    s_chassis.linear_target_cps = 0;
+    s_chassis.turn_target_cps = 0;
+    s_chassis.left_target_cps = 0;
+    s_chassis.right_target_cps = 0;
+    s_chassis.fl_output = 0;
+    s_chassis.fr_output = 0;
+    s_chassis.rl_output = 0;
+    s_chassis.rr_output = 0;
+    Motor_StopAll();
+}
+
 static int16_t Chassis_LimitTarget(int32_t x)
 {
     if (x > CONTROL_CHASSIS_TARGET_MAX_CPS) return CONTROL_CHASSIS_TARGET_MAX_CPS;
@@ -29,12 +43,33 @@ static int16_t Chassis_TargetToPwm(int16_t target_cps)
 
 void Chassis_Init(void)
 {
-    Motor_Init();
-    Chassis_Stop();
+    /* Motor 已由 Driver_Init() 统一初始化，APP 层只初始化控制状态。 */
+    s_chassis.owner = CHASSIS_OWNER_NONE;
+    Chassis_StopOutput();
 }
 
-void Chassis_SetSpeed(int16_t linear_speed_cps, int16_t turn_speed_cps)
+BSP_Status_t Chassis_AcquireControl(Chassis_ControlOwner_t owner)
 {
+    if (owner == CHASSIS_OWNER_NONE) {
+        return BSP_PARAM;
+    }
+    if ((s_chassis.owner != CHASSIS_OWNER_NONE) &&
+        (s_chassis.owner != owner)) {
+        return BSP_BUSY;
+    }
+
+    s_chassis.owner = owner;
+    return BSP_OK;
+}
+
+BSP_Status_t Chassis_SetSpeed(Chassis_ControlOwner_t owner,
+                              int16_t linear_speed_cps,
+                              int16_t turn_speed_cps)
+{
+    if ((owner == CHASSIS_OWNER_NONE) || (s_chassis.owner != owner)) {
+        return BSP_BUSY;
+    }
+
     s_chassis.linear_target_cps = Chassis_LimitTarget(linear_speed_cps);
     s_chassis.turn_target_cps   = Chassis_LimitTarget(turn_speed_cps);
 
@@ -43,25 +78,44 @@ void Chassis_SetSpeed(int16_t linear_speed_cps, int16_t turn_speed_cps)
     s_chassis.right_target_cps = Chassis_LimitTarget((int32_t)s_chassis.linear_target_cps + s_chassis.turn_target_cps);
 
     s_chassis.mode = CHASSIS_MODE_SPEED;
+    return BSP_OK;
 }
 
-void Chassis_Stop(void)
+BSP_Status_t Chassis_Stop(Chassis_ControlOwner_t owner)
 {
-    s_chassis.mode = CHASSIS_MODE_STOP;
-    s_chassis.linear_target_cps = 0;
-    s_chassis.turn_target_cps = 0;
-    s_chassis.left_target_cps = 0;
-    s_chassis.right_target_cps = 0;
-    s_chassis.fl_output = 0;
-    s_chassis.fr_output = 0;
-    s_chassis.rl_output = 0;
-    s_chassis.rr_output = 0;
-    Motor_StopAll();
+    if ((owner == CHASSIS_OWNER_NONE) || (s_chassis.owner != owner)) {
+        return BSP_BUSY;
+    }
+
+    Chassis_StopOutput();
+    return BSP_OK;
+}
+
+BSP_Status_t Chassis_ReleaseControl(Chassis_ControlOwner_t owner)
+{
+    if ((owner == CHASSIS_OWNER_NONE) || (s_chassis.owner != owner)) {
+        return BSP_BUSY;
+    }
+
+    Chassis_StopOutput();
+    s_chassis.owner = CHASSIS_OWNER_NONE;
+    return BSP_OK;
+}
+
+void Chassis_EmergencyStop(void)
+{
+    Chassis_StopOutput();
+    s_chassis.owner = CHASSIS_OWNER_NONE;
 }
 
 Chassis_Mode_t Chassis_GetMode(void)
 {
     return s_chassis.mode;
+}
+
+Chassis_ControlOwner_t Chassis_GetOwner(void)
+{
+    return s_chassis.owner;
 }
 
 void Chassis_Update(void)

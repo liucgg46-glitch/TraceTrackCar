@@ -2,9 +2,9 @@
 #include "route_config.h"
 #include "route_profile_basic.h"
 #include "route_profile_hjduino.h"
-#include "motion_action.h"
 
 static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
+static Route_ActionState_t s_action_state = ROUTE_ACTION_STATE_IDLE;
 
 static void RouteManager_ProfileInit(void)
 {
@@ -33,35 +33,46 @@ void RouteManager_Init(void)
     LineTrack_Init();
     RouteManager_ProfileInit();
     s_control_mode = ROUTE_CONTROL_STOP;
+    s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
 
 void RouteManager_Reset(void)
 {
-    /* Cancel every previous command owner before starting a new route run. */
-    Motion_Stop();
     LineTrack_Reset();
     RouteManager_ProfileReset();
     s_control_mode = ROUTE_CONTROL_STOP;
+    s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
 
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
-                                        LineTrack_Output_t *out)
+                                        const Route_ActionFeedback_t *feedback,
+                                        LineTrack_Output_t *out,
+                                        Route_ActionRequest_t *request)
 {
     if (out != 0) {
         out->linear_cps = 0;
         out->turn_cps = 0;
         out->valid = 0U;
     }
+    if (request != 0) {
+        request->type = ROUTE_ACTION_NONE;
+        request->distance_mm = 0;
+        request->angle_deg = 0;
+        request->speed_cps = 0;
+    }
 
-    if ((line == 0) || (out == 0)) {
+    if ((line == 0) || (feedback == 0) ||
+        (out == 0) || (request == 0)) {
         s_control_mode = ROUTE_CONTROL_ERROR;
         return s_control_mode;
     }
 
+    s_action_state = feedback->state;
+
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    s_control_mode = BasicRoute_Update(line, out);
+    s_control_mode = BasicRoute_Update(line, feedback, out, request);
 #elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_HJDUINO)
-    s_control_mode = HJduinoRoute_Update(line, out);
+    s_control_mode = HJduinoRoute_Update(line, feedback, out, request);
 #else
 #error "Invalid ROUTE_PROFILE_SELECT"
 #endif
@@ -79,7 +90,7 @@ BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->profile = (uint8_t)ROUTE_PROFILE_SELECT;
     info->profile_state = 0U;
     info->control_mode = s_control_mode;
-    info->motion_state = (uint8_t)Motion_GetState();
+    info->action_state = s_action_state;
     info->event_confirm_samples = 0U;
     info->running_ms = 0U;
     info->transition_count = 0U;

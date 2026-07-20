@@ -174,7 +174,7 @@ static void OledUi_ShowRouteTest(void)
         Drv_OledI2c_DrawString5x7(4U, 12U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "LF:%u M:%u CF:%u",
                        (unsigned int)line.state,
-                       (unsigned int)route.motion_state,
+                       (unsigned int)route.action_state,
                        (unsigned int)route.event_confirm_samples);
         Drv_OledI2c_DrawString5x7(4U, 22U, text, DRV_OLED_COLOR_ON);
         (void)snprintf(text, sizeof(text), "RUN:%lus TR:%lu",

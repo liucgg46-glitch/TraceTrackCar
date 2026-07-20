@@ -537,7 +537,7 @@ static void LcdUi_BuildRouteTestDashboard(void)
     LcdUi_CopyDashboardLine(1U, text);
     (void)snprintf(text, sizeof(text), "LF:%u MOT:%u CF:%u",
                    (unsigned int)line.state,
-                   (unsigned int)route.motion_state,
+                   (unsigned int)route.action_state,
                    (unsigned int)route.event_confirm_samples);
     LcdUi_CopyDashboardLine(2U, text);
     (void)snprintf(text, sizeof(text), "RUN:%lus TR:%lu",

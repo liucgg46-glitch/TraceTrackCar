@@ -33,7 +33,7 @@ static int16_t Motion_LimitSpeed(int16_t speed)
 
 static void Motion_SetDone(void)
 {
-    Chassis_Stop();
+    (void)Chassis_ReleaseControl(CHASSIS_OWNER_MOTION);
     s_motion.state = MOTION_DONE;
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
@@ -42,7 +42,7 @@ static void Motion_SetDone(void)
 
 static void Motion_SetError(void)
 {
-    Chassis_Stop();
+    (void)Chassis_ReleaseControl(CHASSIS_OWNER_MOTION);
     s_motion.state = MOTION_ERROR;
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
@@ -68,6 +68,9 @@ BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
 {
     if (s_motion.state == MOTION_RUNNING) return BSP_BUSY;
     if (distance_mm == 0) return BSP_PARAM;
+    if (Chassis_AcquireControl(CHASSIS_OWNER_MOTION) != BSP_OK) {
+        return BSP_BUSY;
+    }
 
     Odometer_Clear();
     Heading_Reset();
@@ -96,6 +99,9 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg)
 {
     if (s_motion.state == MOTION_RUNNING) return BSP_BUSY;
     if (angle_deg == 0) return BSP_PARAM;
+    if (Chassis_AcquireControl(CHASSIS_OWNER_MOTION) != BSP_OK) {
+        return BSP_BUSY;
+    }
 
     Odometer_Clear();
     Heading_Reset();
@@ -123,7 +129,7 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg)
 
 void Motion_Stop(void)
 {
-    Chassis_Stop();
+    (void)Chassis_ReleaseControl(CHASSIS_OWNER_MOTION);
     s_motion.state = MOTION_IDLE;
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
@@ -161,7 +167,11 @@ void Motion_Update(void)
             if (dist_abs + CONTROL_MOTION_DISTANCE_TOLERANCE_MM >= target_abs) {
                 Motion_SetDone();
             } else {
-                Chassis_SetSpeed(s_motion.speed_cps, 0);
+                if (Chassis_SetSpeed(CHASSIS_OWNER_MOTION,
+                                     s_motion.speed_cps,
+                                     0) != BSP_OK) {
+                    Motion_SetError();
+                }
             }
             break;
 
@@ -171,7 +181,10 @@ void Motion_Update(void)
                 if (s_turn_settle_samples < 0xFFU) {
                     s_turn_settle_samples++;
                 }
-                Chassis_Stop();
+                if (Chassis_Stop(CHASSIS_OWNER_MOTION) != BSP_OK) {
+                    Motion_SetError();
+                    return;
+                }
                 if (s_turn_settle_samples >= CONTROL_MOTION_TURN_SETTLE_SAMPLES) {
                     Motion_SetDone();
                 }
@@ -196,7 +209,9 @@ void Motion_Update(void)
                     }
                 }
                 cmd = (err_deg > 0.0f) ? (int16_t)cmd_f : (int16_t)(-cmd_f);
-                Chassis_SetSpeed(0, cmd);
+                if (Chassis_SetSpeed(CHASSIS_OWNER_MOTION, 0, cmd) != BSP_OK) {
+                    Motion_SetError();
+                }
             }
             break;
 

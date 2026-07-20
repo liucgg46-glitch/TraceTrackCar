@@ -1,6 +1,5 @@
 #include "route_profile_hjduino.h"
 #include "route_config.h"
-#include "motion_action.h"
 
 static HJduinoRoute_State_t s_state;
 static uint16_t s_entry_confirm_samples;
@@ -45,12 +44,14 @@ void HJduinoRoute_Reset(void)
 }
 
 Route_ControlMode_t HJduinoRoute_Update(const LineDetect_Result_t *line,
-                                        LineTrack_Output_t *out)
+                                        const Route_ActionFeedback_t *feedback,
+                                        LineTrack_Output_t *out,
+                                        Route_ActionRequest_t *request)
 {
-    MotionState_t motion_state;
-    BSP_Status_t status;
-
-    if ((line == 0) || (out == 0)) return ROUTE_CONTROL_ERROR;
+    if ((line == 0) || (feedback == 0) ||
+        (out == 0) || (request == 0)) {
+        return ROUTE_CONTROL_ERROR;
+    }
 
     switch (s_state) {
     case HJD_ROUTE_NORMAL_BEFORE_LOOP:
@@ -69,21 +70,18 @@ Route_ControlMode_t HJduinoRoute_Update(const LineDetect_Result_t *line,
             return HJduinoRoute_RunLineTrack(line, out);
         }
 
-        status = Motion_TurnAngle(HJDUINO_ROUTE_ENTRY_TURN_ANGLE_DEG);
-        if (status != BSP_OK) {
-            HJduinoRoute_SetState(HJD_ROUTE_ERROR);
-            return ROUTE_CONTROL_ERROR;
-        }
-
+        request->type = ROUTE_ACTION_TURN_ANGLE;
+        request->angle_deg = HJDUINO_ROUTE_ENTRY_TURN_ANGLE_DEG;
         HJduinoRoute_SetState(HJD_ROUTE_ENTER_LOOP_RIGHT);
         return ROUTE_CONTROL_MOTION;
 
     case HJD_ROUTE_ENTER_LOOP_RIGHT:
-        motion_state = Motion_GetState();
-        if (motion_state == MOTION_RUNNING) return ROUTE_CONTROL_MOTION;
+        if (feedback->state == ROUTE_ACTION_STATE_RUNNING) {
+            return ROUTE_CONTROL_MOTION;
+        }
 
-        if (motion_state == MOTION_DONE) {
-            /* Do not reuse a line command saved before the angle action. */
+        if (feedback->state == ROUTE_ACTION_STATE_DONE) {
+            /* 动作完成后清除旧循迹命令，再使用当前灰度结果重新计算。 */
             LineTrack_Reset();
             HJduinoRoute_SetState(HJD_ROUTE_IN_LOOP);
             return HJduinoRoute_RunLineTrack(line, out);

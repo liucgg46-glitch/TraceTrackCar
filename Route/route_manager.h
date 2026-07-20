@@ -11,7 +11,7 @@ typedef struct {
     uint8_t profile;
     uint8_t profile_state;
     Route_ControlMode_t control_mode;
-    uint8_t motion_state;
+    Route_ActionState_t action_state;
     uint16_t event_confirm_samples;
     uint32_t running_ms;
     uint32_t transition_count;
@@ -26,7 +26,9 @@ typedef struct {
 void RouteManager_Init(void);
 void RouteManager_Reset(void);
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
-                                        LineTrack_Output_t *out);
+                                        const Route_ActionFeedback_t *feedback,
+                                        LineTrack_Output_t *out,
+                                        Route_ActionRequest_t *request);
 BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info);
 
 #ifdef __cplusplus

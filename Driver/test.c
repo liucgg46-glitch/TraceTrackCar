@@ -821,6 +821,18 @@ void Test_DrvEncoder_Log(void)
 #define TEST_CHASSIS_LINEAR_MAX_CPS      4800
 #define TEST_CHASSIS_TURN_CPS            1600
 
+static BSP_Status_t Test_ChassisSetCommand(int16_t linear_cps,
+                                           int16_t turn_cps)
+{
+    BSP_Status_t status;
+
+    status = Chassis_AcquireControl(CHASSIS_OWNER_TEST);
+    if (status != BSP_OK) {
+        return status;
+    }
+    return Chassis_SetSpeed(CHASSIS_OWNER_TEST, linear_cps, turn_cps);
+}
+
 /*
  * 五按键底盘开环 PWM 测试，必须先运行 Key_Update()。
  * KEY1 以 1600 cps 前进并重置加速档位；KEY2 每次增加 200 cps，
@@ -833,6 +845,7 @@ void Test_ChassisCmd_Update(void)
     static uint8_t banner_sent = 0U;
     char message[96];
     int length;
+    BSP_Status_t status;
 
     if (banner_sent == 0U) {
         static const char banner[] =
@@ -845,8 +858,15 @@ void Test_ChassisCmd_Update(void)
 #if BSP_KEY1_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY1)) {
         linear_speed_cps = TEST_CHASSIS_INITIAL_LINEAR_CPS;
+        status = Test_ChassisSetCommand(linear_speed_cps, 0);
+        if (status != BSP_OK) {
+            static const char busy[] =
+                "CHASSIS KEY1 REJECTED: CONTROL BUSY\r\n";
+            Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+            forward_started = 0U;
+            return;
+        }
         forward_started = 1U;
-        Chassis_SetSpeed(linear_speed_cps, 0);
         length = snprintf(message, sizeof(message),
                           "CHASSIS KEY1 FORWARD: linear=%d cps\r\n",
                           (int)linear_speed_cps);
@@ -869,7 +889,13 @@ void Test_ChassisCmd_Update(void)
                     linear_speed_cps = TEST_CHASSIS_LINEAR_MAX_CPS;
                 }
             }
-            Chassis_SetSpeed(linear_speed_cps, 0);
+            status = Test_ChassisSetCommand(linear_speed_cps, 0);
+            if (status != BSP_OK) {
+                static const char busy[] =
+                    "CHASSIS KEY2 REJECTED: CONTROL BUSY\r\n";
+                Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+                return;
+            }
             length = snprintf(message, sizeof(message),
                               "CHASSIS KEY2 ACCEL: linear=%d cps%s\r\n",
                               (int)linear_speed_cps,
@@ -884,7 +910,13 @@ void Test_ChassisCmd_Update(void)
 #if BSP_KEY3_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY3)) {
         static const char response[] = "CHASSIS KEY3: TURN LEFT 1600 cps\r\n";
-        Chassis_SetSpeed(0, TEST_CHASSIS_TURN_CPS);
+        status = Test_ChassisSetCommand(0, TEST_CHASSIS_TURN_CPS);
+        if (status != BSP_OK) {
+            static const char busy[] =
+                "CHASSIS KEY3 REJECTED: CONTROL BUSY\r\n";
+            Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+            return;
+        }
         Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
     }
 #endif
@@ -892,7 +924,13 @@ void Test_ChassisCmd_Update(void)
 #if BSP_KEY4_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY4)) {
         static const char response[] = "CHASSIS KEY4: TURN RIGHT 1600 cps\r\n";
-        Chassis_SetSpeed(0, -TEST_CHASSIS_TURN_CPS);
+        status = Test_ChassisSetCommand(0, -TEST_CHASSIS_TURN_CPS);
+        if (status != BSP_OK) {
+            static const char busy[] =
+                "CHASSIS KEY4 REJECTED: CONTROL BUSY\r\n";
+            Test_Key_Send(busy, (uint16_t)(sizeof(busy) - 1U));
+            return;
+        }
         Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
     }
 #endif
@@ -901,7 +939,7 @@ void Test_ChassisCmd_Update(void)
     if (BSP_Key_WasPressed(BSP_KEY5)) {
         static const char response[] = "CHASSIS KEY5: STOP\r\n";
         forward_started = 0U;
-        Chassis_Stop();
+        Chassis_EmergencyStop();
         Test_Key_Send(response, (uint16_t)(sizeof(response) - 1U));
     }
 #endif
@@ -916,7 +954,8 @@ void Test_ChassisCmd_Log(void)
     if (Chassis_GetInfo(&info) != BSP_OK) return;
 
     n = sprintf(buf,
-                "CHS mode=%d tgt L=%d R=%d | fb FL=%ld FR=%ld RL=%ld RR=%ld | out %d %d %d %d\r\n",
+                "CHS owner=%d mode=%d tgt L=%d R=%d | fb FL=%ld FR=%ld RL=%ld RR=%ld | out %d %d %d %d\r\n",
+                (int)info.owner,
                 (int)info.mode,
                 info.left_target_cps,
                 info.right_target_cps,
@@ -1827,7 +1866,7 @@ void Test_Attitude_Update(void)
      */
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
         if (ch == 'G') {
-            Chassis_Stop();
+            Chassis_EmergencyStop();
             Drv_ICM20948_StartGyroCalibration();
             Attitude_Reset();
             Heading_Reset();

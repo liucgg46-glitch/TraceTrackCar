@@ -10,7 +10,9 @@ extern "C" {
 void BasicRoute_Init(void);
 void BasicRoute_Reset(void);
 Route_ControlMode_t BasicRoute_Update(const LineDetect_Result_t *line,
-                                      LineTrack_Output_t *out);
+                                      const Route_ActionFeedback_t *feedback,
+                                      LineTrack_Output_t *out,
+                                      Route_ActionRequest_t *request);
 
 #ifdef __cplusplus
 }

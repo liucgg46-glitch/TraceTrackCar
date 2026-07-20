@@ -24,7 +24,9 @@ typedef struct {
 void HJduinoRoute_Init(void);
 void HJduinoRoute_Reset(void);
 Route_ControlMode_t HJduinoRoute_Update(const LineDetect_Result_t *line,
-                                        LineTrack_Output_t *out);
+                                        const Route_ActionFeedback_t *feedback,
+                                        LineTrack_Output_t *out,
+                                        Route_ActionRequest_t *request);
 BSP_Status_t HJduinoRoute_GetInfo(HJduinoRoute_Info_t *info);
 
 #ifdef __cplusplus
