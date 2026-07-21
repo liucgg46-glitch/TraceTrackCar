@@ -42,48 +42,98 @@
 
 #include <stdio.h>
 
+/*
+ * K210与STM32通信测试任务。
+ *
+ * 功能：
+ *   1. 读取K210发送的完整多数字快照；
+ *   2. 通过USART1输出数字、置信度和横坐标；
+ *   3. 每500ms输出一次通信状态和错误统计。
+ *
+ * 建议任务周期：
+ *   { Test_K210_CommUpdate, 10U, 0U },
+ */
 void Test_K210_CommUpdate(void)
 {
     static uint32_t last_status_ms = 0U;
 
-    uint8_t digit;
-    uint8_t valid;
-    uint8_t confidence;
-
+    K210_DigitSnapshot_t snapshot;
     K210_Comm_Info_t info;
 
-    char buf[160];
+    char buf[240];
     int n;
+    int used;
+    uint8_t i;
 
     /*
-     * 读取新的数字结果。
+     * 读取一个已经完整接收的数字快照。
+     *
+     * 快照中的数字已经按照画面横坐标
+     * 从左到右排列。
      */
-    if (K210_Comm_GetNewDigit(
-            &digit,
-            &valid,
-            &confidence) == BSP_OK) {
-        n = snprintf(
+    if (K210_Comm_GetNewSnapshot(&snapshot) == BSP_OK) {
+        used = snprintf(
             buf,
             sizeof(buf),
-            "NEW DIGIT=%u valid=%u confidence=%u\r\n",
-            (unsigned int)digit,
-            (unsigned int)valid,
-            (unsigned int)confidence
+            "K210 SNAP seq=%u status=%u count=%u",
+            (unsigned int)snapshot.sequence,
+            (unsigned int)snapshot.status,
+            (unsigned int)snapshot.count
         );
 
-        if ((n > 0) &&
-            (n < (int)sizeof(buf))) {
+        /*
+         * 将本次快照中的全部数字追加到日志。
+         *
+         * 输出格式：
+         *   [序号]=数字/置信度/x横坐标
+         */
+        for (i = 0U;
+             (i < snapshot.count) &&
+             (used > 0) &&
+             (used < (int)sizeof(buf));
+             i++) {
+            n = snprintf(
+                &buf[used],
+                sizeof(buf) - (size_t)used,
+                " [%u]=%u/%u/x%u",
+                (unsigned int)i,
+                (unsigned int)snapshot.items[i].digit,
+                (unsigned int)snapshot.items[i].confidence,
+                (unsigned int)snapshot.items[i].center_x
+            );
+
+            /*
+             * snprintf返回值大于等于剩余空间时，
+             * 表示日志内容被截断。
+             */
+            if ((n <= 0) ||
+                (n >= ((int)sizeof(buf) - used))) {
+                used = (int)sizeof(buf);
+                break;
+            }
+
+            used += n;
+        }
+
+        /*
+         * 缓冲区仍有空间时添加回车换行，
+         * 然后通过USART1发送到串口助手。
+         */
+        if ((used > 0) &&
+            (used <= ((int)sizeof(buf) - 3))) {
+            buf[used++] = '\r';
+            buf[used++] = '\n';
+            buf[used] = '\0';
+
             (void)BSP_UART_WriteFrame(
                 UART_PORT1,
                 (const uint8_t *)buf,
-                (uint16_t)n
+                (uint16_t)used
             );
         }
     }
 
-    /*
-     * 每500ms打印一次通信状态。
-     */
+    /* 通信状态每500ms输出一次 */
     if ((uint32_t)(
             BSP_GetTickMs() -
             last_status_ms
@@ -93,6 +143,7 @@ void Test_K210_CommUpdate(void)
 
     last_status_ms = BSP_GetTickMs();
 
+    /* 获取K210通信状态和错误计数 */
     if (K210_Comm_GetInfo(&info) != BSP_OK) {
         return;
     }
@@ -100,11 +151,17 @@ void Test_K210_CommUpdate(void)
     n = snprintf(
         buf,
         sizeof(buf),
-        "K210 online=%u frames=%lu checksum_err=%lu format_err=%lu last_rx=%lu\r\n",
+        "K210 online=%u frames=%lu "
+        "snapshots=%lu check_err=%lu "
+        "format_err=%lu snap_err=%lu "
+        "overwrite=%lu last_rx=%lu\r\n",
         (unsigned int)info.online,
         (unsigned long)info.valid_frame_count,
+        (unsigned long)info.snapshot_count,
         (unsigned long)info.checksum_error_count,
         (unsigned long)info.format_error_count,
+        (unsigned long)info.snapshot_error_count,
+        (unsigned long)info.snapshot_overwrite_count,
         (unsigned long)info.last_rx_ms
     );
 
@@ -117,8 +174,6 @@ void Test_K210_CommUpdate(void)
         );
     }
 }
-
-
 
 
 

@@ -6,49 +6,59 @@
 #include <string.h>
 
 /*
- * K210¹Ì¶¨Ê¹ÓÃUSART2¡£
+ * K210å›ºå®šä½¿ç”¨USART2ã€‚
  *
- * USART1Áô¸øUSB×ªTTLµ÷ÊÔ£º
- *   PA9  -> USB×ªTTL RX
- *   PA10 <- USB×ªTTL TX
+ * USART1ä¿ç•™ç»™USBè½¬TTLè°ƒè¯•è¾“å‡ºï¼š
+ *   PA9  -> USBè½¬TTL RX
+ *   PA10 <- USBè½¬TTL TX
  *
- * USART2Á¬½ÓK210£º
- *   PA2  -> K210 RX
- *   PA3  <- K210 TX
+ * USART2è¿æ¥K210ï¼š
+ *   STM32 PA2  -> K210 RXï¼Œç¬¬ä¸€é˜¶æ®µæš‚æ—¶ä¸æ¥
+ *   STM32 PA3  <- K210 IO6 TX
  */
 #define K210_UART_PORT             UART_PORT2
 
 /*
- * ³¬¹ı¸ÃÊ±¼äÃ»ÓĞÊÕµ½ÓĞĞ§Êı¾İÖ¡£¬
- * ÔòÈÏÎªK210ÒÑ¾­ÀëÏß¡£
+ * è¶…è¿‡1ç§’æ²¡æœ‰æ”¶åˆ°æ ¡éªŒæ­£ç¡®çš„æ•°æ®å¸§ï¼Œ
+ * åˆ™è®¤ä¸ºK210å·²ç»ç¦»çº¿ã€‚
  */
 #define K210_OFFLINE_TIMEOUT_MS    1000U
 
-/*
- * ½ÓÊÕ×´Ì¬»ú×´Ì¬¡£
- */
+/* ä¸²å£å­—èŠ‚æ¥æ”¶çŠ¶æ€æœº */
 typedef enum {
     K210_RX_WAIT_HEAD1 = 0,
     K210_RX_WAIT_HEAD2,
     K210_RX_RECEIVING
 } K210_RxState_t;
 
-/*
- * K210Í¨ĞÅ×´Ì¬»º´æ¡£
- */
+/* K210é€šä¿¡çŠ¶æ€å’Œè¯Šæ–­ä¿¡æ¯ */
 static K210_Comm_Info_t s_k210_info;
 
-/*
- * ½ÓÊÕ×´Ì¬»ú±äÁ¿¡£
- */
+/* å›ºå®š7å­—èŠ‚å¸§çš„æ¥æ”¶çŠ¶æ€ */
 static K210_RxState_t s_rx_state;
 static uint8_t s_rx_frame[K210_FRAME_SIZE];
 static uint8_t s_rx_index;
 
 /*
- * ¼ÆËãÖ¡Ğ£ÑéºÍ¡£
+ * å¯å˜æ•°é‡æ•°å­—å¿«ç…§ç¼“å­˜ã€‚
  *
- * CHECKSUMµÈÓÚÖ¸¶¨Êı¾İµÄÀÛ¼ÓºÍµÍ8Î»¡£
+ * s_snapshot_buildingï¼š
+ *   å½“å‰æ­£åœ¨æ¥æ”¶å’Œç»„è£…çš„å¿«ç…§ã€‚
+ *
+ * s_snapshot_latestï¼š
+ *   å·²ç»å®Œæ•´æ¥æ”¶å¹¶æäº¤çš„æœ€æ–°å¿«ç…§ã€‚
+ */
+static K210_DigitSnapshot_t s_snapshot_building;
+static K210_DigitSnapshot_t s_snapshot_latest;
+static uint8_t s_snapshot_receiving;
+static uint8_t s_snapshot_expected_count;
+static uint8_t s_snapshot_received_count;
+static uint8_t s_new_snapshot;
+
+/*
+ * è®¡ç®—æ ¡éªŒå’Œã€‚
+ *
+ * æ ¡éªŒå€¼ä¸ºæŒ‡å®šå­—èŠ‚ç´¯åŠ å’Œçš„ä½8ä½ã€‚
  */
 static uint8_t K210_Comm_CalcChecksum(const uint8_t *data,
                                       uint8_t length)
@@ -70,16 +80,8 @@ static uint8_t K210_Comm_CalcChecksum(const uint8_t *data,
 }
 
 /*
- * ½«Á½¸ö8Î»Êı¾İ×éºÏÎªÒ»¸ö16Î»ÎŞ·ûºÅÕûÊı¡£
- *
- * Ğ­Òé²ÉÓÃ¸ß×Ö½ÚÔÚÇ°¡¢µÍ×Ö½ÚÔÚºó¡£
- *
- * Ê¾Àı£º
- *   high = 0x01
- *   low  = 0x40
- *
- * ½á¹û£º
- *   0x0140 = 320
+ * å°†ä¸¤ä¸ª8ä½æ•°æ®ç»„åˆæˆä¸€ä¸ª16ä½æ— ç¬¦å·æ•´æ•°ã€‚
+ * åè®®ä½¿ç”¨é«˜å­—èŠ‚åœ¨å‰ã€ä½å­—èŠ‚åœ¨åã€‚
  */
 static uint16_t K210_Comm_MakeU16(uint8_t high,
                                   uint8_t low)
@@ -91,8 +93,32 @@ static uint16_t K210_Comm_MakeU16(uint8_t high,
 }
 
 /*
- * ½âÎöÒ»Ö¡ÒÑ¾­Í¨¹ıĞ£ÑéµÄÊı¾İ¡£
+ * K210ä¸ºäº†å°†æ¨ªåæ ‡è£…å…¥ä¸€ä¸ªå­—èŠ‚ï¼Œ
+ * ä¼šæŠŠ0ï½319å‹ç¼©æˆ0ï½255ã€‚
+ *
+ * STM32æ”¶åˆ°åå†æŠŠå®ƒè¿˜åŸåˆ°QVGAçš„0ï½319èŒƒå›´ã€‚
  */
+static uint16_t K210_Comm_DecodeCenterX(uint8_t encoded_x)
+{
+    return (uint16_t)(
+        (((uint32_t)encoded_x * 319U) + 127U) / 255U
+    );
+}
+
+/*
+ * æ”¾å¼ƒå½“å‰æ­£åœ¨æ¥æ”¶çš„å¿«ç…§ã€‚
+ *
+ * å‡ºç°é¡ºåºé”™è¯¯ã€æ•°é‡é”™è¯¯ã€åºå·ä¸ä¸€è‡´æˆ–å†…å®¹éæ³•æ—¶è°ƒç”¨ã€‚
+ */
+static void K210_Comm_AbortSnapshot(void)
+{
+    s_snapshot_receiving = 0U;
+    s_snapshot_expected_count = 0U;
+    s_snapshot_received_count = 0U;
+    s_k210_info.snapshot_error_count++;
+}
+
+/* è§£æä¸€ä¸ªå·²ç»é€šè¿‡æ ¡éªŒçš„å›ºå®š7å­—èŠ‚å¸§ */
 static void K210_Comm_ParseFrame(const uint8_t *frame)
 {
     uint8_t command;
@@ -110,8 +136,8 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
     data3 = frame[5];
 
     /*
-     * Ö»ÒªÊÕµ½Ò»Ö¡Ğ£ÑéÕıÈ·µÄÊı¾İ£¬
-     * ¾ÍÈÏÎªK210µ±Ç°ÔÚÏß¡£
+     * åªè¦æ”¶åˆ°ä¸€ä¸ªæ ¡éªŒæ­£ç¡®çš„æ•°æ®å¸§ï¼Œ
+     * å°±è®¤ä¸ºK210å½“å‰åœ¨çº¿ã€‚
      */
     s_k210_info.online = 1U;
     s_k210_info.last_rx_ms = BSP_GetTickMs();
@@ -119,19 +145,13 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
 
     switch (command) {
         /*
-         * Êı×ÖÊ¶±ğ½á¹ûÖ¡£º
+         * æ—§ç‰ˆå•æ•°å­—è¯†åˆ«ç»“æœï¼š
          *
          * AA 55 01 DIGIT VALID CONFIDENCE CHECKSUM
          *
-         * DIGIT£º
-         *   0~9
-         *
-         * VALID£º
-         *   0£ºµ±Ç°Ê¶±ğ½á¹ûÎŞĞ§£»
-         *   1£ºµ±Ç°Ê¶±ğ½á¹ûÓĞĞ§¡£
-         *
-         * CONFIDENCE£º
-         *   0~100¡£
+         * DIGITï¼šæ•°å­—ç±»åˆ«
+         * VALIDï¼š0è¡¨ç¤ºæ— æ•ˆï¼Œ1è¡¨ç¤ºæœ‰æ•ˆ
+         * CONFIDENCEï¼š0ï½100
          */
         case K210_CMD_DIGIT_RESULT:
             if ((data1 <= 9U) &&
@@ -147,18 +167,12 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
             break;
 
         /*
-         * Ä¿±êÖĞĞÄ×ø±êÖ¡£º
+         * ç›®æ ‡ä¸­å¿ƒåæ ‡ï¼š
          *
          * AA 55 02 X_H X_L Y CHECKSUM
          *
-         * X£º
-         *   16Î»×ø±ê£¬¸ß×Ö½ÚÔÚÇ°¡£
-         *
-         * Y£º
-         *   8Î»×ø±ê¡£
-         *
-         * Y=0xFF£º
-         *   ±íÊ¾µ±Ç°Ã»ÓĞ¼ì²âµ½Ä¿±ê¡£
+         * Xç”±é«˜ä½ä¸¤ä¸ªå­—èŠ‚ç»„æˆã€‚
+         * Yç­‰äº0xFFæ—¶è¡¨ç¤ºç›®æ ‡æ— æ•ˆã€‚
          */
         case K210_CMD_TARGET_POINT:
             s_k210_info.target_x =
@@ -176,12 +190,11 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
             break;
 
         /*
-         * ¼¤¹âµã×ø±êÖ¡£º
+         * æ¿€å…‰ç‚¹åæ ‡ï¼š
          *
          * AA 55 03 X_H X_L Y CHECKSUM
          *
-         * Y=0xFF£º
-         *   ±íÊ¾µ±Ç°Ã»ÓĞ¼ì²âµ½¼¤¹âµã¡£
+         * Yç­‰äº0xFFæ—¶è¡¨ç¤ºæ¿€å…‰ç‚¹æ— æ•ˆã€‚
          */
         case K210_CMD_LASER_POINT:
             s_k210_info.laser_x =
@@ -199,13 +212,13 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
             break;
 
         /*
-         * Ä¿±ê×´Ì¬Ö¡£º
+         * ç›®æ ‡æœ‰æ•ˆçŠ¶æ€ï¼š
          *
          * AA 55 04 STATE 00 00 CHECKSUM
          *
-         * STATE£º
-         *   0£ºÄ¿±ê¶ªÊ§£»
-         *   1£ºÄ¿±êÓĞĞ§¡£
+         * STATEï¼š
+         *   0ï¼šç›®æ ‡ä¸¢å¤±
+         *   1ï¼šç›®æ ‡æœ‰æ•ˆ
          */
         case K210_CMD_TARGET_STATE:
             if (data1 <= 1U) {
@@ -216,17 +229,136 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
             break;
 
         /*
-         * ĞÄÌøÖ¡¡£
-         *
-         * ²»Ğ¯´øÒµÎñÊı¾İ£¬
-         * Ö»ÓÃÓÚË¢ĞÂK210ÔÚÏß×´Ì¬¡£
+         * å¿ƒè·³å¸§ä¸åŒ…å«ä¸šåŠ¡æ•°æ®ã€‚
+         * æ”¶åˆ°æœ‰æ•ˆå¿ƒè·³åï¼Œå‰é¢å·²ç»åˆ·æ–°äº†åœ¨çº¿çŠ¶æ€ã€‚
          */
         case K210_CMD_HEARTBEAT:
             break;
 
         /*
-         * Î´¶¨ÒåµÄÃüÁî¡£
+         * å¤šæ•°å­—å¿«ç…§å¼€å§‹å¸§ï¼š
+         *
+         * AA 55 10 SEQUENCE COUNT STATUS CHECKSUM
+         *
+         * SEQUENCEï¼šå¿«ç…§åºå·
+         * COUNTï¼šæœ¬æ¬¡æ•°å­—æ•°é‡
+         * STATUSï¼šè¯†åˆ«çŠ¶æ€
          */
+        case K210_CMD_DIGIT_SNAPSHOT_BEGIN:
+            /*
+             * æ£€æŸ¥ä»¥ä¸‹éæ³•æƒ…å†µï¼š
+             *
+             * 1. æ•°é‡è¶…è¿‡STM32ç¼“å­˜å®¹é‡ï¼›
+             * 2. çŠ¶æ€å€¼ä¸åœ¨å®šä¹‰èŒƒå›´å†…ï¼›
+             * 3. NORMALçŠ¶æ€ä¸‹æ•°é‡ä¸º0ï¼›
+             * 4. éNORMALçŠ¶æ€ä¸‹æ•°é‡å´ä¸ä¸º0ã€‚
+             */
+            if ((data2 > K210_MAX_DIGITS) ||
+                (data3 > K210_RESULT_OVERFLOW) ||
+                ((data3 == K210_RESULT_NORMAL) &&
+                 (data2 == 0U)) ||
+                ((data3 != K210_RESULT_NORMAL) &&
+                 (data2 != 0U))) {
+                K210_Comm_AbortSnapshot();
+                break;
+            }
+
+            memset(
+                &s_snapshot_building,
+                0,
+                sizeof(s_snapshot_building)
+            );
+
+            s_snapshot_building.sequence = data1;
+            s_snapshot_building.count = data2;
+            s_snapshot_building.status = data3;
+
+            s_snapshot_expected_count = data2;
+            s_snapshot_received_count = 0U;
+            s_snapshot_receiving = 1U;
+            break;
+
+        /*
+         * å¤šæ•°å­—å¿«ç…§é¡¹ç›®å¸§ï¼š
+         *
+         * AA 55 11 INDEX_DIGIT CONFIDENCE CENTER_X_8 CHECKSUM
+         *
+         * INDEX_DIGITé«˜4ä½ï¼šé¡¹ç›®åºå·
+         * INDEX_DIGITä½4ä½ï¼šæ•°å­—ç±»åˆ«
+         * CONFIDENCEï¼š0ï½100
+         * CENTER_X_8ï¼šå‹ç¼©åçš„æ¨ªåæ ‡0ï½255
+         */
+        case K210_CMD_DIGIT_SNAPSHOT_ITEM:
+        {
+            uint8_t index;
+            uint8_t digit;
+
+            index = (uint8_t)((data1 >> 4U) & 0x0FU);
+            digit = (uint8_t)(data1 & 0x0FU);
+
+            /*
+             * å¿…é¡»æŒ‰ç…§0ã€1ã€2â€¦â€¦çš„é¡ºåºæ¥æ”¶ITEMã€‚
+             * ä»»æ„ä¸€ä¸ªæ¡ä»¶é”™è¯¯éƒ½æ”¾å¼ƒæ•´æ¬¡å¿«ç…§ã€‚
+             */
+            if ((s_snapshot_receiving == 0U) ||
+                (s_snapshot_building.status !=
+                 K210_RESULT_NORMAL) ||
+                (index != s_snapshot_received_count) ||
+                (index >= s_snapshot_expected_count) ||
+                (index >= K210_MAX_DIGITS) ||
+                (digit < 1U) ||
+                (digit > 8U) ||
+                (data2 > 100U)) {
+                K210_Comm_AbortSnapshot();
+                break;
+            }
+
+            s_snapshot_building.items[index].digit = digit;
+            s_snapshot_building.items[index].confidence = data2;
+            s_snapshot_building.items[index].center_x =
+                K210_Comm_DecodeCenterX(data3);
+
+            s_snapshot_received_count++;
+            break;
+        }
+
+        /*
+         * å¤šæ•°å­—å¿«ç…§ç»“æŸå¸§ï¼š
+         *
+         * AA 55 12 SEQUENCE COUNT 00 CHECKSUM
+         *
+         * BEGINå’ŒENDçš„åºå·ã€æ•°é‡å¿…é¡»ä¸€è‡´ï¼Œ
+         * å®é™…æ”¶åˆ°çš„ITEMæ•°é‡ä¹Ÿå¿…é¡»ä¸COUNTä¸€è‡´ã€‚
+         */
+        case K210_CMD_DIGIT_SNAPSHOT_END:
+            if ((s_snapshot_receiving == 0U) ||
+                (data1 != s_snapshot_building.sequence) ||
+                (data2 != s_snapshot_expected_count) ||
+                (data3 != 0U) ||
+                (s_snapshot_received_count !=
+                 s_snapshot_expected_count)) {
+                K210_Comm_AbortSnapshot();
+                break;
+            }
+
+            /*
+             * å¦‚æœä¸Šä¸€ä»½å¿«ç…§è¿˜æ²¡æœ‰è¢«åº”ç”¨å±‚è¯»å–ï¼Œ
+             * æ–°å¿«ç…§ä¼šè¦†ç›–æ—§å¿«ç…§ï¼Œå¹¶è®°å½•è¦†ç›–æ¬¡æ•°ã€‚
+             */
+            if (s_new_snapshot != 0U) {
+                s_k210_info.snapshot_overwrite_count++;
+            }
+
+            s_snapshot_latest = s_snapshot_building;
+            s_new_snapshot = 1U;
+            s_k210_info.snapshot_count++;
+
+            s_snapshot_receiving = 0U;
+            s_snapshot_expected_count = 0U;
+            s_snapshot_received_count = 0U;
+            break;
+
+        /* æœªå®šä¹‰çš„å‘½ä»¤ */
         default:
             s_k210_info.format_error_count++;
             break;
@@ -234,23 +366,21 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
 }
 
 /*
- * ½«Ò»¸ö½ÓÊÕµ½µÄ×Ö½ÚËÍÈëĞ­Òé×´Ì¬»ú¡£
+ * å°†USART2æ”¶åˆ°çš„ä¸€ä¸ªå­—èŠ‚é€å…¥åè®®çŠ¶æ€æœºã€‚
  *
- * ×´Ì¬»úÖ§³Ö£º
- *   1. °ë°ü£»
- *   2. Á¬Ğø¶àÖ¡£»
- *   3. Ö¡Í·´íÎ»£»
- *   4. Ğ£Ñé´íÎóºóÖØĞÂÍ¬²½£»
- *   5. Á¬ĞøÊÕµ½AA AAÊ±ÖØĞÂÑ°ÕÒÖ¡Í·¡£
+ * çŠ¶æ€æœºæ”¯æŒï¼š
+ *   1. åŠåŒ…ï¼›
+ *   2. è¿ç»­å¤šå¸§ï¼›
+ *   3. å¸§å¤´é”™ä½ï¼›
+ *   4. æ ¡éªŒé”™è¯¯åé‡æ–°åŒæ­¥ï¼›
+ *   5. è¿ç»­æ”¶åˆ°AA AAæ—¶é‡æ–°å¯»æ‰¾å¸§å¤´ã€‚
  */
 static void K210_Comm_InputByte(uint8_t byte)
 {
     uint8_t checksum;
 
     switch (s_rx_state) {
-        /*
-         * µÈ´ıµÚÒ»¸öÖ¡Í·0xAA¡£
-         */
+        /* ç­‰å¾…ç¬¬ä¸€ä¸ªå¸§å¤´0xAA */
         case K210_RX_WAIT_HEAD1:
             if (byte == K210_FRAME_HEAD1) {
                 s_rx_frame[0] = byte;
@@ -258,9 +388,7 @@ static void K210_Comm_InputByte(uint8_t byte)
             }
             break;
 
-        /*
-         * ÒÑÊÕµ½0xAA£¬µÈ´ıµÚ¶ş¸öÖ¡Í·0x55¡£
-         */
+        /* å·²ç»æ”¶åˆ°0xAAï¼Œç­‰å¾…ç¬¬äºŒä¸ªå¸§å¤´0x55 */
         case K210_RX_WAIT_HEAD2:
             if (byte == K210_FRAME_HEAD2) {
                 s_rx_frame[1] = byte;
@@ -268,8 +396,8 @@ static void K210_Comm_InputByte(uint8_t byte)
                 s_rx_state = K210_RX_RECEIVING;
             } else if (byte == K210_FRAME_HEAD1) {
                 /*
-                 * ÊÕµ½AA AAÊ±£¬
-                 * µÚ¶ş¸öAAÈÔ¿ÉÄÜÊÇĞÂÖ¡µÄµÚÒ»¸ö×Ö½Ú¡£
+                 * å¦‚æœæ”¶åˆ°AA AAï¼Œ
+                 * ç¬¬äºŒä¸ªAAä»å¯èƒ½æ˜¯æ–°å¸§çš„ç¬¬ä¸€ä¸ªå­—èŠ‚ã€‚
                  */
                 s_rx_frame[0] = byte;
             } else {
@@ -278,28 +406,21 @@ static void K210_Comm_InputByte(uint8_t byte)
             }
             break;
 
-        /*
-         * ½ÓÊÕÖ¡ÖĞÊ£ÓàµÄ5¸ö×Ö½Ú¡£
-         */
+        /* æ¥æ”¶å›ºå®šå¸§å‰©ä½™çš„5ä¸ªå­—èŠ‚ */
         case K210_RX_RECEIVING:
-            /*
-             * Õı³£Çé¿öÏÂs_rx_index·¶Î§Îª2~6¡£
-             */
             if (s_rx_index < K210_FRAME_SIZE) {
                 s_rx_frame[s_rx_index] = byte;
                 s_rx_index++;
             } else {
                 /*
-                 * ·ÀÖ¹Òì³£×´Ì¬Ôì³ÉÊı×éÔ½½ç¡£
+                 * å¼‚å¸¸ä¿æŠ¤ï¼Œé˜²æ­¢æ•°ç»„è¶Šç•Œã€‚
                  */
                 s_rx_index = 0U;
                 s_rx_state = K210_RX_WAIT_HEAD1;
                 break;
             }
 
-            /*
-             * ÊÕÂú7¸ö×Ö½Úºó½øĞĞĞ£Ñé¡£
-             */
+            /* æ”¶æ»¡7ä¸ªå­—èŠ‚åè¿›è¡Œæ ¡éªŒ */
             if (s_rx_index >= K210_FRAME_SIZE) {
                 checksum =
                     K210_Comm_CalcChecksum(
@@ -314,17 +435,15 @@ static void K210_Comm_InputByte(uint8_t byte)
                 }
 
                 /*
-                 * ÎŞÂÛĞ£Ñé³É¹¦»¹ÊÇÊ§°Ü£¬
-                 * ¶¼ÖØĞÂµÈ´ıÏÂÒ»Ö¡¡£
+                 * æ— è®ºæ ¡éªŒæˆåŠŸè¿˜æ˜¯å¤±è´¥ï¼Œ
+                 * éƒ½é‡æ–°ç­‰å¾…ä¸‹ä¸€å¸§ã€‚
                  */
                 s_rx_index = 0U;
                 s_rx_state = K210_RX_WAIT_HEAD1;
             }
             break;
 
-        /*
-         * Òì³£×´Ì¬»Ö¸´¡£
-         */
+        /* å¼‚å¸¸çŠ¶æ€æ¢å¤ */
         default:
             s_rx_index = 0U;
             s_rx_state = K210_RX_WAIT_HEAD1;
@@ -334,22 +453,33 @@ static void K210_Comm_InputByte(uint8_t byte)
 
 void K210_Comm_Init(void)
 {
-    /*
-     * Çå¿ÕÍ¨ĞÅ×´Ì¬ºÍ½ÓÊÕÖ¡»º´æ¡£
-     */
+    /* æ¸…ç©ºé€šä¿¡çŠ¶æ€å’Œå¸§ç¼“å­˜ */
     memset(&s_k210_info, 0, sizeof(s_k210_info));
     memset(s_rx_frame, 0, sizeof(s_rx_frame));
+    memset(
+        &s_snapshot_building,
+        0,
+        sizeof(s_snapshot_building)
+    );
+    memset(
+        &s_snapshot_latest,
+        0,
+        sizeof(s_snapshot_latest)
+    );
 
-    /*
-     * ³õÊ¼»¯Ğ­Òé½ÓÊÕ×´Ì¬»ú¡£
-     */
+    /* åˆå§‹åŒ–å›ºå®šå¸§æ¥æ”¶çŠ¶æ€æœº */
     s_rx_state = K210_RX_WAIT_HEAD1;
     s_rx_index = 0U;
 
+    /* åˆå§‹åŒ–å¤šæ•°å­—å¿«ç…§æ¥æ”¶çŠ¶æ€ */
+    s_snapshot_receiving = 0U;
+    s_snapshot_expected_count = 0U;
+    s_snapshot_received_count = 0U;
+    s_new_snapshot = 0U;
+
     /*
-     * Çå¿ÕUSART2µ×²ã½ÓÊÕ»º´æ¡£
-     *
-     * USART2Ó²¼şÒÑ¾­ÓÉBSP_InitAll()Íê³É³õÊ¼»¯¡£
+     * æ¸…ç©ºUSART2åº•å±‚æ¥æ”¶ç¼“å­˜ã€‚
+     * USART2ç¡¬ä»¶å·²ç»ç”±BSP_InitAll()åˆå§‹åŒ–ã€‚
      */
     BSP_UART_FlushRx(K210_UART_PORT);
 }
@@ -360,24 +490,23 @@ void K210_Comm_Update(void)
     uint32_t now_ms;
 
     /*
-     * ÍÆ½øUSART2µ×²ã½ÓÊÕ×´Ì¬¡£
-     *
-     * Èç¹ûUSART2Ê¹ÓÃDMA½ÓÊÕ£¬
-     * ¸Ãº¯Êı»á½«DMAÊı¾İ°áÔËµ½Èí¼ş»º³åÇø¡£
+     * æ¨è¿›USART2åº•å±‚æ¥æ”¶ä»»åŠ¡ã€‚
+     * å¦‚æœUSART2ä½¿ç”¨DMAï¼Œè¿™ä¸€æ­¥ä¼šæ›´æ–°è½¯ä»¶æ¥æ”¶ç¼“å­˜ã€‚
      */
     BSP_UART_Task(K210_UART_PORT);
 
     /*
-     * ½«USART2Èí¼ş»º³åÇøÖĞµÄËùÓĞ×Ö½Ú
-     * Öğ¸öËÍÈëĞ­Òé×´Ì¬»ú¡£
+     * å°†USART2è½¯ä»¶ç¼“å†²åŒºä¸­çš„æ‰€æœ‰å­—èŠ‚ï¼Œ
+     * é€ä¸ªé€å…¥åè®®çŠ¶æ€æœºã€‚
      */
-    while (BSP_UART_GetChar(K210_UART_PORT, &byte) != 0U) {
+    while (BSP_UART_GetChar(
+               K210_UART_PORT,
+               &byte
+           ) != 0U) {
         K210_Comm_InputByte(byte);
     }
 
-    /*
-     * ¼ì²éK210Í¨ĞÅÊÇ·ñ³¬Ê±¡£
-     */
+    /* æ£€æŸ¥K210æ˜¯å¦é€šä¿¡è¶…æ—¶ */
     now_ms = BSP_GetTickMs();
 
     if (s_k210_info.online != 0U) {
@@ -385,14 +514,12 @@ void K210_Comm_Update(void)
                 now_ms -
                 s_k210_info.last_rx_ms
             ) > K210_OFFLINE_TIMEOUT_MS) {
-            /*
-             * ³¬¹ı1ÃëÃ»ÓĞÊÕµ½Ğ£ÑéÕıÈ·µÄÊı¾İÖ¡£¬
-             * ÅĞ¶¨K210ÀëÏß¡£
-             */
+            /* è¶…è¿‡1ç§’æœªæ”¶åˆ°æœ‰æ•ˆå¸§ï¼Œåˆ¤å®šK210ç¦»çº¿ */
             s_k210_info.online = 0U;
 
             /*
-             * ÀëÏßºó£¬µ±Ç°Ê¶±ğ½á¹û²»ÔÙÊÓÎªÓĞĞ§¡£
+             * ç¦»çº¿åï¼Œå°†æ—§ç‰ˆç›®æ ‡çŠ¶æ€æ ‡è®°ä¸ºæ— æ•ˆã€‚
+             * å·²ç»æäº¤çš„å¿«ç…§ä»å¯ç”±åº”ç”¨å±‚å†³å®šæ˜¯å¦æ¸…é™¤ã€‚
              */
             s_k210_info.digit_valid = 0U;
             s_k210_info.target_valid = 0U;
@@ -407,9 +534,6 @@ BSP_Status_t K210_Comm_GetInfo(K210_Comm_Info_t *info)
         return BSP_PARAM;
     }
 
-    /*
-     * ·µ»ØÍêÕûÍ¨ĞÅ×´Ì¬¿ìÕÕ¡£
-     */
     *info = s_k210_info;
 
     return BSP_OK;
@@ -425,29 +549,36 @@ BSP_Status_t K210_Comm_GetNewDigit(uint8_t *digit,
         return BSP_PARAM;
     }
 
-    /*
-     * µ±Ç°Ã»ÓĞĞÂµÄÊı×ÖÊ¶±ğ½á¹û¡£
-     */
     if (s_k210_info.new_digit == 0U) {
         return BSP_BUSY;
     }
 
-    /*
-     * ¸´ÖÆ×îĞÂÊı×Ö½á¹û¡£
-     */
     *digit = s_k210_info.digit;
     *valid = s_k210_info.digit_valid;
     *confidence = s_k210_info.digit_confidence;
 
-    /*
-     * ±¾´Î¶ÁÈ¡Íê³ÉºóÇå³ıĞÂÊı¾İ±êÖ¾¡£
-     */
+    /* è¯»å–å®Œæˆåæ¸…é™¤æ–°æ•°æ®æ ‡å¿— */
     s_k210_info.new_digit = 0U;
 
-    /*
-     * ¼´Ê¹valid=0£¬Ò²ËµÃ÷³É¹¦¶ÁÈ¡µ½Ò»ÌõĞÂ½á¹û£¬
-     * Òò´ËÈÔÈ»·µ»ØBSP_OK¡£
-     */
+    return BSP_OK;
+}
+
+BSP_Status_t K210_Comm_GetNewSnapshot(
+    K210_DigitSnapshot_t *snapshot
+)
+{
+    if (snapshot == 0) {
+        return BSP_PARAM;
+    }
+
+    if (s_new_snapshot == 0U) {
+        return BSP_BUSY;
+    }
+
+    /* å¤åˆ¶æœ€æ–°å®Œæ•´å¿«ç…§ï¼Œå¹¶æ¸…é™¤æ–°å¿«ç…§æ ‡å¿— */
+    *snapshot = s_snapshot_latest;
+    s_new_snapshot = 0U;
+
     return BSP_OK;
 }
 

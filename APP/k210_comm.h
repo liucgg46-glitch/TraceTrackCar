@@ -10,25 +10,24 @@ extern "C" {
 
 /*
  * ============================================================================
- * K210 <-> STM32 Í¨ÓÃÍ¨ĞÅĞ­Òé
+ * K210ä¸STM32é€šä¿¡åè®®
  * ============================================================================
  *
- * STM32ÎïÀí½Ó¿Ú£º
- *   USART2_TX£ºPA2
- *   USART2_RX£ºPA3
+ * STM32æ¥å£ï¼š
+ *   USART2_TXï¼šPA2
+ *   USART2_RXï¼šPA3
  *
- * ½ÓÏß£º
- *   K210 TX  -> STM32 PA3
- *   K210 RX  <- STM32 PA2
- *   K210 GND -> STM32 GND
+ * å½“å‰ç¬¬ä¸€é˜¶æ®µæ¥çº¿ï¼š
+ *   K210 IO6ï¼ˆTXï¼‰ -> STM32 PA3ï¼ˆRXï¼‰
+ *   K210 GND       -> STM32 GND
  *
- * ´®¿Ú²ÎÊı£º
- *   115200
- *   8Î»Êı¾İÎ»
- *   ÎŞĞ£Ñé
- *   1Î»Í£Ö¹Î»
+ * ä¸²å£å‚æ•°ï¼š
+ *   æ³¢ç‰¹ç‡ï¼š115200
+ *   æ•°æ®ä½ï¼š8ä½
+ *   æ ¡éªŒä½ï¼šæ— 
+ *   åœæ­¢ä½ï¼š1ä½
  *
- * ¹Ì¶¨Ö¡¸ñÊ½£º
+ * å›ºå®šå¸§æ ¼å¼ï¼š
  *   [0] 0xAA
  *   [1] 0x55
  *   [2] CMD
@@ -37,159 +36,200 @@ extern "C" {
  *   [5] DATA3
  *   [6] CHECKSUM
  *
- * CHECKSUM£º
- *   Ç°6¸ö×Ö½ÚÀÛ¼ÓºÍµÄµÍ8Î»¡£
+ * CHECKSUMä¸ºå‰6ä¸ªå­—èŠ‚ç´¯åŠ å’Œçš„ä½8ä½ã€‚
  */
 
-/* ¹Ì¶¨Ö¡¶¨Òå */
-#define K210_FRAME_HEAD1             0xAAU
-#define K210_FRAME_HEAD2             0x55U
-#define K210_FRAME_SIZE              7U
+/* å›ºå®šå¸§å‚æ•° */
+#define K210_FRAME_HEAD1              0xAAU
+#define K210_FRAME_HEAD2              0x55U
+#define K210_FRAME_SIZE               7U
 
 /*
- * K210 -> STM32ÃüÁî¡£
+ * K210å‘é€ç»™STM32çš„æ—§ç‰ˆå•ç»“æœå‘½ä»¤ã€‚
+ * å½“å‰å¤šæ•°å­—è¯†åˆ«ä¸»è¦ä½¿ç”¨åé¢çš„å¿«ç…§å‘½ä»¤ã€‚
  */
-#define K210_CMD_DIGIT_RESULT        0x01U
-#define K210_CMD_TARGET_POINT        0x02U
-#define K210_CMD_LASER_POINT         0x03U
-#define K210_CMD_TARGET_STATE        0x04U
-#define K210_CMD_HEARTBEAT           0x05U
+#define K210_CMD_DIGIT_RESULT         0x01U
+#define K210_CMD_TARGET_POINT         0x02U
+#define K210_CMD_LASER_POINT          0x03U
+#define K210_CMD_TARGET_STATE         0x04U
+#define K210_CMD_HEARTBEAT            0x05U
 
 /*
- * STM32 -> K210ÃüÁî¡£
+ * K210å‘é€ç»™STM32çš„å¯å˜æ•°é‡æ•°å­—å¿«ç…§å‘½ä»¤ã€‚
+ *
+ * ä¸€æ¬¡å®Œæ•´ç»“æœç”±ä»¥ä¸‹å¸§ç»„æˆï¼š
+ *   1ä¸ªBEGINå¸§
+ *   0ä¸ªæˆ–å¤šä¸ªITEMå¸§
+ *   1ä¸ªENDå¸§
  */
-#define K210_CMD_START_DETECT        0x81U
-#define K210_CMD_STOP_DETECT         0x82U
-#define K210_CMD_SET_MODE            0x83U
+#define K210_CMD_DIGIT_SNAPSHOT_BEGIN 0x10U
+#define K210_CMD_DIGIT_SNAPSHOT_ITEM  0x11U
+#define K210_CMD_DIGIT_SNAPSHOT_END   0x12U
 
-/* Ä¿±ê×´Ì¬ */
-#define K210_TARGET_LOST             0U
-#define K210_TARGET_VALID            1U
+/* ä¸€æ¬¡æ•°å­—è¯†åˆ«å¿«ç…§çš„çŠ¶æ€ */
+#define K210_RESULT_EMPTY             0U
+#define K210_RESULT_NORMAL            1U
+#define K210_RESULT_AMBIGUOUS         2U
+#define K210_RESULT_OVERFLOW          3U
 
 /*
- * K210Í¨ĞÅ×´Ì¬ºÍÊı¾İ»º´æ¡£
+ * STM32ç«¯ä¸€æ¬¡æœ€å¤šç¼“å­˜8ä¸ªæ•°å­—ã€‚
+ * è¿™åªæ˜¯é€šä¿¡ç¼“å­˜å®¹é‡ï¼Œä¸è¡¨ç¤ºå®é™…ç”»é¢å¿…é¡»å­˜åœ¨8ä¸ªæ•°å­—ã€‚
+ */
+#define K210_MAX_DIGITS               8U
+
+/* STM32å‘é€ç»™K210çš„æ§åˆ¶å‘½ä»¤ï¼Œç¬¬ä¸€é˜¶æ®µæš‚æ—¶ä¸ç”¨ */
+#define K210_CMD_START_DETECT         0x81U
+#define K210_CMD_STOP_DETECT          0x82U
+#define K210_CMD_SET_MODE             0x83U
+
+/* ç›®æ ‡çŠ¶æ€ */
+#define K210_TARGET_LOST              0U
+#define K210_TARGET_VALID             1U
+
+/*
+ * ä¸€ä¸ªæ•°å­—çš„è¯†åˆ«ç»“æœã€‚
+ *
+ * digitï¼š
+ *   æ•°å­—ç±»åˆ«ï¼Œå½“å‰æœ‰æ•ˆèŒƒå›´ä¸º1ï½8ã€‚
+ *
+ * confidenceï¼š
+ *   ç½®ä¿¡åº¦ï¼ŒèŒƒå›´ä¸º0ï½100ã€‚
+ *
+ * center_xï¼š
+ *   æ•°å­—æ¡†ä¸­å¿ƒç‚¹åœ¨QVGAç”»é¢ä¸­çš„æ¨ªåæ ‡ï¼ŒèŒƒå›´ä¸º0ï½319ã€‚
  */
 typedef struct {
+    uint8_t digit;
+    uint8_t confidence;
+    uint16_t center_x;
+} K210_DigitItem_t;
+
+/*
+ * ä¸€æ¬¡å®Œæ•´çš„å¤šæ•°å­—è¯†åˆ«å¿«ç…§ã€‚
+ *
+ * sequenceï¼š
+ *   å¿«ç…§åºå·ï¼Œç”¨äºåˆ¤æ–­BEGINå’ŒENDæ˜¯å¦å±äºåŒä¸€æ¬¡ç»“æœã€‚
+ *
+ * statusï¼š
+ *   K210_RESULT_EMPTYã€NORMALã€AMBIGUOUSæˆ–OVERFLOWã€‚
+ *
+ * countï¼š
+ *   æœ¬æ¬¡å¿«ç…§åŒ…å«çš„æœ‰æ•ˆæ•°å­—æ•°é‡ã€‚
+ *
+ * itemsï¼š
+ *   æŒ‰ç”»é¢æ¨ªåæ ‡ä»å·¦åˆ°å³æ’åˆ—çš„æ•°å­—ç»“æœã€‚
+ */
+typedef struct {
+    uint8_t sequence;
+    uint8_t status;
+    uint8_t count;
+    K210_DigitItem_t items[K210_MAX_DIGITS];
+} K210_DigitSnapshot_t;
+
+/* K210é€šä¿¡çŠ¶æ€å’Œè¯Šæ–­ä¿¡æ¯ */
+typedef struct {
     /*
-     * ÔÚÏß×´Ì¬£º
-     *   0£ºÀëÏß£»
-     *   1£ºÔÚÏß¡£
+     * åœ¨çº¿çŠ¶æ€ï¼š
+     *   0ï¼šç¦»çº¿
+     *   1ï¼šåœ¨çº¿
      */
     uint8_t online;
 
-    /*
-     * Êı×ÖÊ¶±ğ½á¹û¡£
-     */
+    /* å…¼å®¹æ—§ç‰ˆå•æ•°å­—åè®®çš„ç»“æœ */
     uint8_t digit;
     uint8_t digit_valid;
     uint8_t digit_confidence;
     uint8_t new_digit;
 
-    /*
-     * Ä¿±êÖĞĞÄ×ø±ê¡£
-     */
+    /* å…¼å®¹ç›®æ ‡ä¸­å¿ƒç‚¹åè®®çš„ç»“æœ */
     uint16_t target_x;
     uint16_t target_y;
     uint8_t target_valid;
     uint8_t new_target;
 
-    /*
-     * ¼¤¹âµã×ø±ê¡£
-     */
+    /* å…¼å®¹æ¿€å…‰ç‚¹åè®®çš„ç»“æœ */
     uint16_t laser_x;
     uint16_t laser_y;
     uint8_t laser_valid;
     uint8_t new_laser;
 
-    /*
-     * Í¨ĞÅÍ³¼ÆĞÅÏ¢¡£
-     */
+    /* é€šä¿¡ç»Ÿè®¡ä¿¡æ¯ */
     uint32_t valid_frame_count;
     uint32_t checksum_error_count;
     uint32_t format_error_count;
+    uint32_t snapshot_error_count;
+    uint32_t snapshot_count;
+    uint32_t snapshot_overwrite_count;
     uint32_t last_rx_ms;
 } K210_Comm_Info_t;
 
 /*
- * ³õÊ¼»¯K210Ğ­Òé²ã¡£
+ * åˆå§‹åŒ–K210åè®®å±‚ã€‚
  *
- * USART2µ×²ãÒÑ¾­ÓÉBSP_InitAll()Í³Ò»³õÊ¼»¯£¬
- * ±¾º¯Êı²»»áÖØ¸´³õÊ¼»¯USART2Ó²¼ş¡£
+ * USART2ç¡¬ä»¶ç”±BSP_InitAll()ç»Ÿä¸€åˆå§‹åŒ–ï¼Œ
+ * æœ¬å‡½æ•°åªåˆå§‹åŒ–åè®®çŠ¶æ€æœºå’Œæ•°æ®ç¼“å­˜ã€‚
  */
 void K210_Comm_Init(void);
 
 /*
- * ÖÜÆÚ½ÓÊÕÈÎÎñ¡£
+ * K210é€šä¿¡å‘¨æœŸä»»åŠ¡ã€‚
  *
- * ½¨ÒéÈÎÎñÖÜÆÚ£º
- *   5ms
- *
- * ÈÎÎñ±í£º
+ * å»ºè®®åœ¨APP/app_task_config.hä¸­ä»¥5mså‘¨æœŸæ³¨å†Œï¼š
  *   { K210_Comm_Update, 5U, 0U },
  */
 void K210_Comm_Update(void);
 
-/*
- * »ñÈ¡ÍêÕûÍ¨ĞÅ×´Ì¬¿ìÕÕ¡£
- */
+/* è·å–å½“å‰å®Œæ•´çš„é€šä¿¡çŠ¶æ€ */
 BSP_Status_t K210_Comm_GetInfo(K210_Comm_Info_t *info);
 
 /*
- * ¶ÁÈ¡ĞÂµÄÊı×ÖÊ¶±ğ½á¹û¡£
+ * è·å–ä¸€ä¸ªæ–°çš„æ—§ç‰ˆå•æ•°å­—ç»“æœã€‚
  *
- * ·µ»ØÖµ£º
- *   BSP_OK£º
- *     ´æÔÚÒ»ÌõĞÂµÄÊı×ÖÊ¶±ğ½á¹û£»
- *
- *   BSP_BUSY£º
- *     µ±Ç°Ã»ÓĞĞÂµÄÊı×Ö½á¹û£»
- *
- *   BSP_PARAM£º
- *     ÊäÈëÖ¸ÕëÎª¿Õ¡£
- *
- * ×¢Òâ£º
- *   valid=0±íÊ¾K210·¢ËÍÁËÒ»Ìõ¡°Ê¶±ğÎŞĞ§¡±½á¹û£¬
- *   µ«Í¨ĞÅ±¾ÉíÈÔÈ»Õı³££¬ËùÒÔº¯ÊıÈÔ·µ»ØBSP_OK¡£
+ * è¿”å›å€¼ï¼š
+ *   BSP_OKï¼šè¯»å–åˆ°æ–°ç»“æœ
+ *   BSP_BUSYï¼šæ²¡æœ‰æ–°ç»“æœ
+ *   BSP_PARAMï¼šä¼ å…¥ç©ºæŒ‡é’ˆ
  */
 BSP_Status_t K210_Comm_GetNewDigit(uint8_t *digit,
                                    uint8_t *valid,
                                    uint8_t *confidence);
 
 /*
- * ¶ÁÈ¡ĞÂµÄÄ¿±êÖĞĞÄ×ø±ê¡£
+ * è·å–ä¸€ä¸ªå·²ç»å®Œæ•´æ¥æ”¶å¹¶æäº¤çš„å¤šæ•°å­—å¿«ç…§ã€‚
+ *
+ * è¿”å›å€¼ï¼š
+ *   BSP_OKï¼šæˆåŠŸè¯»å–åˆ°ä¸€ä¸ªæ–°å¿«ç…§
+ *   BSP_BUSYï¼šå½“å‰æ²¡æœ‰æ–°å¿«ç…§
+ *   BSP_PARAMï¼šä¼ å…¥ç©ºæŒ‡é’ˆ
  */
+BSP_Status_t K210_Comm_GetNewSnapshot(
+    K210_DigitSnapshot_t *snapshot
+);
+
+/* è·å–æ–°çš„ç›®æ ‡ä¸­å¿ƒåæ ‡ */
 BSP_Status_t K210_Comm_GetNewTarget(uint16_t *x,
                                     uint16_t *y,
                                     uint8_t *valid);
 
-/*
- * ¶ÁÈ¡ĞÂµÄ¼¤¹âµã×ø±ê¡£
- */
+/* è·å–æ–°çš„æ¿€å…‰ç‚¹åæ ‡ */
 BSP_Status_t K210_Comm_GetNewLaser(uint16_t *x,
                                    uint16_t *y,
                                    uint8_t *valid);
 
-/*
- * STM32ÏòK210·¢ËÍÒ»¸öÍ¨ÓÃÊı¾İÖ¡¡£
- */
+/* STM32é€šè¿‡USART2å‘K210å‘é€ä¸€ä¸ªå›ºå®š7å­—èŠ‚å¸§ */
 BSP_Status_t K210_Comm_SendFrame(uint8_t command,
                                  uint8_t data1,
                                  uint8_t data2,
                                  uint8_t data3);
 
-/*
- * ÇëÇóK210¿ªÊ¼Ê¶±ğ¡£
- */
+/* è¯·æ±‚K210å¼€å§‹è¯†åˆ«ï¼Œç¬¬ä¸€é˜¶æ®µæš‚æ—¶ä¸ç”¨ */
 BSP_Status_t K210_Comm_StartDetect(uint8_t mode);
 
-/*
- * ÇëÇóK210Í£Ö¹Ê¶±ğ¡£
- */
+/* è¯·æ±‚K210åœæ­¢è¯†åˆ«ï¼Œç¬¬ä¸€é˜¶æ®µæš‚æ—¶ä¸ç”¨ */
 BSP_Status_t K210_Comm_StopDetect(void);
 
-/*
- * ÇëÇóK210ÇĞ»»ÊÓ¾õÄ£Ê½¡£
- */
+/* è¯·æ±‚K210åˆ‡æ¢è¯†åˆ«æ¨¡å¼ï¼Œç¬¬ä¸€é˜¶æ®µæš‚æ—¶ä¸ç”¨ */
 BSP_Status_t K210_Comm_SetMode(uint8_t mode);
 
 #ifdef __cplusplus
