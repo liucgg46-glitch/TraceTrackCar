@@ -27,6 +27,8 @@ extern "C" {
  *   CH16 ：PE5，ICM-20948 SPI2 独立片选 CS
  *   CH17 ：PG2，激光使能
  *   CH18 ：PE6，E220 AUX 输入（仅无线 USART1 模式启用）
+ *   CH19~CH20：PG3/PG4，HX711 DOUT/PD_SCK
+ *   CH21~CH22：PG5/PG6，红灯/绿灯控制输出
  *
  * 电机方向脚规划：
  *   M1_IN1 = PD0, M1_IN2 = PD1
@@ -260,6 +262,31 @@ extern "C" {
 #define BSP_GPIO_CH20_SPEED          GPIO_Speed_50MHz
 #define BSP_GPIO_CH20_INIT_LEVEL     0U
 
+/* CH21~CH22：送药小车红绿状态灯控制。
+ * PG5/PG6 在当前源码中未被其他外设占用；开发板实际引出位置仍需按板卡确认。
+ * 默认按高电平点亮、低电平熄灭接线，上电时两灯均保持熄灭。
+ * 若实物模块为低电平有效，应修改对应 ACTIVE_LEVEL，初始化电平会自动取反。 */
+#define BSP_GPIO_STATUS_RED_ACTIVE_LEVEL     1U
+#define BSP_GPIO_STATUS_GREEN_ACTIVE_LEVEL   1U
+
+#define BSP_GPIO_CH21_ENABLE         1
+#define BSP_GPIO_CH21_PORT           GPIOG
+#define BSP_GPIO_CH21_PIN            GPIO_Pin_5
+#define BSP_GPIO_CH21_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH21_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH21_PUPD           GPIO_PuPd_DOWN
+#define BSP_GPIO_CH21_SPEED          GPIO_Speed_2MHz
+#define BSP_GPIO_CH21_INIT_LEVEL     ((BSP_GPIO_STATUS_RED_ACTIVE_LEVEL != 0U) ? 0U : 1U)
+
+#define BSP_GPIO_CH22_ENABLE         1
+#define BSP_GPIO_CH22_PORT           GPIOG
+#define BSP_GPIO_CH22_PIN            GPIO_Pin_6
+#define BSP_GPIO_CH22_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH22_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH22_PUPD           GPIO_PuPd_DOWN
+#define BSP_GPIO_CH22_SPEED          GPIO_Speed_2MHz
+#define BSP_GPIO_CH22_INIT_LEVEL     ((BSP_GPIO_STATUS_GREEN_ACTIVE_LEVEL != 0U) ? 0U : 1U)
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -322,6 +349,12 @@ typedef enum {
 #if BSP_GPIO_CH20_ENABLE
     BSP_GPIO_CH20,
 #endif
+#if BSP_GPIO_CH21_ENABLE
+    BSP_GPIO_CH21,
+#endif
+#if BSP_GPIO_CH22_ENABLE
+    BSP_GPIO_CH22,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -348,6 +381,10 @@ typedef enum {
 /* HX711 数据输出与时钟/掉电控制脚。 */
 #define BSP_GPIO_HX711_DOUT    BSP_GPIO_CH19
 #define BSP_GPIO_HX711_PD_SCK  BSP_GPIO_CH20
+
+/* 送药小车红绿状态灯控制脚。 */
+#define BSP_GPIO_STATUS_RED     BSP_GPIO_CH21
+#define BSP_GPIO_STATUS_GREEN   BSP_GPIO_CH22
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

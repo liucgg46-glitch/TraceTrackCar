@@ -10,6 +10,7 @@
 #include "drv_e220.h"
 #include "drv_servo.h"
 #include "drv_laser.h"
+#include "drv_status_light.h"
 
 void Driver_Init(void)
 {
@@ -37,9 +38,10 @@ void Driver_Init(void)
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();
 
-    /* 舵机和激光只在 Driver 层统一初始化，APP 不重复操作底层资源。 */
+    /* 舵机、激光和红绿状态灯只在 Driver 层统一初始化。 */
     Drv_Laser_Init();
     Drv_Servo_Init();
+    Drv_StatusLight_Init();
 }
 
 void Driver_Task(void)

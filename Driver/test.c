@@ -29,6 +29,7 @@
 #include "drv_oled_i2c.h"
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
+#include "drv_status_light.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -184,6 +185,30 @@ void Test_GPIO_Toggle(void)
 
     if (BSP_TimeElapsed(&last, 500U)) {
         BSP_GPIO_Toggle(BSP_GPIO_CH1);
+    }
+}
+
+/*
+ * 红绿状态灯非阻塞测试：红灯、绿灯、全部熄灭各保持 1 秒并循环。
+ * 建议以 10 ms 周期注册：{ Test_StatusLight_Update, 10U, 0U }。
+ */
+void Test_StatusLight_Update(void)
+{
+    static uint32_t last_switch_ms = 0U;
+    static uint8_t phase = 0U;
+
+    if (BSP_TimeElapsed(&last_switch_ms, 1000U) == 0U) {
+        return;
+    }
+
+    phase++;
+    if (phase == 1U) {
+        Drv_StatusLight_SetRed();
+    } else if (phase == 2U) {
+        Drv_StatusLight_SetGreen();
+    } else {
+        Drv_StatusLight_Off();
+        phase = 0U;
     }
 }
 

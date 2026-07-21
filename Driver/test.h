@@ -2,6 +2,7 @@
 #define __TEST_H
 
 void Test_GPIO_Toggle(void); //{ Test_GPIO_Toggle,       10U,   0U },  /* LED闪烁任务，判断程序是否正常运行 */
+void Test_StatusLight_Update(void); /* { Test_StatusLight_Update, 10U, 0U }，红灯、绿灯、熄灭循环测试 */
 void Test_PWM_Ramp(void);    //{ Test_PWM_Ramp, 10U, 0U },
 void Test_Encoder_Log(void); //{ Test_Encoder_Log,   200U, 0U },
 
