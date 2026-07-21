@@ -196,13 +196,21 @@ BSP_Status_t K210_Comm_GetNewDigit(uint8_t *digit,
                                    uint8_t *confidence);
 
 /*
- * 获取一个已经完整接收并提交的多数字快照。
+ * 读取当前有效数字。
+ *
+ * digits至少提供K210_MAX_DIGITS个uint8_t空间。
+ * 识别结果按照画面中的左右顺序写入digits。
+ * 本接口不消耗测试任务使用的新快照标志，可以和通信日志同时调用。
  *
  * 返回值：
- *   BSP_OK：成功读取到一个新快照
- *   BSP_BUSY：当前没有新快照
- *   BSP_PARAM：传入空指针
+ *   1～K210_MAX_DIGITS：当前有效数字个数
+ *   0：K210离线、当前没有正常数字结果，或参数无效
  */
+uint8_t K210_Comm_ReadDigits(
+    uint8_t digits[K210_MAX_DIGITS]
+);
+
+/* 获取完整快照，供通信测试和诊断使用 */
 BSP_Status_t K210_Comm_GetNewSnapshot(
     K210_DigitSnapshot_t *snapshot
 );

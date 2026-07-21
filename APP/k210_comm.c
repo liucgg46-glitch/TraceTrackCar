@@ -582,6 +582,41 @@ BSP_Status_t K210_Comm_GetNewSnapshot(
     return BSP_OK;
 }
 
+uint8_t K210_Comm_ReadDigits(
+    uint8_t digits[K210_MAX_DIGITS]
+)
+{
+    K210_DigitSnapshot_t snapshot;
+    uint8_t i;
+
+    if (digits == 0) {
+        return 0U;
+    }
+
+    /* 没有有效结果时，调用者不会残留上一次读取的数字 */
+    memset(digits, 0, K210_MAX_DIGITS * sizeof(digits[0]));
+
+    if (s_k210_info.online == 0U) {
+        return 0U;
+    }
+
+    /* 直接读取最新结果，不消耗测试任务使用的新快照标志 */
+    snapshot = s_snapshot_latest;
+
+    if ((snapshot.status != K210_RESULT_NORMAL) ||
+        (snapshot.count == 0U) ||
+        (snapshot.count > K210_MAX_DIGITS)) {
+        return 0U;
+    }
+
+    /* 只向业务层返回从左到右排列的数字值 */
+    for (i = 0U; i < snapshot.count; i++) {
+        digits[i] = snapshot.items[i].digit;
+    }
+
+    return snapshot.count;
+}
+
 BSP_Status_t K210_Comm_GetNewTarget(uint16_t *x,
                                     uint16_t *y,
                                     uint8_t *valid)
