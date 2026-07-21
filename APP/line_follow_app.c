@@ -9,6 +9,7 @@
 
 static LineFollow_Info_t s_lf;
 static uint8_t s_route_action_active;
+static uint8_t s_auto_start_pending;
 
 static void LineFollow_ClearOutput(void)
 {
@@ -90,6 +91,7 @@ void LineFollow_Init(void)
 
     LineDetect_Init();
     RouteManager_Init();
+		
 }
 
 BSP_Status_t LineFollow_Start(void)
@@ -135,6 +137,14 @@ void LineFollow_Update(void)
         }
         return;
     }
+				/* 等灰度传感器完成第一次采样后，只自动启动一次 */
+		if (s_auto_start_pending != 0U) {
+				if (LineFollow_Start() == BSP_OK) {
+						s_auto_start_pending = 0U;
+				} else {
+						return;
+				}
+		}
 
     (void)Drv_GraySensor_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
     LineDetect_Update(s_lf.raw);

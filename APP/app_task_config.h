@@ -37,11 +37,18 @@ extern "C" {
 Task_t task_list[] = {                                                              \
     { Test_GPIO_Toggle,        10U, 0U },                \
     { AppTask_BSP_Background,   1U, 0U },                \
-    { K210_Comm_Update,         5U, 0U },                \
-    { Test_K210_CommUpdate,    10U, 0U },                \
-};                                                       \
-const uint8_t TASK_NUM =                                 \
-    (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
+		 { Sensor_Update,             1U, 0U },                                          \
+    { Encoder_Update,           10U, 0U },                                          \
+    { LineTrack_Update,         10U, 0U },                                          \
+    { Chassis_Update,           10U, 0U },                                          \
+};                                                                                  \
+const uint8_t TASK_NUM =                                                            \
+    (uint8_t)(sizeof(task_list) / sizeof(task_list[0]));
+//    { K210_Comm_Update,         5U, 0U },                \
+//    { Test_K210_CommUpdate,    10U, 0U },                \
+//};                                                       \
+//const uint8_t TASK_NUM =                                 \
+//    (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 
 //    { Test_GPIO_Toggle,        10U, 0U },                   \
 //    { AppTask_BSP_Background,   1U, 0U },                   \
