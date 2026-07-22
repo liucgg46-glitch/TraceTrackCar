@@ -617,9 +617,9 @@ BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
         s_info.mag_used = 0U;
         s_mag_good_samples = 0U;
     }
-    if (ATTITUDE_MAG_YAW_CORRECTION_ENABLE == 0U) {
-        s_info.mag_used = 0U;
-    }
+#if (ATTITUDE_MAG_YAW_CORRECTION_ENABLE == 0U)
+    s_info.mag_used = 0U;
+#endif
 
 #if (ATTITUDE_SEPARATE_YAW_ENABLE != 0U)
     if ((ATTITUDE_MAG_YAW_CORRECTION_ENABLE != 0U) &&
