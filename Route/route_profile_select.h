@@ -14,6 +14,11 @@ extern "C" {
  */
 void RouteProfile_Init(void);
 void RouteProfile_Reset(void);
+BSP_Status_t RouteProfile_ConfigureMission(
+    uint8_t target_room,
+    Route_MissionDirection_t direction);
+BSP_Status_t RouteProfile_SubmitVisualDecision(
+    Route_VisualDirection_t direction);
 Route_ControlMode_t RouteProfile_Update(
     const LineDetect_Result_t *line,
     const Route_ActionFeedback_t *feedback,

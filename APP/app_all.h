@@ -7,7 +7,7 @@ extern "C" {
 
 /*
  * App/控制层统一初始化入口。
- * 当前包含：Chassis、Odometer、AngleControl、Motion。
+ * 当前包含底盘、里程、姿态、动作、传感器、循迹、显示、K210和送药状态机。
  */
 void App_Init(void);
 

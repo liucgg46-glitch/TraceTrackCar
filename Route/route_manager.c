@@ -21,6 +21,23 @@ void RouteManager_Reset(void)
     s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
 
+BSP_Status_t RouteManager_ConfigureMission(
+    uint8_t target_room,
+    Route_MissionDirection_t direction)
+{
+    if (s_control_mode != ROUTE_CONTROL_STOP) {
+        return BSP_BUSY;
+    }
+
+    return RouteProfile_ConfigureMission(target_room, direction);
+}
+
+BSP_Status_t RouteManager_SubmitVisualDecision(
+    Route_VisualDirection_t direction)
+{
+    return RouteProfile_SubmitVisualDecision(direction);
+}
+
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         const Route_ActionFeedback_t *feedback,
                                         LineTrack_Output_t *out,
@@ -62,6 +79,17 @@ BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
 
     info->profile = (uint8_t)ROUTE_PROFILE_SELECT;
     info->profile_state = profile_info.state;
+    info->configured = profile_info.configured;
+    info->target_room = profile_info.target_room;
+    info->direction = profile_info.direction;
+    info->room_approach_ready = profile_info.room_approach_ready;
+    info->visual_stage = profile_info.visual_stage;
+    info->visual_decision_ready = profile_info.visual_decision_ready;
+    info->waiting_visual = profile_info.waiting_visual;
+    info->intersection_count = profile_info.intersection_count;
+    info->decisions_completed = profile_info.decisions_completed;
+    info->arrived = profile_info.arrived;
+    info->error = profile_info.error;
     info->control_mode = s_control_mode;
     info->action_state = s_action_state;
     info->event_confirm_samples = profile_info.event_confirm_samples;

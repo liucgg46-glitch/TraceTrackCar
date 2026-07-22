@@ -35,18 +35,16 @@ extern "C" {
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
-	{ Test_GPIO_Toggle,        10U, 0U }, /* 运行指示灯 */   \
-	{ AppTask_BSP_Background,   1U, 0U },                   \
-	{ Key_Update,              10U, 0U },                   \
-	{ Sensor_Update,            1U, 0U },                   \
-	{ Encoder_Update,          10U, 0U },                   \
-	{ Test_RouteCmd_Update,    10U, 0U },                   \
-	{ LineTrack_Update,        10U, 0U },                   \
-	{ Motion_Update,           10U, 0U },                   \
-	{ Chassis_Update,          10U, 0U },                   \
-	{ Test_RouteLog,          200U, 0U },                   \
-	{ LCD_Update,              20U, 0U },                   \
-	{ OLED_Update,             20U, 0U },                   \
+    { Test_GPIO_Toggle,        10U, 0U }, /* 运行指示灯 */ \
+    { AppTask_BSP_Background,   1U, 0U }, /* BSP和Driver后台维护 */ \
+    { Sensor_Update,            1U, 0U }, /* HX711非阻塞采样 */ \
+    { K210_Comm_Update,         5U, 0U }, /* K210新快照解析 */ \
+    { Encoder_Update,          10U, 0U }, /* 轮速反馈与停车确认 */ \
+    { TaskFSM_Update,          10U, 0U }, /* 送药总状态机 */ \
+    { LineTrack_Update,        10U, 0U }, /* 去返程循迹与路线推进 */ \
+    { Motion_Update,           10U, 0U }, /* 路口定角转弯 */ \
+    { Chassis_Update,          10U, 0U }, /* 底盘速度闭环 */ \
+    { Test_TaskFSM_Log,       200U, 0U }, /* USART1联调日志 */ \
 };                                                       \
 const uint8_t TASK_NUM =                                 \
     (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))

@@ -1,6 +1,7 @@
 
 #include "line_follow_app.h"
 #include "drv_gray_sensor.h"
+#include "drv_encoder.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
@@ -153,6 +154,9 @@ void LineFollow_Update(void)
      * 后续赛道方案也从这里统一接管，不直接操作底盘或 Motion。
      */
     feedback.state = LineFollow_GetRouteActionState();
+    feedback.distance_mm =
+        (Drv_Encoder_GetLeftTotalMm() +
+         Drv_Encoder_GetRightTotalMm()) / 2;
     control = RouteManager_Update(res,
                                   &feedback,
                                   &s_lf.output,

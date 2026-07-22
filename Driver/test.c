@@ -30,6 +30,7 @@
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
 #include "drv_status_light.h"
+#include "task_fsm.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -1771,6 +1772,80 @@ void Test_HX711_Update(void)
     if ((uint32_t)(BSP_GET_TICK() - last_print_ms) >= 200U) {
         last_print_ms = BSP_GET_TICK();
         Test_HX711_Print();
+    }
+}
+
+/* 近端送药状态机联调日志，状态数字与task_fsm.h中的枚举保持一致。 */
+void Test_TaskFSM_Log(void)
+{
+    TaskFSM_Info_t info;
+    long weight_tenth_g;
+    char weight_text[24];
+    const char *display_weight;
+    char line[360];
+    int length;
+
+    if (TaskFSM_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+    weight_tenth_g = (long)((info.weight_g * 10.0f) +
+                            ((info.weight_g >= 0.0f) ? 0.5f : -0.5f));
+    Test_FormatFixed(weight_text,
+                     sizeof(weight_text),
+                     weight_tenth_g,
+                     10UL,
+                     1U);
+    display_weight = (weight_text[0] == '+') ? &weight_text[1] : weight_text;
+
+    length = snprintf(
+        line,
+        sizeof(line),
+        "TASK st=%u fault=%u target=%u lock=%u obs=%u cf=%u side=%u/x%u vf=%u "
+        "k210=%u weight=%s valid=%u load=%u empty=%u "
+        "start=%u lf=%u gray=%u owner=%u cmode=%u cfault=%u "
+        "route=%u approach=%u vision=%u/%u wait=%u cross=%u decisions=%u "
+        "arrived=%u stop=%u light=%u "
+        "elapsed=%lu trans=%lu\r\n",
+        (unsigned int)info.state,
+        (unsigned int)info.fault,
+        (unsigned int)info.target_room,
+        (unsigned int)info.target_locked,
+        (unsigned int)info.observed_digit,
+        (unsigned int)info.target_confirm_frames,
+        (unsigned int)info.vision_observed_side,
+        (unsigned int)info.vision_center_x,
+        (unsigned int)info.vision_confirm_frames,
+        (unsigned int)info.k210_online,
+        display_weight,
+        (unsigned int)info.weight_valid,
+        (unsigned int)info.load_state,
+        (unsigned int)info.empty_seen,
+        (unsigned int)info.route_start_status,
+        (unsigned int)LineFollow_GetState(),
+        (unsigned int)Drv_GraySensor_IsOnline(),
+        (unsigned int)Chassis_GetOwner(),
+        (unsigned int)Chassis_GetMode(),
+        (unsigned int)Chassis_GetFault(),
+        (unsigned int)info.route_state,
+        (unsigned int)info.route_approach_ready,
+        (unsigned int)info.route_visual_stage,
+        (unsigned int)info.route_visual_ready,
+        (unsigned int)info.route_waiting_visual,
+        (unsigned int)info.route_intersections,
+        (unsigned int)info.route_decisions,
+        (unsigned int)info.route_arrived,
+        (unsigned int)info.stop_confirmed,
+        (unsigned int)info.status_light,
+        (unsigned long)info.state_elapsed_ms,
+        (unsigned long)info.transition_count
+    );
+
+    if ((length > 0) && (length < (int)sizeof(line))) {
+        (void)BSP_UART_WriteFrame(
+            UART_PORT1,
+            (const uint8_t *)line,
+            (uint16_t)length
+        );
     }
 }
 

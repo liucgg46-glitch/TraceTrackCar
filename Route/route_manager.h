@@ -10,6 +10,17 @@ extern "C" {
 typedef struct {
     uint8_t profile;
     uint8_t profile_state;
+    uint8_t configured;
+    uint8_t target_room;
+    uint8_t direction;
+    uint8_t room_approach_ready;
+    uint8_t visual_stage;
+    uint8_t visual_decision_ready;
+    uint8_t waiting_visual;
+    uint8_t intersection_count;
+    uint8_t decisions_completed;
+    uint8_t arrived;
+    uint8_t error;
     Route_ControlMode_t control_mode;
     Route_ActionState_t action_state;
     uint16_t event_confirm_samples;
@@ -26,6 +37,11 @@ typedef struct {
 
 void RouteManager_Init(void);
 void RouteManager_Reset(void);
+BSP_Status_t RouteManager_ConfigureMission(
+    uint8_t target_room,
+    Route_MissionDirection_t direction);
+BSP_Status_t RouteManager_SubmitVisualDecision(
+    Route_VisualDirection_t direction);
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         const Route_ActionFeedback_t *feedback,
                                         LineTrack_Output_t *out,

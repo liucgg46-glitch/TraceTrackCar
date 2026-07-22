@@ -9,6 +9,11 @@ extern "C" {
 
 void BasicRoute_Init(void);
 void BasicRoute_Reset(void);
+BSP_Status_t BasicRoute_ConfigureMission(
+    uint8_t target_room,
+    Route_MissionDirection_t direction);
+BSP_Status_t BasicRoute_SubmitVisualDecision(
+    Route_VisualDirection_t direction);
 Route_ControlMode_t BasicRoute_Update(const LineDetect_Result_t *line,
                                       const Route_ActionFeedback_t *feedback,
                                       LineTrack_Output_t *out,

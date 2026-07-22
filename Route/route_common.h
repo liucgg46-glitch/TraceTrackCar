@@ -31,8 +31,23 @@ typedef enum {
     ROUTE_ACTION_STATE_ERROR
 } Route_ActionState_t;
 
+/* 去程和返程共用同一条赛道描述，由任务层在启动循迹前配置。 */
+typedef enum {
+    ROUTE_MISSION_OUTBOUND = 0,
+    ROUTE_MISSION_RETURN
+} Route_MissionDirection_t;
+
+/* 视觉只向路线层提交相对车头的左右方向，不把K210协议耦合进路线模块。 */
+typedef enum {
+    ROUTE_VISUAL_NONE = 0,
+    ROUTE_VISUAL_LEFT,
+    ROUTE_VISUAL_RIGHT,
+    ROUTE_VISUAL_STRAIGHT
+} Route_VisualDirection_t;
+
 typedef struct {
     Route_ActionState_t state;
+    int32_t distance_mm;
 } Route_ActionFeedback_t;
 
 typedef struct {
@@ -45,6 +60,17 @@ typedef struct {
 /* 各赛道方案向 RouteManager 提供的统一状态快照。 */
 typedef struct {
     uint8_t state;
+    uint8_t configured;
+    uint8_t target_room;
+    uint8_t direction;
+    uint8_t room_approach_ready;
+    uint8_t visual_stage;
+    uint8_t visual_decision_ready;
+    uint8_t waiting_visual;
+    uint8_t intersection_count;
+    uint8_t decisions_completed;
+    uint8_t arrived;
+    uint8_t error;
     uint16_t event_confirm_samples;
     uint32_t running_ms;
     uint32_t transition_count;

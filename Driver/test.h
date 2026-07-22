@@ -44,6 +44,7 @@ void Test_LineCmd_Log(void);//测试巡线函数日志（包含灰度数据和�
 
 void Test_VL53L1X_Update(void);//VL53L1X日志测试 { Test_VL53L1X_Update, 200U, 0U },
 void Test_HX711_Update(void);//HX711克重输出 { Test_HX711_Update, 20U, 0U }，内部每200ms打印
+void Test_TaskFSM_Log(void); /* 近端送药状态机联调日志 { Test_TaskFSM_Log, 200U, 0U } */
 
 void Test_ICM20948_Update(void);//易读IMU日志 { Test_ICM20948_Update, 500U, 0U },
 void Test_ICM20948_Mag_Update(void);//AK09916专项测试 { Test_ICM20948_Mag_Update, 500U, 0U },

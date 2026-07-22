@@ -1168,6 +1168,16 @@
               <FileType>5</FileType>
               <FilePath>.\APP\gimbal_app.h</FilePath>
             </File>
+            <File>
+              <FileName>task_fsm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\task_fsm.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_fsm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\task_fsm.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1177,6 +1187,11 @@
               <FileName>route_common.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Route\route_common.h</FilePath>
+            </File>
+            <File>
+              <FileName>route_common.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Route\route_common.c</FilePath>
             </File>
             <File>
               <FileName>route_config.h</FileName>
@@ -1212,6 +1227,16 @@
               <FileName>route_profile_basic.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Route\route_profile_basic.h</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_medicine.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Route\route_profile_medicine.c</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_medicine.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Route\route_profile_medicine.h</FilePath>
             </File>
           </Files>
         </Group>

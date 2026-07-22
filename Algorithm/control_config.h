@@ -103,10 +103,10 @@
 #error "CONTROL_LINE_DIRECTION_REVERSE must be 0U or 1U"
 #endif
 
-#define CONTROL_LINE_BASE_SPEED_CPS               2000    /* 中线正常循迹速度 */
-#define CONTROL_LINE_CROSS_SPEED_CPS              1500    /* 十字/全黑区域低速直行 */
-#define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
-#define CONTROL_LINE_TURN_MAX_CPS                 400     /* 最大转向量；实际还会限制到不让内侧轮反转 */
+#define CONTROL_LINE_BASE_SPEED_CPS               2500    /* 中线正常循迹速度 */
+#define CONTROL_LINE_CROSS_SPEED_CPS              2000    /* 十字/全黑区域低速直行 */
+#define CONTROL_LINE_MIN_TRACK_SPEED_CPS          2000    /* 大偏差时最低直行速度 */
+#define CONTROL_LINE_TURN_MAX_CPS                 500     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
 #define CONTROL_LINE_KP                           0.3f    /* 比例增大：转弯更积极；过大易摆动 */
 #define CONTROL_LINE_KD                           0.2f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
