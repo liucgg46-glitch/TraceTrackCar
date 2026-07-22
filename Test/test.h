@@ -1,6 +1,10 @@
 #ifndef __TEST_H
 #define __TEST_H
 
+#include "test_config.h"
+
+#if (PROJECT_TEST_TASKS_ENABLE != 0U)
+
 void Test_GPIO_Toggle(void); //{ Test_GPIO_Toggle,       10U,   0U },  /* LED闪烁任务，判断程序是否正常运行 */
 void Test_StatusLight_Update(void); /* { Test_StatusLight_Update, 10U, 0U }，红灯、绿灯、熄灭循环测试 */
 void Test_PWM_Ramp(void);    //{ Test_PWM_Ramp, 10U, 0U },
@@ -31,7 +35,6 @@ void Test_ChassisCmd_Log(void);//打印日志   { Test_ChassisCmd_Log,   200U, 0
 
 void Test_DrvEncoder_Log(void);//测试编码器方向    { Test_DrvEncoder_Log,   200U, 0U },
 
-static void Test_CountPerRev_Print(void);//测试脉冲
 void Test_CountPerRev_Update(void);// 测试一圈的脉冲数{ Test_CountPerRev_Update,10U,  0U },
 
 void Test_MotionCmd_Update(void);//五按键动作库测试；必须先注册 { Key_Update,10U,0U }
@@ -57,5 +60,7 @@ void Test_AsyncDisplay_Update(void);//
 void Test_K210_CommUpdate(void);//K210测试
 
 void Test_DriveProfile_Update(void);
+
+#endif /* PROJECT_TEST_TASKS_ENABLE */
 
 #endif

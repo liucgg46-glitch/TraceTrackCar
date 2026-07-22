@@ -184,6 +184,9 @@
             <hadXRAM>0</hadXRAM>
             <uocXRam>0</uocXRam>
             <RvdsVP>2</RvdsVP>
+            <RvdsMve>0</RvdsMve>
+            <RvdsCdeCp>0</RvdsCdeCp>
+            <nBranchProt>0</nBranchProt>
             <hadIRAM2>1</hadIRAM2>
             <hadIROM2>0</hadIROM2>
             <StupSel>8</StupSel>
@@ -324,6 +327,7 @@
             <uThumb>0</uThumb>
             <uSurpInc>0</uSurpInc>
             <uC99>1</uC99>
+            <uGnu>0</uGnu>
             <useXO>0</useXO>
             <v6Lang>1</v6Lang>
             <v6LangP>1</v6LangP>
@@ -336,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER,STM32F40_41xxx</Define>
               <Undefine></Undefine>
-              <IncludePath>.\libraries\CMSIS\Device\ST\STM32F4xx\Include;.\libraries\CMSIS\Include;.\libraries\STM32F4xx_StdPeriph_Driver\inc;.\user;.\BSP;.\Driver;.\Algorithm;.\VL53L1_core;.\VL53L1_platform;.\APP;.\Route</IncludePath>
+              <IncludePath>.\libraries\CMSIS\Device\ST\STM32F4xx\Include;.\libraries\CMSIS\Include;.\libraries\STM32F4xx_StdPeriph_Driver\inc;.\user;.\BSP;.\Driver;.\Algorithm;.\VL53L1_core;.\VL53L1_platform;.\APP;.\Route;.\Test</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -349,7 +353,7 @@
             <NoWarn>0</NoWarn>
             <uSurpInc>0</uSurpInc>
             <useXO>0</useXO>
-            <uClangAs>0</uClangAs>
+            <ClangAsOpt>4</ClangAsOpt>
             <VariousControls>
               <MiscControls></MiscControls>
               <Define></Define>
@@ -834,16 +838,6 @@
           <GroupName>Driver</GroupName>
           <Files>
             <File>
-              <FileName>test.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Driver\test.c</FilePath>
-            </File>
-            <File>
-              <FileName>test.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Driver\test.h</FilePath>
-            </File>
-            <File>
               <FileName>drv_encoder.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Driver\drv_encoder.c</FilePath>
@@ -1031,12 +1025,42 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>Test</GroupName>
+          <Files>
+            <File>
+              <FileName>test_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Test\test_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Test\test.c</FilePath>
+            </File>
+            <File>
+              <FileName>test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Test\test.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>APP</GroupName>
           <Files>
             <File>
               <FileName>app_task_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\app_task_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_diagnostics.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\app_diagnostics.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_diagnostics.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\app_diagnostics.h</FilePath>
             </File>
             <File>
               <FileName>app_task_port.c</FileName>

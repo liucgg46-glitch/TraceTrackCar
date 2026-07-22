@@ -24,7 +24,8 @@ INCLUDES := \
   -IVL53L1_core \
   -IVL53L1_platform \
   -IAPP \
-  -IRoute
+  -IRoute \
+  -ITest
 
 CFLAGS := $(MCU) $(DEFS) $(INCLUDES) -std=gnu11 -O0 -g3 -ffunction-sections -fdata-sections -Wall -MMD -MP
 ASFLAGS := $(MCU) -x assembler-with-cpp -g3 -MMD -MP
@@ -97,7 +98,7 @@ SRCS := \
   Algorithm/attitude_estimator.c \
   Algorithm/heading_estimator.c \
   Algorithm/odometer.c \
-  Driver/test.c \
+  Test/test.c \
   Driver/drv_encoder.c \
   Driver/drv_motor.c \
   Driver/driver_all.c \
@@ -117,6 +118,7 @@ SRCS := \
   Driver/drv_oled_image.c \
   Driver/drv_vl53l1x.c \
   APP/app_task_port.c \
+  APP/app_diagnostics.c \
   APP/line_calibration.c \
   APP/nb_wait.c \
   APP/scheduler.c \

@@ -1,4 +1,7 @@
 #include "test.h"
+
+#if (PROJECT_TEST_TASKS_ENABLE != 0U)
+
 #include "bsp_gpio.h"
 #include "bsp_pwm.h"
 #include "bsp_encoder.h"
@@ -248,13 +251,13 @@ void Test_Encoder_Log(void)
     int n;
 
     n = sprintf(buf,
-                "ENC L: d=%d cps=%d total=%d | R: d=%d cps=%d total=%d\r\n",
-                BSP_Encoder_GetDelta(BSP_ENCODER_CH1),
-                BSP_Encoder_GetSpeedCps(BSP_ENCODER_CH1),
-                BSP_Encoder_GetTotal(BSP_ENCODER_CH1),
-                BSP_Encoder_GetDelta(BSP_ENCODER_CH2),
-                BSP_Encoder_GetSpeedCps(BSP_ENCODER_CH2),
-                BSP_Encoder_GetTotal(BSP_ENCODER_CH2));
+                "ENC L: d=%ld cps=%ld total=%ld | R: d=%ld cps=%ld total=%ld\r\n",
+                (long)BSP_Encoder_GetDelta(BSP_ENCODER_CH1),
+                (long)BSP_Encoder_GetSpeedCps(BSP_ENCODER_CH1),
+                (long)BSP_Encoder_GetTotal(BSP_ENCODER_CH1),
+                (long)BSP_Encoder_GetDelta(BSP_ENCODER_CH2),
+                (long)BSP_Encoder_GetSpeedCps(BSP_ENCODER_CH2),
+                (long)BSP_Encoder_GetTotal(BSP_ENCODER_CH2));
 
     BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
 }
@@ -884,13 +887,13 @@ void Test_DrvEncoder_Log(void)
     int n;
 
     n = sprintf(buf,
-                "ENC FL=%d FR=%d RL=%d RR=%d | L=%d R=%d\r\n",
-                Drv_Encoder_GetWheelSpeedCps(WHEEL_FL),
-                Drv_Encoder_GetWheelSpeedCps(WHEEL_FR),
-                Drv_Encoder_GetWheelSpeedCps(WHEEL_RL),
-                Drv_Encoder_GetWheelSpeedCps(WHEEL_RR),
-                Drv_Encoder_GetLeftSpeedCps(),
-                Drv_Encoder_GetRightSpeedCps());
+                "ENC FL=%ld FR=%ld RL=%ld RR=%ld | L=%ld R=%ld\r\n",
+                (long)Drv_Encoder_GetWheelSpeedCps(WHEEL_FL),
+                (long)Drv_Encoder_GetWheelSpeedCps(WHEEL_FR),
+                (long)Drv_Encoder_GetWheelSpeedCps(WHEEL_RL),
+                (long)Drv_Encoder_GetWheelSpeedCps(WHEEL_RR),
+                (long)Drv_Encoder_GetLeftSpeedCps(),
+                (long)Drv_Encoder_GetRightSpeedCps());
 
     if (n > 0 && n < (int)sizeof(buf)) {
         BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
@@ -2425,3 +2428,5 @@ void Test_AsyncDisplay_Update(void)
         lcd_step++;
     }
 }
+
+#endif /* PROJECT_TEST_TASKS_ENABLE */

@@ -408,7 +408,7 @@ static void Lcd_CompleteDelayIfElapsed(void)
 
 void Drv_LcdTft_Init(void)
 {
-    BSP_SPI_Init(DRV_LCD_TFT_SPI_BUS);
+    /* SPI 总线由 BSP_InitAll() 统一初始化，设备驱动不得重置共享总线。 */
     BSP_GPIO_Init(DRV_LCD_TFT_CS_GPIO);
     BSP_GPIO_Init(DRV_LCD_TFT_DC_GPIO);
     BSP_GPIO_Init(DRV_LCD_TFT_BL_GPIO);

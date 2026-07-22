@@ -210,7 +210,7 @@ void Drv_OledI2c_Init(void)
     s_oled_async_state = OLED_ASYNC_IDLE;
     return;
 #else
-    BSP_I2C_Init(DRV_OLED_I2C_BUS);
+    /* I2C 总线由 BSP_InitAll() 统一初始化，本驱动只初始化设备状态。 */
     Oled_DetectAddressOnInit();
     memset(s_oled_buf, 0, sizeof(s_oled_buf));
 

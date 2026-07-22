@@ -658,10 +658,6 @@ void Drv_GrayMcu_Init(void)
         s_gray.rx[i] = 0xFFU;
     }
 
-#if DRV_GRAY_MCU_INIT_I2C_BUS
-    BSP_I2C_Init(DRV_GRAY_MCU_I2C_BUS);
-#endif
-
     GrayMcu_SelectInitialAddress();
 
     s_gray.channel_enable_mask = DRV_GRAY_MCU_CHANNEL_ENABLE_MASK;
