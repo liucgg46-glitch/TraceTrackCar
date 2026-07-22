@@ -497,7 +497,9 @@ static BSP_Status_t TaskFSM_StartRoute(Route_MissionDirection_t direction)
 {
     BSP_Status_t status;
 
-    status = RouteManager_ConfigureMission(s_task.target_room, direction);
+    status = RouteManager_ConfigureMission(s_task.target_room,
+                                           direction,
+                                           BSP_GetTickMs());
     s_task.route_start_status = (uint8_t)status;
     if (status != BSP_OK) {
         return status;

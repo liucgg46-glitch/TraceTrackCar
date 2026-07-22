@@ -1,7 +1,7 @@
 #ifndef __ODOMETER_H
 #define __ODOMETER_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -24,14 +24,15 @@ typedef struct {
     int32_t delta_distance_mm;
 } Odometer_Info_t;
 
-void Odometer_Init(void);
-void Odometer_Clear(void);
-void Odometer_Update(void);
+/* 调用方传入编码器累计里程，算法内部保存清零基线。 */
+void Odometer_Init(int32_t left_total_mm, int32_t right_total_mm);
+void Odometer_Clear(int32_t left_total_mm, int32_t right_total_mm);
+void Odometer_Update(int32_t left_total_mm, int32_t right_total_mm);
 
 int32_t Odometer_GetLeftMm(void);
 int32_t Odometer_GetRightMm(void);
 int32_t Odometer_GetDistanceMm(void);
-BSP_Status_t Odometer_GetInfo(Odometer_Info_t *info);
+Project_Status_t Odometer_GetInfo(Odometer_Info_t *info);
 
 #ifdef __cplusplus
 }

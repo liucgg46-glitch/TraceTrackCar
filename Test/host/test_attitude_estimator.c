@@ -47,15 +47,15 @@ static int Test_StaticInputConverges(void)
 
     Attitude_Init();
     input = Test_MakeLevelSample(timestamp_ms);
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
 
     for (sample = 0U; sample < 150U; sample++) {
         timestamp_ms += 10U;
         input.timestamp_ms = timestamp_ms;
-        TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+        TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
     }
 
-    TEST_CHECK(Attitude_GetInfo(&info) == BSP_OK);
+    TEST_CHECK(Attitude_GetInfo(&info) == PROJECT_OK);
     TEST_CHECK(info.valid == 1U);
     TEST_CHECK(info.stationary == 1U);
     TEST_CHECK(info.update_count == 151U);
@@ -74,16 +74,16 @@ static int Test_ConstantYawRotation(void)
 
     Attitude_Init();
     input = Test_MakeLevelSample(timestamp_ms);
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
 
     input.gyro_filtered_dps.z = 90.0f;
     for (sample = 0U; sample < 100U; sample++) {
         timestamp_ms += 10U;
         input.timestamp_ms = timestamp_ms;
-        TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+        TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
     }
 
-    TEST_CHECK(Attitude_GetInfo(&info) == BSP_OK);
+    TEST_CHECK(Attitude_GetInfo(&info) == PROJECT_OK);
     TEST_CHECK(fabsf(info.yaw_deg - 90.0f) < 1.0f);
     TEST_CHECK(fabsf(info.roll_deg) < 0.5f);
     TEST_CHECK(fabsf(info.pitch_deg) < 0.5f);
@@ -99,12 +99,12 @@ static int Test_DuplicateTimestampRejected(void)
 
     Attitude_Init();
     input = Test_MakeLevelSample(10U);
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
-    TEST_CHECK(Attitude_GetInfo(&before) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
+    TEST_CHECK(Attitude_GetInfo(&before) == PROJECT_OK);
 
     input.gyro_filtered_dps.z = 180.0f;
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_BUSY);
-    TEST_CHECK(Attitude_GetInfo(&after) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_BUSY);
+    TEST_CHECK(Attitude_GetInfo(&after) == PROJECT_OK);
     TEST_CHECK(after.update_count == before.update_count);
     TEST_CHECK(after.timestamp_ms == before.timestamp_ms);
     TEST_CHECK(fabsf(after.yaw_deg - before.yaw_deg) < 0.001f);
@@ -118,22 +118,22 @@ static int Test_InvalidInputAndRecovery(void)
 
     Attitude_Init();
     input = Test_MakeLevelSample(10U);
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
     TEST_CHECK(Attitude_IsValid() == 1U);
 
-    TEST_CHECK(Attitude_Update(0, 0U) == BSP_PARAM);
+    TEST_CHECK(Attitude_Update(0, 0U) == PROJECT_PARAM);
     TEST_CHECK(Attitude_IsValid() == 0U);
-    TEST_CHECK(Attitude_GetInfo(&info) == BSP_ERROR);
+    TEST_CHECK(Attitude_GetInfo(&info) == PROJECT_ERROR);
     TEST_CHECK(info.valid == 0U);
 
     input.timestamp_ms += 10U;
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
     TEST_CHECK(Attitude_IsValid() == 1U);
 
     Attitude_Invalidate();
     TEST_CHECK(Attitude_IsValid() == 0U);
     input.timestamp_ms += 10U;
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
     TEST_CHECK(Attitude_IsValid() == 1U);
     return 1;
 }
@@ -153,26 +153,26 @@ static int Test_MotorActiveGatesMagnetometer(void)
 
     for (sample = 0U; sample < 12U; sample++) {
         input.timestamp_ms = timestamp_ms;
-        TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
+        TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
         timestamp_ms += 10U;
     }
-    TEST_CHECK(Attitude_GetInfo(&before_motor) == BSP_OK);
+    TEST_CHECK(Attitude_GetInfo(&before_motor) == PROJECT_OK);
     TEST_CHECK(before_motor.mag_available == 1U);
     TEST_CHECK(before_motor.mag_healthy == 1U);
     TEST_CHECK(before_motor.mag_used == 1U);
     TEST_CHECK(before_motor.mag_accept_count >= 2U);
 
     input.timestamp_ms = timestamp_ms;
-    TEST_CHECK(Attitude_Update(&input, 1U) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 1U) == PROJECT_OK);
     timestamp_ms += 10U;
-    TEST_CHECK(Attitude_GetInfo(&during_motor) == BSP_OK);
+    TEST_CHECK(Attitude_GetInfo(&during_motor) == PROJECT_OK);
     TEST_CHECK(during_motor.mag_available == 1U);
     TEST_CHECK(during_motor.mag_used == 0U);
     TEST_CHECK(during_motor.mag_accept_count == before_motor.mag_accept_count);
 
     input.timestamp_ms = timestamp_ms;
-    TEST_CHECK(Attitude_Update(&input, 0U) == BSP_OK);
-    TEST_CHECK(Attitude_GetInfo(&after_motor) == BSP_OK);
+    TEST_CHECK(Attitude_Update(&input, 0U) == PROJECT_OK);
+    TEST_CHECK(Attitude_GetInfo(&after_motor) == PROJECT_OK);
     TEST_CHECK(after_motor.mag_healthy == 1U);
     TEST_CHECK(after_motor.mag_used == 1U);
     TEST_CHECK(after_motor.mag_accept_count == before_motor.mag_accept_count + 1U);

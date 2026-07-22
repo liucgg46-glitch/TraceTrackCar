@@ -1,7 +1,7 @@
 
 #include "app_all.h"
 #include "chassis.h"
-#include "odometer.h"
+#include "odometer_adapter.h"
 #include "attitude_estimator.h"
 #include "heading_estimator.h"
 #include "motion_action.h"
@@ -16,7 +16,7 @@
 void App_Init(void)
 {
     Chassis_Init();
-    Odometer_Init();
+    AppOdometer_Init();
     Attitude_Init();
     Heading_Init();
     Motion_Init();

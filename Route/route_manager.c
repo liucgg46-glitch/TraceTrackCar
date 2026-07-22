@@ -5,34 +5,35 @@
 static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
 static Route_ActionState_t s_action_state = ROUTE_ACTION_STATE_IDLE;
 
-void RouteManager_Init(void)
+void RouteManager_Init(uint32_t now_ms)
 {
     LineTrack_Init();
-    RouteProfile_Init();
+    RouteProfile_Init(now_ms);
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
 
-void RouteManager_Reset(void)
+void RouteManager_Reset(uint32_t now_ms)
 {
     LineTrack_Reset();
-    RouteProfile_Reset();
+    RouteProfile_Reset(now_ms);
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
 }
 
-BSP_Status_t RouteManager_ConfigureMission(
+Project_Status_t RouteManager_ConfigureMission(
     uint8_t target_room,
-    Route_MissionDirection_t direction)
+    Route_MissionDirection_t direction,
+    uint32_t now_ms)
 {
     if (s_control_mode != ROUTE_CONTROL_STOP) {
-        return BSP_BUSY;
+        return PROJECT_BUSY;
     }
 
-    return RouteProfile_ConfigureMission(target_room, direction);
+    return RouteProfile_ConfigureMission(target_room, direction, now_ms);
 }
 
-BSP_Status_t RouteManager_SubmitVisualDecision(
+Project_Status_t RouteManager_SubmitVisualDecision(
     Route_VisualDirection_t direction)
 {
     return RouteProfile_SubmitVisualDecision(direction);
@@ -41,7 +42,8 @@ BSP_Status_t RouteManager_SubmitVisualDecision(
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         const Route_ActionFeedback_t *feedback,
                                         LineTrack_Output_t *out,
-                                        Route_ActionRequest_t *request)
+                                        Route_ActionRequest_t *request,
+                                        uint32_t now_ms)
 {
     if (out != 0) {
         out->linear_cps = 0;
@@ -63,19 +65,23 @@ Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
 
     s_action_state = feedback->state;
 
-    s_control_mode = RouteProfile_Update(line, feedback, out, request);
+    s_control_mode = RouteProfile_Update(line,
+                                         feedback,
+                                         out,
+                                         request,
+                                         now_ms);
 
     return s_control_mode;
 }
 
-BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
+Project_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
 {
     LineTrack_Info_t line_info;
     RouteProfile_Info_t profile_info;
 
-    if (info == 0) return BSP_PARAM;
-    if (LineTrack_GetInfo(&line_info) != BSP_OK) return BSP_ERROR;
-    if (RouteProfile_GetInfo(&profile_info) != BSP_OK) return BSP_ERROR;
+    if (info == 0) return PROJECT_PARAM;
+    if (LineTrack_GetInfo(&line_info) != PROJECT_OK) return PROJECT_ERROR;
+    if (RouteProfile_GetInfo(&profile_info) != PROJECT_OK) return PROJECT_ERROR;
 
     info->profile = (uint8_t)ROUTE_PROFILE_SELECT;
     info->profile_state = profile_info.state;
@@ -103,5 +109,5 @@ BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->line_search_direction = line_info.search_direction;
     info->line_lost_ms = line_info.lost_ms;
 
-    return BSP_OK;
+    return PROJECT_OK;
 }

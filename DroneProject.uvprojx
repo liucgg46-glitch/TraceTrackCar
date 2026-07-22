@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER,STM32F40_41xxx</Define>
               <Undefine></Undefine>
-              <IncludePath>.\libraries\CMSIS\Device\ST\STM32F4xx\Include;.\libraries\CMSIS\Include;.\libraries\STM32F4xx_StdPeriph_Driver\inc;.\user;.\BSP;.\Driver;.\Algorithm;.\VL53L1_core;.\VL53L1_platform;.\APP;.\Route;.\Test</IncludePath>
+              <IncludePath>.\libraries\CMSIS\Device\ST\STM32F4xx\Include;.\libraries\CMSIS\Include;.\libraries\STM32F4xx_StdPeriph_Driver\inc;.\user;.\Common;.\BSP;.\Driver;.\Algorithm;.\VL53L1_core;.\VL53L1_platform;.\APP;.\Route;.\Test</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -640,8 +640,28 @@
           <GroupName>Doc</GroupName>
         </Group>
         <Group>
+          <GroupName>Common</GroupName>
+          <Files>
+            <File>
+              <FileName>project_status.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Common\project_status.h</FilePath>
+            </File>
+            <File>
+              <FileName>project_critical.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Common\project_critical.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>BSP</GroupName>
           <Files>
+            <File>
+              <FileName>bsp_common.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\BSP\bsp_common.c</FilePath>
+            </File>
             <File>
               <FileName>bsp_gpio.h</FileName>
               <FileType>5</FileType>
@@ -1121,6 +1141,16 @@
               <FileName>app_all.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\app_all.h</FilePath>
+            </File>
+            <File>
+              <FileName>odometer_adapter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\odometer_adapter.c</FilePath>
+            </File>
+            <File>
+              <FileName>odometer_adapter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\odometer_adapter.h</FilePath>
             </File>
             <File>
               <FileName>motion_action.c</FileName>

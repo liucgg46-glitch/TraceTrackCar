@@ -160,11 +160,11 @@ void LineDetect_Update(const uint16_t raw[LINE_DETECT_SENSOR_NUM])
     s_line.type = Line_Classify(normalized_mask, (uint8_t)count);
 }
 
-BSP_Status_t LineDetect_GetResult(LineDetect_Result_t *out_result)
+Project_Status_t LineDetect_GetResult(LineDetect_Result_t *out_result)
 {
-    if (out_result == 0) return BSP_PARAM;
+    if (out_result == 0) return PROJECT_PARAM;
     *out_result = s_line;
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 const LineDetect_Result_t *LineDetect_GetResultPtr(void)
@@ -186,17 +186,17 @@ void LineDetect_SetAllThreshold(uint16_t threshold)
     }
 }
 
-BSP_Status_t LineDetect_GetThresholdArray(uint16_t *out_threshold, uint8_t max_count)
+Project_Status_t LineDetect_GetThresholdArray(uint16_t *out_threshold, uint8_t max_count)
 {
     uint8_t i;
     uint8_t n;
 
-    if (out_threshold == 0) return BSP_PARAM;
+    if (out_threshold == 0) return PROJECT_PARAM;
     n = (max_count < LINE_DETECT_SENSOR_NUM) ? max_count : LINE_DETECT_SENSOR_NUM;
     for (i = 0U; i < n; i++) {
         out_threshold[i] = s_line.threshold[i];
     }
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 void LineDetect_CaptureWhite(const uint16_t raw[LINE_DETECT_SENSOR_NUM])

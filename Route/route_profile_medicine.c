@@ -1,7 +1,5 @@
 #include "route_profile_medicine.h"
 
-#include "bsp_systick.h"
-
 #define MEDICINE_ROUTE_MAX_DECISIONS 2U
 
 typedef enum {
@@ -29,6 +27,7 @@ static int32_t s_end_gate_start_distance_mm;
 static uint8_t s_end_gate_distance_ready;
 static uint32_t s_start_ms;
 static uint32_t s_state_enter_ms;
+static uint32_t s_now_ms;
 
 static int32_t MedicineRoute_Abs32(int32_t value)
 {
@@ -52,7 +51,7 @@ static void MedicineRoute_ResetEventGate(void)
     s_intersection_armed = 0U;
     s_single_samples = 0U;
     s_route.event_confirm_samples = 0U;
-    s_state_enter_ms = BSP_GetTickMs();
+    s_state_enter_ms = s_now_ms;
 }
 
 static void MedicineRoute_ResetEndGate(void)
@@ -70,7 +69,7 @@ static void MedicineRoute_EnterState(MedicineRoute_State_t state)
 
     s_route.state = (uint8_t)state;
     s_route.event_confirm_samples = 0U;
-    s_state_enter_ms = BSP_GetTickMs();
+    s_state_enter_ms = s_now_ms;
     s_action_requested = 0U;
     s_route.transition_count++;
     s_route.waiting_visual =
@@ -229,7 +228,7 @@ static uint8_t MedicineRoute_UpdateIntersectionGate(
 {
     uint32_t elapsed_ms;
 
-    elapsed_ms = (uint32_t)(BSP_GetTickMs() - s_state_enter_ms);
+    elapsed_ms = (uint32_t)(s_now_ms - s_state_enter_ms);
     if (s_intersection_armed == 0U) {
         s_route.event_confirm_samples = 0U;
         if ((elapsed_ms < MEDICINE_ROUTE_EVENT_IGNORE_MS) ||
@@ -313,7 +312,7 @@ static Route_ControlMode_t MedicineRoute_FollowLine(
 {
     int32_t return_speed_cps;
 
-    LineTrack_Compute(line, out);
+    LineTrack_Compute(line, out, s_now_ms);
     /*
      * 返程只在正常单线循迹时提速；十字路口、分支和异常线型仍保留
      * LineTrack原有速度，避免提高路口转向和终点识别风险。
@@ -409,15 +408,15 @@ static Route_ControlMode_t MedicineRoute_RunTurn(
     return ROUTE_CONTROL_ERROR;
 }
 
-static BSP_Status_t MedicineRoute_StoreOutboundDecision(
+static Project_Status_t MedicineRoute_StoreOutboundDecision(
     Route_VisualDirection_t direction)
 {
     if ((direction != ROUTE_VISUAL_LEFT) &&
         (direction != ROUTE_VISUAL_RIGHT)) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
     if (s_outbound_turn_count >= MEDICINE_ROUTE_MAX_DECISIONS) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
 
     /* 第一项转向位于主路，保存路口层级供返程终点解锁使用。 */
@@ -432,7 +431,7 @@ static BSP_Status_t MedicineRoute_StoreOutboundDecision(
     s_pending_visual = ROUTE_VISUAL_NONE;
     s_route.visual_decision_ready = 0U;
     s_route.visual_stage = 0U;
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 static Route_ControlMode_t MedicineRoute_HandleOutboundMain(
@@ -455,7 +454,7 @@ static Route_ControlMode_t MedicineRoute_HandleOutboundMain(
         (s_route.intersection_count == 1U)) {
         direction = (s_target_room == 1U) ?
             ROUTE_VISUAL_LEFT : ROUTE_VISUAL_RIGHT;
-        if (MedicineRoute_StoreOutboundDecision(direction) != BSP_OK) {
+        if (MedicineRoute_StoreOutboundDecision(direction) != PROJECT_OK) {
             MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
             return ROUTE_CONTROL_ERROR;
         }
@@ -484,7 +483,7 @@ static Route_ControlMode_t MedicineRoute_HandleOutboundMain(
             return MedicineRoute_ContinueToFar(line, out);
         }
 
-        if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != BSP_OK) {
+        if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != PROJECT_OK) {
             MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
             return ROUTE_CONTROL_ERROR;
         }
@@ -505,7 +504,7 @@ static Route_ControlMode_t MedicineRoute_HandleOutboundMain(
             return MedicineRoute_HoldForVision(out);
         }
 
-        if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != BSP_OK) {
+        if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != PROJECT_OK) {
             MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
             return ROUTE_CONTROL_ERROR;
         }
@@ -537,7 +536,7 @@ static Route_ControlMode_t MedicineRoute_HandleFarCorridor(
         return MedicineRoute_HoldForVision(out);
     }
 
-    if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != BSP_OK) {
+    if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != PROJECT_OK) {
         MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
         return ROUTE_CONTROL_ERROR;
     }
@@ -567,7 +566,7 @@ static Route_ControlMode_t MedicineRoute_HandleVisualWait(
         return ROUTE_CONTROL_ERROR;
     }
 
-    if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != BSP_OK) {
+    if (MedicineRoute_StoreOutboundDecision(s_pending_visual) != PROJECT_OK) {
         MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
         return ROUTE_CONTROL_ERROR;
     }
@@ -658,8 +657,9 @@ static Route_ControlMode_t MedicineRoute_HandleReturnMain(
     return MedicineRoute_FollowLine(line, out);
 }
 
-void MedicineRoute_Init(void)
+void MedicineRoute_Init(uint32_t now_ms)
 {
+    s_now_ms = now_ms;
     s_configured = 0U;
     s_target_room = 0U;
     s_direction = ROUTE_MISSION_OUTBOUND;
@@ -667,11 +667,12 @@ void MedicineRoute_Init(void)
     s_outbound_turns[1] = 0;
     s_outbound_turn_count = 0U;
     s_outbound_main_intersection = 0U;
-    MedicineRoute_Reset();
+    MedicineRoute_Reset(now_ms);
 }
 
-void MedicineRoute_Reset(void)
+void MedicineRoute_Reset(uint32_t now_ms)
 {
+    s_now_ms = now_ms;
     s_route.state = (uint8_t)MEDICINE_ROUTE_STATE_IDLE;
     s_route.configured = s_configured;
     s_route.target_room = s_target_room;
@@ -696,7 +697,7 @@ void MedicineRoute_Reset(void)
     s_return_main_intersections = 0U;
     s_end_gate_start_distance_mm = 0;
     s_end_gate_distance_ready = 0U;
-    s_start_ms = BSP_GetTickMs();
+    s_start_ms = s_now_ms;
     s_state_enter_ms = s_start_ms;
     MedicineRoute_ResetEventGate();
 
@@ -713,14 +714,15 @@ void MedicineRoute_Reset(void)
     }
 }
 
-BSP_Status_t MedicineRoute_ConfigureMission(
+Project_Status_t MedicineRoute_ConfigureMission(
     uint8_t target_room,
-    Route_MissionDirection_t direction)
+    Route_MissionDirection_t direction,
+    uint32_t now_ms)
 {
     if ((target_room < 1U) || (target_room > 8U) ||
         ((direction != ROUTE_MISSION_OUTBOUND) &&
          (direction != ROUTE_MISSION_RETURN))) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     if (direction == ROUTE_MISSION_OUTBOUND) {
@@ -732,55 +734,57 @@ BSP_Status_t MedicineRoute_ConfigureMission(
         if ((target_room != s_target_room) ||
             (s_outbound_turn_count == 0U) ||
             (s_outbound_turn_count > MEDICINE_ROUTE_MAX_DECISIONS)) {
-            return BSP_ERROR;
+            return PROJECT_ERROR;
         }
     }
 
     s_configured = 1U;
     s_target_room = target_room;
     s_direction = direction;
-    MedicineRoute_Reset();
-    return BSP_OK;
+    MedicineRoute_Reset(now_ms);
+    return PROJECT_OK;
 }
 
-BSP_Status_t MedicineRoute_SubmitVisualDecision(
+Project_Status_t MedicineRoute_SubmitVisualDecision(
     Route_VisualDirection_t direction)
 {
     if ((direction != ROUTE_VISUAL_LEFT) &&
         (direction != ROUTE_VISUAL_RIGHT) &&
         (direction != ROUTE_VISUAL_STRAIGHT)) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
     if ((s_direction != ROUTE_MISSION_OUTBOUND) ||
         (s_route.visual_stage == 0U)) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
     if (s_route.visual_decision_ready != 0U) {
-        return BSP_BUSY;
+        return PROJECT_BUSY;
     }
     if ((direction == ROUTE_VISUAL_STRAIGHT) &&
         (s_route.visual_stage != 1U)) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     s_pending_visual = direction;
     s_route.visual_decision_ready = 1U;
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 Route_ControlMode_t MedicineRoute_Update(
     const LineDetect_Result_t *line,
     const Route_ActionFeedback_t *feedback,
     LineTrack_Output_t *out,
-    Route_ActionRequest_t *request)
+    Route_ActionRequest_t *request,
+    uint32_t now_ms)
 {
     if ((line == 0) || (feedback == 0) ||
         (out == 0) || (request == 0)) {
         return ROUTE_CONTROL_ERROR;
     }
 
+    s_now_ms = now_ms;
     MedicineRoute_ClearOutput(out, request);
-    s_route.running_ms = (uint32_t)(BSP_GetTickMs() - s_start_ms);
+    s_route.running_ms = (uint32_t)(s_now_ms - s_start_ms);
 
     if (s_configured == 0U) {
         MedicineRoute_EnterState(MEDICINE_ROUTE_STATE_ERROR);
@@ -835,12 +839,12 @@ Route_ControlMode_t MedicineRoute_Update(
     }
 }
 
-BSP_Status_t MedicineRoute_GetInfo(RouteProfile_Info_t *info)
+Project_Status_t MedicineRoute_GetInfo(RouteProfile_Info_t *info)
 {
     if (info == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     *info = s_route;
-    return BSP_OK;
+    return PROJECT_OK;
 }

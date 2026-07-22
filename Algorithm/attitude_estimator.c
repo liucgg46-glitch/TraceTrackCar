@@ -1,4 +1,5 @@
 #include "attitude_estimator.h"
+#include "project_critical.h"
 
 #include <math.h>
 #include <string.h>
@@ -503,8 +504,8 @@ void Attitude_Reset(void)
     Attitude_ResetFusionState();
 }
 
-BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
-                             uint8_t motor_active)
+Project_Status_t Attitude_Update(const Attitude_Input_t *input,
+                                 uint8_t motor_active)
 {
     float accel[3];
     float accel_norm;
@@ -522,11 +523,11 @@ BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
 
     if (input == 0) {
         s_info.valid = 0U;
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
     if ((s_have_timestamp != 0U) &&
         (input->timestamp_ms == s_last_timestamp_ms)) {
-        return BSP_BUSY;
+        return PROJECT_BUSY;
     }
 
     accel[0] = input->accel_filtered_g.x;
@@ -564,7 +565,7 @@ BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
         } else {
             s_info.mag_used = 0U;
         }
-        return BSP_OK;
+        return PROJECT_OK;
     }
 
     elapsed_ms = (uint32_t)(input->timestamp_ms - s_last_timestamp_ms);
@@ -640,7 +641,7 @@ BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
     s_info.initialized = 1U;
     s_info.valid = 1U;
     s_info.update_count++;
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 void Attitude_Invalidate(void)
@@ -648,17 +649,17 @@ void Attitude_Invalidate(void)
     s_info.valid = 0U;
 }
 
-BSP_Status_t Attitude_GetInfo(Attitude_Info_t *info)
+Project_Status_t Attitude_GetInfo(Attitude_Info_t *info)
 {
     uint32_t primask;
 
     if (info == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
-    primask = BSP_EnterCritical();
+    primask = Project_EnterCritical();
     memcpy(info, &s_info, sizeof(*info));
-    BSP_ExitCritical(primask);
-    return (info->valid != 0U) ? BSP_OK : BSP_ERROR;
+    Project_ExitCritical(primask);
+    return (info->valid != 0U) ? PROJECT_OK : PROJECT_ERROR;
 }
 
 float Attitude_GetRollDeg(void)
@@ -704,7 +705,7 @@ void Attitude_MagCalibrationStart(void)
     Attitude_ResetMagReference();
 }
 
-BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
+Project_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
 {
     Attitude_MagCalibration_t candidate;
     float radius[3];
@@ -712,19 +713,19 @@ BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
     uint8_t axis;
 
     if (s_info.mag_calibrating == 0U) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
     s_info.mag_calibrating = 0U;
 
     if (s_info.mag_calibration_samples < ATTITUDE_MAG_CAL_MIN_SAMPLES) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
 
     memset(&candidate, 0, sizeof(candidate));
     for (axis = 0U; axis < 3U; axis++) {
         float span = s_mag_cal_max[axis] - s_mag_cal_min[axis];
         if (span < ATTITUDE_MAG_CAL_MIN_SPAN_UT) {
-            return BSP_ERROR;
+            return PROJECT_ERROR;
         }
         candidate.offset_uT[axis] = 0.5f * (s_mag_cal_max[axis] + s_mag_cal_min[axis]);
         radius[axis] = 0.5f * span;
@@ -736,19 +737,19 @@ BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
     }
     candidate.valid = 1U;
 
-    if (Attitude_SetMagCalibration(&candidate) != BSP_OK) {
-        return BSP_ERROR;
+    if (Attitude_SetMagCalibration(&candidate) != PROJECT_OK) {
+        return PROJECT_ERROR;
     }
     if (result != 0) {
         *result = s_mag_cal;
     }
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
-BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration)
+Project_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration)
 {
     if (calibration == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     if (calibration->valid == 0U) {
@@ -756,25 +757,25 @@ BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibra
         s_mag_cal.valid = 0U;
         s_info.mag_calibrated = 0U;
         Attitude_ResetMagReference();
-        return BSP_OK;
+        return PROJECT_OK;
     }
 
     if (Attitude_IsCalibrationValid(calibration) == 0U) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     s_mag_cal = *calibration;
     s_mag_cal.valid = 1U;
     s_info.mag_calibrated = 1U;
     Attitude_ResetMagReference();
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
-BSP_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration)
+Project_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration)
 {
     if (calibration == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
     *calibration = s_mag_cal;
-    return BSP_OK;
+    return PROJECT_OK;
 }

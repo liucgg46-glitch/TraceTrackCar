@@ -7,6 +7,7 @@
 #include "chassis.h"
 #include "motion_action.h"
 #include "route_manager.h"
+#include "bsp_systick.h"
 
 static LineFollow_Info_t s_lf;
 static uint8_t s_route_action_active;
@@ -90,7 +91,7 @@ void LineFollow_Init(void)
     s_route_action_active = 0U;
 
     LineDetect_Init();
-    RouteManager_Init();
+    RouteManager_Init(BSP_GetTickMs());
 }
 
 BSP_Status_t LineFollow_Start(void)
@@ -108,7 +109,7 @@ BSP_Status_t LineFollow_Start(void)
     }
 
     /* 成功取得底盘后才复位本模块状态，不影响其他控制者。 */
-    RouteManager_Reset();
+    RouteManager_Reset(BSP_GetTickMs());
     LineFollow_ClearOutput();
     s_route_action_active = 0U;
     s_lf.state = LINE_FOLLOW_RUN;
@@ -119,7 +120,7 @@ void LineFollow_Stop(void)
 {
     s_lf.state = LINE_FOLLOW_STOP;
     LineFollow_ReleaseOwnedControl();
-    RouteManager_Reset();
+    RouteManager_Reset(BSP_GetTickMs());
     LineFollow_ClearOutput();
 }
 
@@ -129,6 +130,7 @@ void LineFollow_Update(void)
     Route_ControlMode_t control;
     Route_ActionFeedback_t feedback;
     Route_ActionRequest_t request;
+    uint32_t now_ms;
 
     if (Drv_GraySensor_IsOnline() == 0U) {
         if (s_lf.state == LINE_FOLLOW_RUN) {
@@ -157,10 +159,12 @@ void LineFollow_Update(void)
     feedback.distance_mm =
         (Drv_Encoder_GetLeftTotalMm() +
          Drv_Encoder_GetRightTotalMm()) / 2;
+    now_ms = BSP_GetTickMs();
     control = RouteManager_Update(res,
                                   &feedback,
                                   &s_lf.output,
-                                  &request);
+                                  &request,
+                                  now_ms);
 
     if (control == ROUTE_CONTROL_MOTION) {
         if (request.type != ROUTE_ACTION_NONE) {

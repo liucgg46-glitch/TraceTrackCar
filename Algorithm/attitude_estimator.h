@@ -1,7 +1,7 @@
 #ifndef __ATTITUDE_ESTIMATOR_H
 #define __ATTITUDE_ESTIMATOR_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -143,12 +143,12 @@ typedef struct {
 void Attitude_Init(void);
 void Attitude_Reset(void);
 
-/* 每次有新输入时间戳时融合一次；重复时间戳返回 BSP_BUSY。 */
-BSP_Status_t Attitude_Update(const Attitude_Input_t *input,
-                             uint8_t motor_active);
+/* 每次有新输入时间戳时融合一次；重复时间戳返回 PROJECT_BUSY。 */
+Project_Status_t Attitude_Update(const Attitude_Input_t *input,
+                                 uint8_t motor_active);
 /* 输入源离线或数据失效时由适配层调用，防止上层继续使用陈旧姿态。 */
 void Attitude_Invalidate(void);
-BSP_Status_t Attitude_GetInfo(Attitude_Info_t *info);
+Project_Status_t Attitude_GetInfo(Attitude_Info_t *info);
 
 float Attitude_GetRollDeg(void);
 float Attitude_GetPitchDeg(void);
@@ -160,9 +160,9 @@ void Attitude_ZeroYaw(void);
 
 /* 运行时磁力计标定：在 Start 与 Finish 之间缓慢转遍所有方向。 */
 void Attitude_MagCalibrationStart(void);
-BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result);
-BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration);
-BSP_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration);
+Project_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result);
+Project_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration);
+Project_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration);
 
 #ifdef __cplusplus
 }

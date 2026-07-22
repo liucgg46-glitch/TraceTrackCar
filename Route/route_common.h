@@ -1,7 +1,7 @@
 #ifndef __ROUTE_COMMON_H
 #define __ROUTE_COMMON_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include <stdint.h>

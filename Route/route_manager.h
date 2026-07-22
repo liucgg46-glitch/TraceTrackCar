@@ -35,18 +35,20 @@ typedef struct {
     uint32_t line_lost_ms;
 } RouteManager_Info_t;
 
-void RouteManager_Init(void);
-void RouteManager_Reset(void);
-BSP_Status_t RouteManager_ConfigureMission(
+void RouteManager_Init(uint32_t now_ms);
+void RouteManager_Reset(uint32_t now_ms);
+Project_Status_t RouteManager_ConfigureMission(
     uint8_t target_room,
-    Route_MissionDirection_t direction);
-BSP_Status_t RouteManager_SubmitVisualDecision(
+    Route_MissionDirection_t direction,
+    uint32_t now_ms);
+Project_Status_t RouteManager_SubmitVisualDecision(
     Route_VisualDirection_t direction);
 Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         const Route_ActionFeedback_t *feedback,
                                         LineTrack_Output_t *out,
-                                        Route_ActionRequest_t *request);
-BSP_Status_t RouteManager_GetInfo(RouteManager_Info_t *info);
+                                        Route_ActionRequest_t *request,
+                                        uint32_t now_ms);
+Project_Status_t RouteManager_GetInfo(RouteManager_Info_t *info);
 
 #ifdef __cplusplus
 }

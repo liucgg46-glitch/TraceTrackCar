@@ -29,17 +29,34 @@ $testExecutable = Join-Path $buildDirectory "attitude_estimator_tests.exe"
 $testObject = Join-Path $buildDirectory "test_attitude_estimator.obj"
 $algorithmObject = Join-Path $buildDirectory "attitude_estimator.obj"
 $stubInclude = Join-Path $repositoryRoot "Test\host\stubs"
+$commonInclude = Join-Path $repositoryRoot "Common"
 $algorithmInclude = Join-Path $repositoryRoot "Algorithm"
 $testSource = Join-Path $repositoryRoot "Test\host\test_attitude_estimator.c"
+$criticalSource = Join-Path $repositoryRoot "Test\host\stubs\project_critical.c"
 $algorithmSource = Join-Path $repositoryRoot "Algorithm\attitude_estimator.c"
+$criticalObject = Join-Path $buildDirectory "project_critical.obj"
+$odometerTestExecutable = Join-Path $buildDirectory "odometer_tests.exe"
+$odometerTestObject = Join-Path $buildDirectory "test_odometer.obj"
+$odometerObject = Join-Path $buildDirectory "odometer.obj"
+$odometerTestSource = Join-Path $repositoryRoot "Test\host\test_odometer.c"
+$odometerSource = Join-Path $repositoryRoot "Algorithm\odometer.c"
 
 [void](New-Item -ItemType Directory -Force -Path $buildDirectory)
 
 $compileAndRun = @"
-call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$algorithmInclude" /c "$testSource" /Fo"$testObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$algorithmInclude" /c "$algorithmSource" /Fo"$algorithmObject" && cl /nologo "$testObject" "$algorithmObject" /Fe"$testExecutable" && "$testExecutable"
+call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$commonInclude" /I"$algorithmInclude" /c "$testSource" /Fo"$testObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$commonInclude" /I"$algorithmInclude" /c "$algorithmSource" /Fo"$algorithmObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$commonInclude" /c "$criticalSource" /Fo"$criticalObject" && cl /nologo "$testObject" "$algorithmObject" "$criticalObject" /Fe"$testExecutable" && "$testExecutable"
 "@
 
 & $env:ComSpec /d /s /c $compileAndRun
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+$compileAndRunOdometer = @"
+call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$odometerTestSource" /Fo"$odometerTestObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$odometerSource" /Fo"$odometerObject" && cl /nologo "$odometerTestObject" "$odometerObject" /Fe"$odometerTestExecutable" && "$odometerTestExecutable"
+"@
+
+& $env:ComSpec /d /s /c $compileAndRunOdometer
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

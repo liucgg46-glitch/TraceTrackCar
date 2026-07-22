@@ -34,18 +34,11 @@
 #include "drv_icm20948.h"
 #include "drv_status_light.h"
 #include "task_fsm.h"
+#include "k210_comm.h"
+#include "bsp_systick.h"
 
 #include <stdio.h>
 #include <stdint.h>
-
-#include "bsp_systick.h"
-#include "test.h"
-
-#include "k210_comm.h"
-#include "bsp_uart.h"
-#include "bsp_systick.h"
-
-#include <stdio.h>
 
 /*
  * K210与STM32通信测试任务。
@@ -1596,7 +1589,7 @@ void Test_RouteCmd_Update(void)
     /* USART1 只保留路线复位命令，路线状态改由 LCD 显示。 */
     while (BSP_UART_GetChar(UART_PORT1, &ch)) {
         if ((ch == 'r') || (ch == 'R')) {
-            RouteManager_Reset();
+            RouteManager_Reset(BSP_GetTickMs());
         }
     }
 }

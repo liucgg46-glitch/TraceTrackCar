@@ -44,19 +44,21 @@ typedef enum {
     MEDICINE_ROUTE_STATE_ERROR
 } MedicineRoute_State_t;
 
-void MedicineRoute_Init(void);
-void MedicineRoute_Reset(void);
-BSP_Status_t MedicineRoute_ConfigureMission(
+void MedicineRoute_Init(uint32_t now_ms);
+void MedicineRoute_Reset(uint32_t now_ms);
+Project_Status_t MedicineRoute_ConfigureMission(
     uint8_t target_room,
-    Route_MissionDirection_t direction);
-BSP_Status_t MedicineRoute_SubmitVisualDecision(
+    Route_MissionDirection_t direction,
+    uint32_t now_ms);
+Project_Status_t MedicineRoute_SubmitVisualDecision(
     Route_VisualDirection_t direction);
 Route_ControlMode_t MedicineRoute_Update(
     const LineDetect_Result_t *line,
     const Route_ActionFeedback_t *feedback,
     LineTrack_Output_t *out,
-    Route_ActionRequest_t *request);
-BSP_Status_t MedicineRoute_GetInfo(RouteProfile_Info_t *info);
+    Route_ActionRequest_t *request,
+    uint32_t now_ms);
+Project_Status_t MedicineRoute_GetInfo(RouteProfile_Info_t *info);
 
 #ifdef __cplusplus
 }

@@ -18,6 +18,7 @@ INCLUDES := \
   -Ilibraries/CMSIS/Include \
   -Ilibraries/STM32F4xx_StdPeriph_Driver/inc \
   -Iuser \
+  -ICommon \
   -IBSP \
   -IDriver \
   -IAlgorithm \
@@ -81,6 +82,7 @@ SRCS := \
   libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c \
   user/main.c \
   user/stm32f4xx_it.c \
+  BSP/bsp_common.c \
   BSP/bsp_gpio.c \
   BSP/bsp_pwm.c \
   BSP/bsp_encoder.c \
@@ -124,6 +126,7 @@ SRCS := \
   APP/scheduler.c \
   APP/chassis.c \
   APP/app_all.c \
+  APP/odometer_adapter.c \
   APP/k210_comm.c \
   APP/gimbal_app.c \
   APP/task_fsm.c \
