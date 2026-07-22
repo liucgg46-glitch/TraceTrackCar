@@ -125,6 +125,7 @@ SRCS := \
   APP/k210_comm.c \
   APP/gimbal_app.c \
   APP/task_fsm.c \
+  APP/task_profile_select.c \
   APP/motion_action.c \
   APP/line_follow_app.c \
   APP/sensor_manager.c \

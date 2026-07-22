@@ -7,6 +7,7 @@
 #include "motion_action.h"
 #include "test.h"
 #include "k210_comm.h"
+#include "task_profile_select.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +41,7 @@ Task_t task_list[] = {                                                          
     { Sensor_Update,            1U, 0U }, /* HX711非阻塞采样 */ \
     { K210_Comm_Update,         5U, 0U }, /* K210新快照解析 */ \
     { Encoder_Update,          10U, 0U }, /* 轮速反馈与停车确认 */ \
-    { TaskFSM_Update,          10U, 0U }, /* 送药总状态机 */ \
+    { TaskProfile_Update,      10U, 0U }, /* 当前选择的总任务状态机 */ \
     { LineTrack_Update,        10U, 0U }, /* 去返程循迹与路线推进 */ \
     { Motion_Update,           10U, 0U }, /* 路口定角转弯 */ \
     { Chassis_Update,          10U, 0U }, /* 底盘速度闭环 */ \

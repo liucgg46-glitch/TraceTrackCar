@@ -11,7 +11,7 @@
 #include "oled_ui.h"
 #include "k210_comm.h"
 #include "gimbal_app.h"
-#include "task_fsm.h"
+#include "task_profile_select.h"
 
 void App_Init(void)
 {
@@ -35,8 +35,8 @@ void App_Init(void)
      */
     K210_Comm_Init();
 
-    /* 送药总任务状态机在全部输入和控制模块初始化完成后进入安全等待。 */
-    TaskFSM_Init();
+    /* 选中的总任务状态机在全部输入和控制模块初始化完成后进入安全等待。 */
+    TaskProfile_Init();
 
     /* 初始化阶段不自动启动电机，运行任务根据用户命令进入循迹或动作。 */
 }

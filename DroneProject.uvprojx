@@ -1178,6 +1178,21 @@
               <FileType>5</FileType>
               <FilePath>.\APP\task_fsm.h</FilePath>
             </File>
+            <File>
+              <FileName>task_profile_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\task_profile_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>task_profile_select.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\task_profile_select.h</FilePath>
+            </File>
+            <File>
+              <FileName>task_profile_select.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\task_profile_select.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
