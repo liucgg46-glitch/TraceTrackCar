@@ -1033,16 +1033,6 @@
               <FilePath>.\Driver\drv_servo.h</FilePath>
             </File>
             <File>
-              <FileName>drv_status_light.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Driver\drv_status_light.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_status_light.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Driver\drv_status_light.h</FilePath>
-            </File>
-            <File>
               <FileName>drv_buzzer.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Driver\drv_buzzer.c</FilePath>
@@ -1051,6 +1041,16 @@
               <FileName>drv_buzzer.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Driver\drv_buzzer.h</FilePath>
+            </File>
+            <File>
+              <FileName>drv_status_light.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_status_light.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_status_light.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_status_light.h</FilePath>
             </File>
           </Files>
         </Group>
