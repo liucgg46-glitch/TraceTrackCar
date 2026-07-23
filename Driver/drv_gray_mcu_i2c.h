@@ -30,7 +30,6 @@ extern "C" {
 #define DRV_GRAY_MCU_CHANNEL_NUM                 8U
 
 #define DRV_GRAY_MCU_I2C_BUS                     I2C_BUS1
-#define DRV_GRAY_MCU_INIT_I2C_BUS                0U
 
 /*
  * 地址：无 AD 跳线时通常为 0x4C。

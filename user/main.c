@@ -9,7 +9,6 @@
 #include "scheduler.h"
 #include "driver_all.h"
 #include "app_all.h"
-#include "test.h"
 
 int main(void)
 {

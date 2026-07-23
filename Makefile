@@ -18,13 +18,15 @@ INCLUDES := \
   -Ilibraries/CMSIS/Include \
   -Ilibraries/STM32F4xx_StdPeriph_Driver/inc \
   -Iuser \
+  -ICommon \
   -IBSP \
   -IDriver \
   -IAlgorithm \
   -IVL53L1_core \
   -IVL53L1_platform \
   -IAPP \
-  -IRoute
+  -IRoute \
+  -ITest
 
 CFLAGS := $(MCU) $(DEFS) $(INCLUDES) -std=gnu11 -O0 -g3 -ffunction-sections -fdata-sections -Wall -MMD -MP
 ASFLAGS := $(MCU) -x assembler-with-cpp -g3 -MMD -MP
@@ -80,7 +82,7 @@ SRCS := \
   libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c \
   user/main.c \
   user/stm32f4xx_it.c \
-  user/bsp_led.c \
+  BSP/bsp_common.c \
   BSP/bsp_gpio.c \
   BSP/bsp_pwm.c \
   BSP/bsp_encoder.c \
@@ -98,7 +100,7 @@ SRCS := \
   Algorithm/attitude_estimator.c \
   Algorithm/heading_estimator.c \
   Algorithm/odometer.c \
-  Driver/test.c \
+  Test/test.c \
   Driver/drv_encoder.c \
   Driver/drv_motor.c \
   Driver/driver_all.c \
@@ -108,6 +110,9 @@ SRCS := \
   Driver/drv_gray_sensor.c \
   Driver/drv_icm20948.c \
   Driver/drv_hx711.c \
+  Driver/drv_status_light.c \
+  Driver/drv_servo.c \
+  Driver/drv_laser.c \
   Driver/drv_lcd_tft.c \
   Driver/drv_lcd_font.c \
   Driver/drv_oled_i2c.c \
@@ -115,33 +120,30 @@ SRCS := \
   Driver/drv_oled_image.c \
   Driver/drv_vl53l1x.c \
   APP/app_task_port.c \
+  APP/app_diagnostics.c \
   APP/line_calibration.c \
   APP/nb_wait.c \
   APP/scheduler.c \
   APP/chassis.c \
   APP/app_all.c \
+  APP/odometer_adapter.c \
+  APP/k210_comm.c \
+  APP/gimbal_app.c \
+  APP/task_fsm.c \
+  APP/task_profile_select.c \
   APP/motion_action.c \
   APP/line_follow_app.c \
   APP/sensor_manager.c \
   APP/lcd_ui.c \
   APP/oled_ui.c \
-  VL53L1_core/vl53l1_api.c \
-  VL53L1_core/vl53l1_api_calibration.c \
-  VL53L1_core/vl53l1_api_core.c \
-  VL53L1_core/vl53l1_api_debug.c \
-  VL53L1_core/vl53l1_api_preset_modes.c \
-  VL53L1_core/vl53l1_api_strings.c \
-  VL53L1_core/vl53l1_core.c \
-  VL53L1_core/vl53l1_core_support.c \
-  VL53L1_core/vl53l1_error_strings.c \
-  VL53L1_core/vl53l1_register_funcs.c \
-  VL53L1_core/vl53l1_silicon_core.c \
-  VL53L1_core/vl53l1_wait.c \
+  VL53L1_core/VL53L1X_api.c \
+  VL53L1_core/VL53L1X_calibration.c \
   VL53L1_platform/vl53l1_platform.c \
-  VL53L1_platform/vl53l1_platform_init.c \
+  Route/route_common.c \
   Route/route_manager.c \
   Route/route_profile_select.c \
-  Route/route_profile_basic.c
+  Route/route_profile_basic.c \
+  Route/route_profile_medicine.c
 
 OBJS := $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
 OBJS += $(BUILD_DIR)/$(STARTUP:.s=.o)

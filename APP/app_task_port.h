@@ -22,7 +22,7 @@ extern "C" {
  *
  * 推荐责任分工：
  *   B：BSP、Key_Update、Encoder_Update、电机底层；
- *   A：Chassis_Update、LineTrack_Update、TaskFSM_Update、Motion_Update；
+ *   A：Chassis_Update、LineTrack_Update、TaskProfile_Update、Motion_Update；
  *   C：Sensor_Update、DebugMenu_Update、OLED_Update、Log_Update。
  */
 
@@ -34,7 +34,7 @@ void Chassis_Update(void);          /* A：底盘速度闭环，10ms */
 void Motion_Update(void);           /* A：底盘动作库，10ms */
 void LineTrack_Update(void);        /* A：循迹控制，10ms */
 void Gimbal_Update(void);           /* 云台轨迹业务，20ms */
-void TaskFSM_Update(void);          /* A：总任务状态机，10ms */
+void TaskFSM_Update(void);          /* Medicine总任务状态机实现，由选择层调用 */
 void DebugMenu_Update(void);        /* C：按键/OLED 调参菜单，20ms */
 void OLED_Update(void);             /* C：OLED 页面刷新，100ms */
 void LCD_Update(void);              /* C：TFT LCD 页面刷新，建议100~200ms */

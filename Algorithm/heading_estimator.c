@@ -66,8 +66,7 @@ void Heading_Update(void)
 #elif (HEADING_ESTIMATOR_SOURCE == HEADING_SOURCE_FUSED)
     float yaw;
 
-    /* Sensor_Update() 正常负责推进；这里再调用一次也会由 timestamp 自动去重。 */
-    (void)Attitude_Update();
+    /* 姿态融合只由 Sensor_Update() 的适配层推进，本模块只读取算法缓存。 */
     if (Attitude_IsValid() == 0U) {
         return;
     }

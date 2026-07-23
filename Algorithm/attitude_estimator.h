@@ -1,7 +1,7 @@
 #ifndef __ATTITUDE_ESTIMATOR_H
 #define __ATTITUDE_ESTIMATOR_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -32,7 +32,6 @@ extern "C" {
 #define ATTITUDE_ENCODER_YAW_CORRECTION_ENABLE    0U
 #define ATTITUDE_MAG_YAW_CORRECTION_ENABLE        1U
 #define ATTITUDE_MAG_DISABLE_WHEN_MOTOR_ACTIVE    1U
-#define ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE    5
 
 /* 磁力计只用于绕重力方向的慢速 Yaw 修正。 */
 #define ATTITUDE_MAHONY_MAG_KP                   0.05f
@@ -90,6 +89,26 @@ typedef struct {
 } Attitude_MagCalibration_t;
 
 typedef struct {
+    float x;
+    float y;
+    float z;
+} Attitude_Vector3f_t;
+
+/*
+ * 姿态算法的纯数据输入，不暴露具体 IMU 驱动类型。
+ * APP 适配层负责把传感器驱动缓存转换为该结构。
+ */
+typedef struct {
+    Attitude_Vector3f_t accel_filtered_g;
+    Attitude_Vector3f_t gyro_filtered_dps;
+    Attitude_Vector3f_t mag_uT;
+    Attitude_Vector3f_t mag_filtered_uT;
+    uint32_t timestamp_ms;
+    uint8_t mag_valid;
+    uint8_t mag_updated;
+} Attitude_Input_t;
+
+typedef struct {
     float q[4];                       /* w, x, y, z */
     float roll_deg;
     float pitch_deg;
@@ -124,9 +143,12 @@ typedef struct {
 void Attitude_Init(void);
 void Attitude_Reset(void);
 
-/* 每次有新 IMU 时间戳时融合一次；重复时间戳返回 BSP_BUSY。 */
-BSP_Status_t Attitude_Update(void);
-BSP_Status_t Attitude_GetInfo(Attitude_Info_t *info);
+/* 每次有新输入时间戳时融合一次；重复时间戳返回 PROJECT_BUSY。 */
+Project_Status_t Attitude_Update(const Attitude_Input_t *input,
+                                 uint8_t motor_active);
+/* 输入源离线或数据失效时由适配层调用，防止上层继续使用陈旧姿态。 */
+void Attitude_Invalidate(void);
+Project_Status_t Attitude_GetInfo(Attitude_Info_t *info);
 
 float Attitude_GetRollDeg(void);
 float Attitude_GetPitchDeg(void);
@@ -138,9 +160,9 @@ void Attitude_ZeroYaw(void);
 
 /* 运行时磁力计标定：在 Start 与 Finish 之间缓慢转遍所有方向。 */
 void Attitude_MagCalibrationStart(void);
-BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result);
-BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration);
-BSP_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration);
+Project_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result);
+Project_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration);
+Project_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration);
 
 #ifdef __cplusplus
 }

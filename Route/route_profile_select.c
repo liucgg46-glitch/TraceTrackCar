@@ -3,21 +3,49 @@
 
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
 #include "route_profile_basic.h"
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+#include "route_profile_medicine.h"
 #else
 #error "Invalid ROUTE_PROFILE_SELECT: add the selected profile adapter in route_profile_select.c"
 #endif
 
-void RouteProfile_Init(void)
+void RouteProfile_Init(uint32_t now_ms)
 {
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    BasicRoute_Init();
+    BasicRoute_Init(now_ms);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    MedicineRoute_Init(now_ms);
 #endif
 }
 
-void RouteProfile_Reset(void)
+void RouteProfile_Reset(uint32_t now_ms)
 {
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    BasicRoute_Reset();
+    BasicRoute_Reset(now_ms);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    MedicineRoute_Reset(now_ms);
+#endif
+}
+
+Project_Status_t RouteProfile_ConfigureMission(
+    uint8_t target_room,
+    Route_MissionDirection_t direction,
+    uint32_t now_ms)
+{
+#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
+    return BasicRoute_ConfigureMission(target_room, direction, now_ms);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    return MedicineRoute_ConfigureMission(target_room, direction, now_ms);
+#endif
+}
+
+Project_Status_t RouteProfile_SubmitVisualDecision(
+    Route_VisualDirection_t direction)
+{
+#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
+    return BasicRoute_SubmitVisualDecision(direction);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    return MedicineRoute_SubmitVisualDecision(direction);
 #endif
 }
 
@@ -25,16 +53,21 @@ Route_ControlMode_t RouteProfile_Update(
     const LineDetect_Result_t *line,
     const Route_ActionFeedback_t *feedback,
     LineTrack_Output_t *out,
-    Route_ActionRequest_t *request)
+    Route_ActionRequest_t *request,
+    uint32_t now_ms)
 {
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
-    return BasicRoute_Update(line, feedback, out, request);
+    return BasicRoute_Update(line, feedback, out, request, now_ms);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    return MedicineRoute_Update(line, feedback, out, request, now_ms);
 #endif
 }
 
-BSP_Status_t RouteProfile_GetInfo(RouteProfile_Info_t *info)
+Project_Status_t RouteProfile_GetInfo(RouteProfile_Info_t *info)
 {
 #if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_BASIC)
     return BasicRoute_GetInfo(info);
+#elif (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_MEDICINE)
+    return MedicineRoute_GetInfo(info);
 #endif
 }

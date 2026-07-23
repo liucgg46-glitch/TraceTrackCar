@@ -1,7 +1,7 @@
 #ifndef __LINE_TRACK_H
 #define __LINE_TRACK_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include "line_detect.h"
 #include <stdint.h>
 
@@ -65,8 +65,10 @@ typedef struct {
 
 void LineTrack_Init(void);
 void LineTrack_Reset(void);
-BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info);
-void LineTrack_Compute(const LineDetect_Result_t *line, LineTrack_Output_t *out);
+Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info);
+void LineTrack_Compute(const LineDetect_Result_t *line,
+                       LineTrack_Output_t *out,
+                       uint32_t now_ms);
 
 #ifdef __cplusplus
 }

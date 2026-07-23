@@ -1,6 +1,7 @@
 #include "motion_action.h"
 #include "control_config.h"
 #include "odometer.h"
+#include "odometer_adapter.h"
 #include "heading_estimator.h"
 #include "chassis.h"
 #include "sensor_manager.h"
@@ -73,7 +74,7 @@ BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
         return BSP_BUSY;
     }
 
-    Odometer_Clear();
+    AppOdometer_Clear();
     Heading_Reset();
 
     s_motion.action = MOTION_ACTION_GO_DISTANCE;
@@ -105,7 +106,7 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg)
         return BSP_BUSY;
     }
 
-    Odometer_Clear();
+    AppOdometer_Clear();
     Heading_Reset();
 
     s_motion.action = MOTION_ACTION_TURN_ANGLE;
@@ -150,7 +151,7 @@ void Motion_Update(void)
         return;
     }
 
-    Odometer_Update();
+    AppOdometer_Update();
     Heading_Update();
 
     s_motion.current_distance_mm = Odometer_GetDistanceMm();

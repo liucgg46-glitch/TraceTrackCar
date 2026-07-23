@@ -6,8 +6,9 @@
  * 新增赛道时先分配唯一编号，再在 route_profile_select.c 中接入实现。
  */
 #define ROUTE_PROFILE_BASIC                         0U
+#define ROUTE_PROFILE_MEDICINE                      1U
 
 /* 当前使用的赛道方案。 */
-#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
+#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_MEDICINE
 
 #endif /* __ROUTE_CONFIG_H */

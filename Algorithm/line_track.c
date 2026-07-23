@@ -38,6 +38,7 @@ static uint16_t s_reacquire_samples;
 static uint16_t s_search_phase;
 static uint32_t s_lost_start_ms;
 static uint32_t s_search_phase_start_ms;
+static uint32_t s_now_ms;
 
 static void LineTrack_SetOutput(int16_t linear,
                                 int16_t turn,
@@ -275,16 +276,13 @@ void LineTrack_Reset(void)
     s_last_line_direction = 1;
     s_search_direction = 1;
     s_reacquire_samples = 0U;
+    s_now_ms = 0U;
     LineTrack_ClearLossRecovery();
 }
 
-BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
+Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
 {
-    uint32_t now;
-
-    if (info == 0) return BSP_PARAM;
-
-    now = BSP_GET_TICK();
+    if (info == 0) return PROJECT_PARAM;
 
     info->mode = s_mode;
     info->raw_error = s_raw_error;
@@ -298,15 +296,15 @@ BSP_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
     info->search_phase = s_search_phase;
     info->search_direction = s_search_direction;
     info->lost_ms = (s_lost_samples == 0U) ? 0U :
-                    (uint32_t)(now - s_lost_start_ms);
+                    (uint32_t)(s_now_ms - s_lost_start_ms);
 
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
 void LineTrack_Compute(const LineDetect_Result_t *line,
-                       LineTrack_Output_t *out)
+                       LineTrack_Output_t *out,
+                       uint32_t now_ms)
 {
-    uint32_t now;
     uint8_t was_recovering;
     int16_t error;
     int16_t d_error;
@@ -321,7 +319,7 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     out->turn_cps = 0;
     out->valid = 0U;
 
-    now = BSP_GET_TICK();
+    s_now_ms = now_ms;
     s_raw_error = line->error_x1000;
 
     /* 找线超时后保持无效输出，必须由上层重新启动循迹。 */
@@ -335,13 +333,13 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
      */
     if (line->type == LINE_TYPE_LOST) {
         if (s_lost_samples == 0U) {
-            s_lost_start_ms = now;
+            s_lost_start_ms = s_now_ms;
         }
 
         s_lost_samples = LineTrack_IncrementU16(s_lost_samples);
         s_reacquire_samples = 0U;
 
-        if ((uint32_t)(now - s_lost_start_ms) >=
+        if ((uint32_t)(s_now_ms - s_lost_start_ms) >=
             s_cfg.search_timeout_ms) {
             s_mode = LINE_TRACK_MODE_FAILSAFE;
             LineTrack_SetOutput(0, 0, 0U, out);
@@ -357,9 +355,9 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
                                     out);
                 return;
             }
-            LineTrack_StartSearch(now);
+            LineTrack_StartSearch(s_now_ms);
         } else {
-            LineTrack_UpdateSearchPhase(now);
+            LineTrack_UpdateSearchPhase(s_now_ms);
         }
 
         LineTrack_OutputSearch(out);

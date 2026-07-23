@@ -6,6 +6,7 @@
 #include "stm32f4xx_dma.h"
 #include "stm32f4xx_gpio.h"
 #include "stm32f4xx_rcc.h"
+#include "project_status.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -23,13 +24,13 @@ extern "C" {
  *      HAL 库，可把下面的 BSP_GET_TICK() 改成 HAL_GetTick()。
  */
 
-typedef enum {
-    BSP_OK = 0,
-    BSP_ERROR,
-    BSP_BUSY,
-    BSP_TIMEOUT,
-    BSP_PARAM
-} BSP_Status_t;
+/* BSP沿用原名称，底层与上层实际共享同一套通用状态码。 */
+typedef Project_Status_t BSP_Status_t;
+#define BSP_OK       PROJECT_OK
+#define BSP_ERROR    PROJECT_ERROR
+#define BSP_BUSY     PROJECT_BUSY
+#define BSP_TIMEOUT  PROJECT_TIMEOUT
+#define BSP_PARAM    PROJECT_PARAM
 
 typedef void (*BSP_ClockCmdFn_t)(uint32_t periph, FunctionalState state);
 

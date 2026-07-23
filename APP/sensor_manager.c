@@ -4,7 +4,58 @@
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
 #include "drv_hx711.h"
+#include "drv_motor.h"
 #include "attitude_estimator.h"
+
+static uint8_t SensorManager_IsMotorActive(void)
+{
+    int16_t motor_pwm[MOTOR_COUNT];
+    uint8_t motor;
+
+    if (Motor_GetAllLastPermille(motor_pwm) != BSP_OK) {
+        /* 无法确认电机状态时按活动处理，优先屏蔽可能受干扰的磁力计。 */
+        return 1U;
+    }
+
+    for (motor = 0U; motor < (uint8_t)MOTOR_COUNT; motor++) {
+        int16_t pwm = motor_pwm[motor];
+        int16_t abs_pwm = (pwm < 0) ? (int16_t)(-pwm) : pwm;
+
+        if (abs_pwm >= SENSOR_ATTITUDE_MOTOR_ACTIVE_MIN_PERMILLE) {
+            return 1U;
+        }
+    }
+    return 0U;
+}
+
+static BSP_Status_t SensorManager_UpdateAttitude(void)
+{
+    Drv_ICM20948_Data_t driver_data;
+    Attitude_Input_t input;
+
+    if (Drv_ICM20948_GetData(&driver_data) != BSP_OK) {
+        Attitude_Invalidate();
+        return BSP_ERROR;
+    }
+
+    input.accel_filtered_g.x = driver_data.accel_filtered_g.x;
+    input.accel_filtered_g.y = driver_data.accel_filtered_g.y;
+    input.accel_filtered_g.z = driver_data.accel_filtered_g.z;
+    input.gyro_filtered_dps.x = driver_data.gyro_filtered_dps.x;
+    input.gyro_filtered_dps.y = driver_data.gyro_filtered_dps.y;
+    input.gyro_filtered_dps.z = driver_data.gyro_filtered_dps.z;
+    input.mag_uT.x = driver_data.mag_uT.x;
+    input.mag_uT.y = driver_data.mag_uT.y;
+    input.mag_uT.z = driver_data.mag_uT.z;
+    input.mag_filtered_uT.x = driver_data.mag_filtered_uT.x;
+    input.mag_filtered_uT.y = driver_data.mag_filtered_uT.y;
+    input.mag_filtered_uT.z = driver_data.mag_filtered_uT.z;
+    input.timestamp_ms = driver_data.timestamp_ms;
+    input.mag_valid = driver_data.mag_valid;
+    input.mag_updated = driver_data.mag_updated;
+
+    return Attitude_Update(&input, SensorManager_IsMotorActive());
+}
 
 void SensorManager_Init(void)
 {
@@ -28,7 +79,7 @@ void Sensor_Update(void)
      * 姿态层按 IMU timestamp 去重：虽然本函数每 1 ms 调用，只有约 102 Hz 的
      * 新样本会真正执行一次融合。重复样本返回 BSP_BUSY，不会重复积分。
      */
-    (void)Attitude_Update();
+    (void)SensorManager_UpdateAttitude();
     (void)Drv_VL53L1X_Update();
     (void)Drv_GraySensor_Update();
     (void)Drv_HX711_Update();

@@ -1,7 +1,5 @@
 #include "attitude_estimator.h"
-
-#include "drv_icm20948.h"
-#include "drv_motor.h"
+#include "project_critical.h"
 
 #include <math.h>
 #include <string.h>
@@ -266,20 +264,20 @@ static uint8_t Attitude_IsCalibrationValid(const Attitude_MagCalibration_t *cali
     return 1U;
 }
 
-static void Attitude_UpdateMagCalibrationSamples(const Drv_ICM20948_Data_t *data)
+static void Attitude_UpdateMagCalibrationSamples(const Attitude_Input_t *input)
 {
     float value[3];
     uint8_t axis;
 
     if ((s_info.mag_calibrating == 0U) ||
-        (data->mag_valid == 0U) ||
-        (data->mag_updated == 0U)) {
+        (input->mag_valid == 0U) ||
+        (input->mag_updated == 0U)) {
         return;
     }
 
-    value[0] = data->mag_uT.x;
-    value[1] = data->mag_uT.y;
-    value[2] = data->mag_uT.z;
+    value[0] = input->mag_uT.x;
+    value[1] = input->mag_uT.y;
+    value[2] = input->mag_uT.z;
 
     for (axis = 0U; axis < 3U; axis++) {
         if (value[axis] < s_mag_cal_min[axis]) s_mag_cal_min[axis] = value[axis];
@@ -288,7 +286,8 @@ static void Attitude_UpdateMagCalibrationSamples(const Drv_ICM20948_Data_t *data
     s_info.mag_calibration_samples++;
 }
 
-static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
+static uint8_t Attitude_PrepareMagnetometer(const Attitude_Input_t *input,
+                                             uint8_t motor_active,
                                              float mag_normalized[3])
 {
     float raw[3];
@@ -297,24 +296,17 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
     float upper;
     uint8_t magnitude_ok;
 
-    s_info.mag_available = data->mag_valid;
+    s_info.mag_available = input->mag_valid;
 
 #if (ATTITUDE_MAG_DISABLE_WHEN_MOTOR_ACTIVE != 0U)
-    if ((Attitude_AbsF((float)Motor_GetLastPermille(MOTOR_FL)) >=
-         (float)ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE) ||
-        (Attitude_AbsF((float)Motor_GetLastPermille(MOTOR_FR)) >=
-         (float)ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE) ||
-        (Attitude_AbsF((float)Motor_GetLastPermille(MOTOR_RL)) >=
-         (float)ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE) ||
-        (Attitude_AbsF((float)Motor_GetLastPermille(MOTOR_RR)) >=
-         (float)ATTITUDE_MAG_MOTOR_ACTIVE_MIN_PERMILLE)) {
+    if (motor_active != 0U) {
         s_info.mag_used = 0U;
         return 0U;
     }
 #endif
 
     /* These states make the magnetometer definitively unusable. */
-    if ((data->mag_valid == 0U) ||
+    if ((input->mag_valid == 0U) ||
         (s_mag_cal.valid == 0U) ||
         (s_info.mag_calibrating != 0U)) {
         s_info.mag_healthy = 0U;
@@ -328,13 +320,13 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
      * No fresh sample in this IMU cycle is not a fault: keep the previous
      * healthy/used state and simply skip magnetometer correction this time.
      */
-    if (data->mag_updated == 0U) {
+    if (input->mag_updated == 0U) {
         return 0U;
     }
 
-    raw[0] = data->mag_filtered_uT.x;
-    raw[1] = data->mag_filtered_uT.y;
-    raw[2] = data->mag_filtered_uT.z;
+    raw[0] = input->mag_filtered_uT.x;
+    raw[1] = input->mag_filtered_uT.y;
+    raw[2] = input->mag_filtered_uT.z;
 
     if (s_mag_cal.valid != 0U) {
         mag_normalized[0] = (raw[0] - s_mag_cal.offset_uT[0]) * s_mag_cal.scale[0];
@@ -378,7 +370,7 @@ static uint8_t Attitude_PrepareMagnetometer(const Drv_ICM20948_Data_t *data,
     }
 
     s_info.mag_healthy = 1U;
-    s_last_healthy_mag_ms = data->timestamp_ms;
+    s_last_healthy_mag_ms = input->timestamp_ms;
 
     if (Attitude_NormalizeVector(mag_normalized) == 0U) {
         s_info.mag_healthy = 0U;
@@ -437,8 +429,8 @@ static void Attitude_AddMagCorrection(const float mag_body[3],
     s_info.mag_accept_count++;
 }
 
-static void Attitude_UpdateStationaryAndBias(const Drv_ICM20948_Data_t *data,
-                                             float accel_norm)
+static void Attitude_UpdateStationaryAndBias(const Attitude_Input_t *input,
+                                              float accel_norm)
 {
     uint8_t stationary_candidate;
     uint8_t axis;
@@ -446,9 +438,9 @@ static void Attitude_UpdateStationaryAndBias(const Drv_ICM20948_Data_t *data,
     stationary_candidate =
         ((accel_norm >= ATTITUDE_STATIONARY_ACCEL_MIN_G) &&
          (accel_norm <= ATTITUDE_STATIONARY_ACCEL_MAX_G) &&
-         (Attitude_AbsF(data->gyro_filtered_dps.x) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS) &&
-         (Attitude_AbsF(data->gyro_filtered_dps.y) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS) &&
-         (Attitude_AbsF(data->gyro_filtered_dps.z) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS)) ? 1U : 0U;
+         (Attitude_AbsF(input->gyro_filtered_dps.x) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS) &&
+         (Attitude_AbsF(input->gyro_filtered_dps.y) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS) &&
+         (Attitude_AbsF(input->gyro_filtered_dps.z) <= ATTITUDE_STATIONARY_GYRO_MAX_DPS)) ? 1U : 0U;
 
     if (stationary_candidate != 0U) {
         if (s_stationary_samples < ATTITUDE_STATIONARY_SAMPLE_COUNT) {
@@ -464,9 +456,9 @@ static void Attitude_UpdateStationaryAndBias(const Drv_ICM20948_Data_t *data,
     }
 
     for (axis = 0U; axis < 3U; axis++) {
-        float measurement = (axis == 0U) ? data->gyro_filtered_dps.x :
-                            ((axis == 1U) ? data->gyro_filtered_dps.y :
-                                           data->gyro_filtered_dps.z);
+        float measurement = (axis == 0U) ? input->gyro_filtered_dps.x :
+                            ((axis == 1U) ? input->gyro_filtered_dps.y :
+                                           input->gyro_filtered_dps.z);
         s_info.online_gyro_bias_dps[axis] += ATTITUDE_ONLINE_BIAS_ALPHA *
                                              (measurement - s_info.online_gyro_bias_dps[axis]);
         s_info.online_gyro_bias_dps[axis] =
@@ -512,9 +504,9 @@ void Attitude_Reset(void)
     Attitude_ResetFusionState();
 }
 
-BSP_Status_t Attitude_Update(void)
+Project_Status_t Attitude_Update(const Attitude_Input_t *input,
+                                 uint8_t motor_active)
 {
-    Drv_ICM20948_Data_t data;
     float accel[3];
     float accel_norm;
     float gravity[3];
@@ -529,21 +521,22 @@ BSP_Status_t Attitude_Update(void)
     uint8_t accel_usable;
     uint8_t mag_usable;
 
-    if (Drv_ICM20948_GetData(&data) != BSP_OK) {
+    if (input == 0) {
         s_info.valid = 0U;
-        return BSP_ERROR;
+        return PROJECT_PARAM;
     }
-    if ((s_have_timestamp != 0U) && (data.timestamp_ms == s_last_timestamp_ms)) {
-        return BSP_BUSY;
+    if ((s_have_timestamp != 0U) &&
+        (input->timestamp_ms == s_last_timestamp_ms)) {
+        return PROJECT_BUSY;
     }
 
-    accel[0] = data.accel_filtered_g.x;
-    accel[1] = data.accel_filtered_g.y;
-    accel[2] = data.accel_filtered_g.z;
+    accel[0] = input->accel_filtered_g.x;
+    accel[1] = input->accel_filtered_g.y;
+    accel[2] = input->accel_filtered_g.z;
     accel_norm = Attitude_VectorNorm(accel);
 
-    Attitude_UpdateMagCalibrationSamples(&data);
-    Attitude_UpdateStationaryAndBias(&data, accel_norm);
+    Attitude_UpdateMagCalibrationSamples(input);
+    Attitude_UpdateStationaryAndBias(input, accel_norm);
 
     if (s_have_timestamp == 0U) {
         roll = atan2f(accel[1], accel[2]);
@@ -556,33 +549,35 @@ BSP_Status_t Attitude_Update(void)
         s_info.encoder_yaw_rate_dps = 0.0f;
         s_info.encoder_used = 0U;
         s_info.encoder_heading_valid = 0U;
-        s_last_timestamp_ms = data.timestamp_ms;
+        s_last_timestamp_ms = input->timestamp_ms;
         s_have_timestamp = 1U;
-        s_info.timestamp_ms = data.timestamp_ms;
+        s_info.timestamp_ms = input->timestamp_ms;
         s_info.initialized = 1U;
         s_info.valid = 1U;
         s_info.update_count++;
 
-        mag_usable = Attitude_PrepareMagnetometer(&data, mag);
+        mag_usable = Attitude_PrepareMagnetometer(input,
+                                                  motor_active,
+                                                  mag);
         if ((ATTITUDE_MAG_YAW_CORRECTION_ENABLE != 0U) && (mag_usable != 0U)) {
             Attitude_GetEstimatedGravity(gravity);
             Attitude_AddMagCorrection(mag, gravity, correction);
         } else {
             s_info.mag_used = 0U;
         }
-        return BSP_OK;
+        return PROJECT_OK;
     }
 
-    elapsed_ms = (uint32_t)(data.timestamp_ms - s_last_timestamp_ms);
+    elapsed_ms = (uint32_t)(input->timestamp_ms - s_last_timestamp_ms);
     dt = (float)elapsed_ms * 0.001f;
     if ((dt < ATTITUDE_MIN_DT_S) || (dt > ATTITUDE_MAX_DT_S)) {
         dt = ATTITUDE_NOMINAL_DT_S;
     }
-    s_last_timestamp_ms = data.timestamp_ms;
+    s_last_timestamp_ms = input->timestamp_ms;
 
-    angular_rate[0] = (data.gyro_filtered_dps.x - s_info.online_gyro_bias_dps[0]) * ATTITUDE_DEG_TO_RAD;
-    angular_rate[1] = (data.gyro_filtered_dps.y - s_info.online_gyro_bias_dps[1]) * ATTITUDE_DEG_TO_RAD;
-    angular_rate[2] = (data.gyro_filtered_dps.z - s_info.online_gyro_bias_dps[2]) * ATTITUDE_DEG_TO_RAD;
+    angular_rate[0] = (input->gyro_filtered_dps.x - s_info.online_gyro_bias_dps[0]) * ATTITUDE_DEG_TO_RAD;
+    angular_rate[1] = (input->gyro_filtered_dps.y - s_info.online_gyro_bias_dps[1]) * ATTITUDE_DEG_TO_RAD;
+    angular_rate[2] = (input->gyro_filtered_dps.z - s_info.online_gyro_bias_dps[2]) * ATTITUDE_DEG_TO_RAD;
 
 #if (ATTITUDE_SEPARATE_YAW_ENABLE != 0U)
     /*
@@ -611,19 +606,21 @@ BSP_Status_t Attitude_Update(void)
     s_info.encoder_used = 0U;
     s_info.encoder_heading_valid = 0U;
 
-    mag_usable = Attitude_PrepareMagnetometer(&data, mag);
+    mag_usable = Attitude_PrepareMagnetometer(input,
+                                              motor_active,
+                                              mag);
     if ((ATTITUDE_MAG_YAW_CORRECTION_ENABLE != 0U) && (mag_usable != 0U)) {
         Attitude_AddMagCorrection(mag, gravity, correction);
     } else if ((s_info.mag_healthy != 0U) &&
-               ((uint32_t)(data.timestamp_ms - s_last_healthy_mag_ms) >
+               ((uint32_t)(input->timestamp_ms - s_last_healthy_mag_ms) >
                 ATTITUDE_MAG_STALE_TIMEOUT_MS)) {
         s_info.mag_healthy = 0U;
         s_info.mag_used = 0U;
         s_mag_good_samples = 0U;
     }
-    if (ATTITUDE_MAG_YAW_CORRECTION_ENABLE == 0U) {
-        s_info.mag_used = 0U;
-    }
+#if (ATTITUDE_MAG_YAW_CORRECTION_ENABLE == 0U)
+    s_info.mag_used = 0U;
+#endif
 
 #if (ATTITUDE_SEPARATE_YAW_ENABLE != 0U)
     if ((ATTITUDE_MAG_YAW_CORRECTION_ENABLE != 0U) &&
@@ -640,24 +637,29 @@ BSP_Status_t Attitude_Update(void)
     Attitude_IntegrateQuaternion(angular_rate, dt);
     Attitude_UpdateEuler();
 
-    s_info.timestamp_ms = data.timestamp_ms;
+    s_info.timestamp_ms = input->timestamp_ms;
     s_info.initialized = 1U;
     s_info.valid = 1U;
     s_info.update_count++;
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
-BSP_Status_t Attitude_GetInfo(Attitude_Info_t *info)
+void Attitude_Invalidate(void)
+{
+    s_info.valid = 0U;
+}
+
+Project_Status_t Attitude_GetInfo(Attitude_Info_t *info)
 {
     uint32_t primask;
 
     if (info == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
-    primask = BSP_EnterCritical();
+    primask = Project_EnterCritical();
     memcpy(info, &s_info, sizeof(*info));
-    BSP_ExitCritical(primask);
-    return (info->valid != 0U) ? BSP_OK : BSP_ERROR;
+    Project_ExitCritical(primask);
+    return (info->valid != 0U) ? PROJECT_OK : PROJECT_ERROR;
 }
 
 float Attitude_GetRollDeg(void)
@@ -703,7 +705,7 @@ void Attitude_MagCalibrationStart(void)
     Attitude_ResetMagReference();
 }
 
-BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
+Project_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
 {
     Attitude_MagCalibration_t candidate;
     float radius[3];
@@ -711,19 +713,19 @@ BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
     uint8_t axis;
 
     if (s_info.mag_calibrating == 0U) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
     s_info.mag_calibrating = 0U;
 
     if (s_info.mag_calibration_samples < ATTITUDE_MAG_CAL_MIN_SAMPLES) {
-        return BSP_ERROR;
+        return PROJECT_ERROR;
     }
 
     memset(&candidate, 0, sizeof(candidate));
     for (axis = 0U; axis < 3U; axis++) {
         float span = s_mag_cal_max[axis] - s_mag_cal_min[axis];
         if (span < ATTITUDE_MAG_CAL_MIN_SPAN_UT) {
-            return BSP_ERROR;
+            return PROJECT_ERROR;
         }
         candidate.offset_uT[axis] = 0.5f * (s_mag_cal_max[axis] + s_mag_cal_min[axis]);
         radius[axis] = 0.5f * span;
@@ -735,19 +737,19 @@ BSP_Status_t Attitude_MagCalibrationFinish(Attitude_MagCalibration_t *result)
     }
     candidate.valid = 1U;
 
-    if (Attitude_SetMagCalibration(&candidate) != BSP_OK) {
-        return BSP_ERROR;
+    if (Attitude_SetMagCalibration(&candidate) != PROJECT_OK) {
+        return PROJECT_ERROR;
     }
     if (result != 0) {
         *result = s_mag_cal;
     }
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
-BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration)
+Project_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibration)
 {
     if (calibration == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     if (calibration->valid == 0U) {
@@ -755,25 +757,25 @@ BSP_Status_t Attitude_SetMagCalibration(const Attitude_MagCalibration_t *calibra
         s_mag_cal.valid = 0U;
         s_info.mag_calibrated = 0U;
         Attitude_ResetMagReference();
-        return BSP_OK;
+        return PROJECT_OK;
     }
 
     if (Attitude_IsCalibrationValid(calibration) == 0U) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
 
     s_mag_cal = *calibration;
     s_mag_cal.valid = 1U;
     s_info.mag_calibrated = 1U;
     Attitude_ResetMagReference();
-    return BSP_OK;
+    return PROJECT_OK;
 }
 
-BSP_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration)
+Project_Status_t Attitude_GetMagCalibration(Attitude_MagCalibration_t *calibration)
 {
     if (calibration == 0) {
-        return BSP_PARAM;
+        return PROJECT_PARAM;
     }
     *calibration = s_mag_cal;
-    return BSP_OK;
+    return PROJECT_OK;
 }

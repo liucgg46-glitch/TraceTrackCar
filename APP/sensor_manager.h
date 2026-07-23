@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+/* 任一电机达到该输出时，姿态适配层向算法报告电机处于活动状态。 */
+#define SENSOR_ATTITUDE_MOTOR_ACTIVE_MIN_PERMILLE 5
+
 /*
  * 传感器统一管理层。
  *

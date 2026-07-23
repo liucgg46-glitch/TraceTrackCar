@@ -160,8 +160,6 @@ void         BSP_Encoder_ClearTotal(BSP_Encoder_Id_t id);
 void         BSP_Encoder_ClearAllTotal(void);
 BSP_Status_t BSP_Encoder_GetInfo(BSP_Encoder_Id_t id, BSP_Encoder_Info_t *info);
 
-void Test_Encoder_Log(void);
-
 #ifdef __cplusplus
 }
 #endif

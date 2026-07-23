@@ -1,15 +1,16 @@
 
 #include "line_follow_app.h"
 #include "drv_gray_sensor.h"
+#include "drv_encoder.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
 #include "motion_action.h"
 #include "route_manager.h"
+#include "bsp_systick.h"
 
 static LineFollow_Info_t s_lf;
 static uint8_t s_route_action_active;
-static uint8_t s_auto_start_pending;
 
 static void LineFollow_ClearOutput(void)
 {
@@ -90,8 +91,7 @@ void LineFollow_Init(void)
     s_route_action_active = 0U;
 
     LineDetect_Init();
-    RouteManager_Init();
-		
+    RouteManager_Init(BSP_GetTickMs());
 }
 
 BSP_Status_t LineFollow_Start(void)
@@ -109,7 +109,7 @@ BSP_Status_t LineFollow_Start(void)
     }
 
     /* 成功取得底盘后才复位本模块状态，不影响其他控制者。 */
-    RouteManager_Reset();
+    RouteManager_Reset(BSP_GetTickMs());
     LineFollow_ClearOutput();
     s_route_action_active = 0U;
     s_lf.state = LINE_FOLLOW_RUN;
@@ -120,7 +120,7 @@ void LineFollow_Stop(void)
 {
     s_lf.state = LINE_FOLLOW_STOP;
     LineFollow_ReleaseOwnedControl();
-    RouteManager_Reset();
+    RouteManager_Reset(BSP_GetTickMs());
     LineFollow_ClearOutput();
 }
 
@@ -130,6 +130,7 @@ void LineFollow_Update(void)
     Route_ControlMode_t control;
     Route_ActionFeedback_t feedback;
     Route_ActionRequest_t request;
+    uint32_t now_ms;
 
     if (Drv_GraySensor_IsOnline() == 0U) {
         if (s_lf.state == LINE_FOLLOW_RUN) {
@@ -137,14 +138,6 @@ void LineFollow_Update(void)
         }
         return;
     }
-				/* 等灰度传感器完成第一次采样后，只自动启动一次 */
-		if (s_auto_start_pending != 0U) {
-				if (LineFollow_Start() == BSP_OK) {
-						s_auto_start_pending = 0U;
-				} else {
-						return;
-				}
-		}
 
     (void)Drv_GraySensor_GetFiltArray(s_lf.raw, LINE_DETECT_SENSOR_NUM);
     LineDetect_Update(s_lf.raw);
@@ -163,10 +156,15 @@ void LineFollow_Update(void)
      * 后续赛道方案也从这里统一接管，不直接操作底盘或 Motion。
      */
     feedback.state = LineFollow_GetRouteActionState();
+    feedback.distance_mm =
+        (Drv_Encoder_GetLeftTotalMm() +
+         Drv_Encoder_GetRightTotalMm()) / 2;
+    now_ms = BSP_GetTickMs();
     control = RouteManager_Update(res,
                                   &feedback,
                                   &s_lf.output,
-                                  &request);
+                                  &request,
+                                  now_ms);
 
     if (control == ROUTE_CONTROL_MOTION) {
         if (request.type != ROUTE_ACTION_NONE) {

@@ -1,7 +1,7 @@
 #ifndef __LINE_DETECT_H
 #define __LINE_DETECT_H
 
-#include "bsp_common.h"
+#include "project_status.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -88,12 +88,12 @@ typedef struct {
 void LineDetect_Init(void);
 
 void LineDetect_Update(const uint16_t raw[LINE_DETECT_SENSOR_NUM]);
-BSP_Status_t LineDetect_GetResult(LineDetect_Result_t *out_result);
+Project_Status_t LineDetect_GetResult(LineDetect_Result_t *out_result);
 const LineDetect_Result_t *LineDetect_GetResultPtr(void);
 
 void LineDetect_SetThreshold(uint8_t index, uint16_t threshold);
 void LineDetect_SetAllThreshold(uint16_t threshold);
-BSP_Status_t LineDetect_GetThresholdArray(uint16_t *out_threshold, uint8_t max_count);
+Project_Status_t LineDetect_GetThresholdArray(uint16_t *out_threshold, uint8_t max_count);
 
 /* 白底/黑线两次采样后生成阈值：threshold = (white + black) / 2。 */
 void LineDetect_CaptureWhite(const uint16_t raw[LINE_DETECT_SENSOR_NUM]);
