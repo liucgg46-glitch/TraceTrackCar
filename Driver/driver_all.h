@@ -24,6 +24,7 @@ extern "C" {
  *   - Drv_Servo_Init()
  *   - Drv_Laser_Init()
  *   - Drv_StatusLight_Init()
+ *   - Drv_Buzzer_Init()
  *
  * Driver_Task() 必须被 1ms 左右后台任务周期调用，用于推进 E220 发送重试、
  * 非阻塞 LCD/OLED DMA、舵机缓动和激光连续点亮保护。

@@ -7,6 +7,7 @@
 
 void Test_GPIO_Toggle(void); //{ Test_GPIO_Toggle,       10U,   0U },  /* LED闪烁任务，判断程序是否正常运行 */
 void Test_StatusLight_Update(void); /* { Test_StatusLight_Update, 10U, 0U }，红灯、绿灯、熄灭循环测试 */
+void Test_Buzzer_Update(void); /* KEY1 长响、KEY2 停止、KEY3 每 500 ms 翻转；需先注册 Key_Update */
 void Test_PWM_Ramp(void);    //{ Test_PWM_Ramp, 10U, 0U },
 void Test_Encoder_Log(void); //{ Test_Encoder_Log,   200U, 0U },
 
@@ -23,8 +24,6 @@ void Test_UART_Stats(void);//{ Test_UART_Stats,        200U,   0U },
 void Test_E220_Link_Update(void);//E220 双车通信测试；每秒发送递增数字并在 LCD/OLED 显示接收结果
 
 void Test_I2C_Scan(void);//扫描i2c设备，主函数中调用一次即可
-
-void Test_SPI2_LCD(void);//主函数调用一次即可
 
 void Test_MotorCmd_Update(void);// 测试电机方向（开环测试）   { Test_MotorCmd_Update,  10U,  0U },
 void Test_MotorCmd_Log(void);//    { Test_MotorCmd_Log,     200U, 0U },

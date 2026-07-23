@@ -18,7 +18,7 @@ extern "C" {
  * 移植方法：
  *   只改本文件“GPIO 通道配置区”。bsp_gpio.c 不需要改。
  *
- * 当前电赛小车推荐规划 v1.4：
+ * 当前电赛小车推荐规划 v1.5：
  *   CH1  ：PC13，板载 LED / 调试输出模板
  *   CH2  ：PB12，SPI2 设备 CS 默认片选
  *   CH3~CH10：四电机方向脚，避开 USART2 的 PD5/PD6
@@ -29,6 +29,7 @@ extern "C" {
  *   CH18 ：PE6，E220 AUX 输入（仅无线 USART1 模式启用）
  *   CH19~CH20：PG3/PG4，HX711 DOUT/PD_SCK
  *   CH21~CH22：PG5/PG6，红灯/绿灯控制输出
+ *   CH23 ：PG7，有源蜂鸣器控制输出
  *
  * 电机方向脚规划：
  *   M1_IN1 = PD0, M1_IN2 = PD1
@@ -287,6 +288,25 @@ extern "C" {
 #define BSP_GPIO_CH22_SPEED          GPIO_Speed_2MHz
 #define BSP_GPIO_CH22_INIT_LEVEL     ((BSP_GPIO_STATUS_GREEN_ACTIVE_LEVEL != 0U) ? 0U : 1U)
 
+/* CH23：有源蜂鸣器或带驱动蜂鸣器模块控制脚。
+ * PG7 在当前源码的 GPIO、PWM、编码器和通信外设配置中均未占用，仅作普通推挽输出。
+ * 默认高电平鸣响；若实物模块为低电平有效，只需将 ACTIVE_LEVEL 改为 0U。 */
+#define BSP_GPIO_BUZZER_ACTIVE_LEVEL  0U
+
+#if ((BSP_GPIO_BUZZER_ACTIVE_LEVEL != 0U) && \
+     (BSP_GPIO_BUZZER_ACTIVE_LEVEL != 1U))
+#error "BSP_GPIO_BUZZER_ACTIVE_LEVEL must be 0U or 1U"
+#endif
+
+#define BSP_GPIO_CH23_ENABLE         1
+#define BSP_GPIO_CH23_PORT           GPIOG
+#define BSP_GPIO_CH23_PIN            GPIO_Pin_7
+#define BSP_GPIO_CH23_MODE           GPIO_Mode_OUT
+#define BSP_GPIO_CH23_OTYPE          GPIO_OType_PP
+#define BSP_GPIO_CH23_PUPD           ((BSP_GPIO_BUZZER_ACTIVE_LEVEL != 0U) ? GPIO_PuPd_DOWN : GPIO_PuPd_UP)
+#define BSP_GPIO_CH23_SPEED          GPIO_Speed_2MHz
+#define BSP_GPIO_CH23_INIT_LEVEL     ((BSP_GPIO_BUZZER_ACTIVE_LEVEL != 0U) ? 0U : 1U)
+
 /* 只有 ENABLE=1 的通道会进入枚举，业务代码不要使用魔法数字。 */
 typedef enum {
 #if BSP_GPIO_CH1_ENABLE
@@ -355,6 +375,9 @@ typedef enum {
 #if BSP_GPIO_CH22_ENABLE
     BSP_GPIO_CH22,
 #endif
+#if BSP_GPIO_CH23_ENABLE
+    BSP_GPIO_CH23,
+#endif
     BSP_GPIO_COUNT
 } BSP_GPIO_Id_t;
 
@@ -385,6 +408,9 @@ typedef enum {
 /* 送药小车红绿状态灯控制脚。 */
 #define BSP_GPIO_STATUS_RED     BSP_GPIO_CH21
 #define BSP_GPIO_STATUS_GREEN   BSP_GPIO_CH22
+
+/* 有源蜂鸣器或带驱动蜂鸣器模块控制脚。 */
+#define BSP_GPIO_BUZZER          BSP_GPIO_CH23
 
 void       BSP_GPIO_Init(BSP_GPIO_Id_t id);
 void       BSP_GPIO_InitAll(void);

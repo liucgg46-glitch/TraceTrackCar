@@ -33,6 +33,7 @@
 #include "drv_vl53l1x.h"
 #include "drv_icm20948.h"
 #include "drv_status_light.h"
+#include "drv_buzzer.h"
 #include "task_fsm.h"
 #include "k210_comm.h"
 #include "bsp_systick.h"
@@ -210,6 +211,60 @@ void Test_StatusLight_Update(void)
 }
 
 //娴嬭瘯浠ｇ爜锛岀數鏈鸿浆閫熼€愭笎鍙樺揩鍦ㄥ彉鎱?
+/*
+ * 蜂鸣器按键测试：KEY1 持续鸣响，KEY2 停止，KEY3 每 500 ms 翻转一次。
+ * 必须先以 10 ms 周期注册 Key_Update，再注册本任务。
+ */
+void Test_Buzzer_Update(void)
+{
+    enum {
+        TEST_BUZZER_MODE_OFF = 0,
+        TEST_BUZZER_MODE_CONTINUOUS,
+        TEST_BUZZER_MODE_TOGGLE
+    };
+
+    static uint32_t last_switch_ms = 0U;
+    static uint8_t mode = TEST_BUZZER_MODE_OFF;
+    uint8_t key1_pressed = 0U;
+    uint8_t key2_pressed = 0U;
+    uint8_t key3_pressed = 0U;
+
+#if BSP_KEY1_ENABLE
+    key1_pressed = BSP_Key_WasPressed(BSP_KEY1);
+#endif
+#if BSP_KEY2_ENABLE
+    key2_pressed = BSP_Key_WasPressed(BSP_KEY2);
+#endif
+#if BSP_KEY3_ENABLE
+    key3_pressed = BSP_Key_WasPressed(BSP_KEY3);
+#endif
+
+    /* 同一轮出现多个事件时停止优先，避免蜂鸣器被后续按键重新启动。 */
+    if (key2_pressed != 0U) {
+        mode = TEST_BUZZER_MODE_OFF;
+        Drv_Buzzer_Off();
+        return;
+    }
+
+    if (key1_pressed != 0U) {
+        mode = TEST_BUZZER_MODE_CONTINUOUS;
+        Drv_Buzzer_On();
+        return;
+    }
+
+    if (key3_pressed != 0U) {
+        mode = TEST_BUZZER_MODE_TOGGLE;
+        last_switch_ms = BSP_GET_TICK();
+        Drv_Buzzer_On();
+        return;
+    }
+
+    if ((mode == TEST_BUZZER_MODE_TOGGLE) &&
+        (BSP_TimeElapsed(&last_switch_ms, 500U) != 0U)) {
+        Drv_Buzzer_Toggle();
+    }
+}
+
 void Test_PWM_Ramp(void)
 {
     static uint32_t last = 0;
@@ -791,13 +846,6 @@ void Test_I2C_Scan(void)
     n += sprintf(&buf[n], "\r\n");
 
     BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-}
-
-//spi娴嬭瘯
-/* 鎸変綘鐨勫疄闄?GPIO 閫氶亾鏀?*/
-void Test_SPI2_LCD(void)
-{
-    Drv_LcdTft_Init();
 }
 
 void Test_DriveProfile_Update(void)
@@ -1468,33 +1516,6 @@ static void Test_Line_Print(void)
     }
 }
 
-void Test_I2C1_Scan_Print(void)
-{
-    uint8_t addr[16];
-    uint8_t found = 0U;
-    char buf[160];
-    int n;
-    uint8_t i;
-
-    (void)BSP_I2C_ScanBus(I2C_BUS1, addr, (uint8_t)sizeof(addr), &found);
-
-    n = sprintf(buf, "I2C_SCAN found=%u:", (unsigned int)found);
-    if (n > 0 && n < (int)sizeof(buf)) {
-        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-    }
-
-    for (i = 0U; i < found; i++) {
-        n = sprintf(buf, " 0x%02X", (unsigned int)addr[i]);
-        if (n > 0 && n < (int)sizeof(buf)) {
-            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-        }
-    }
-
-    (void)BSP_UART_WriteFrame(UART_PORT1,
-                              (const uint8_t *)"\r\n",
-                              2U);
-}
-
 void Test_LineCmd_Update(void)
 {
     uint8_t ch;
@@ -1539,7 +1560,7 @@ void Test_LineCmd_Update(void)
         } else if (ch == 'p') {
             Test_Line_Print();
         } else if (ch == 'k') {
-            Test_I2C1_Scan_Print();
+            Test_I2C_Scan();
         }
     }
 }

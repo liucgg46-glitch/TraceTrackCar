@@ -1042,6 +1042,16 @@
               <FileType>5</FileType>
               <FilePath>.\Driver\drv_status_light.h</FilePath>
             </File>
+            <File>
+              <FileName>drv_buzzer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Driver\drv_buzzer.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_buzzer.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Driver\drv_buzzer.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

@@ -111,6 +111,7 @@ SRCS := \
   Driver/drv_icm20948.c \
   Driver/drv_hx711.c \
   Driver/drv_status_light.c \
+  Driver/drv_buzzer.c \
   Driver/drv_servo.c \
   Driver/drv_laser.c \
   Driver/drv_lcd_tft.c \

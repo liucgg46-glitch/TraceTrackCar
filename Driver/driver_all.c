@@ -11,6 +11,7 @@
 #include "drv_servo.h"
 #include "drv_laser.h"
 #include "drv_status_light.h"
+#include "drv_buzzer.h"
 
 void Driver_Init(void)
 {
@@ -38,10 +39,11 @@ void Driver_Init(void)
     Drv_LcdTft_Init();
     Drv_OledI2c_Init();
 
-    /* 舵机、激光和红绿状态灯只在 Driver 层统一初始化。 */
+    /* 舵机、激光、红绿状态灯和蜂鸣器只在 Driver 层统一初始化。 */
     Drv_Laser_Init();
     Drv_Servo_Init();
     Drv_StatusLight_Init();
+    Drv_Buzzer_Init();
 }
 
 void Driver_Task(void)
