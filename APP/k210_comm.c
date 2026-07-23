@@ -7,6 +7,8 @@
 
 #define K210_UART_PORT             UART_PORT2
 #define K210_OFFLINE_TIMEOUT_MS    1000U
+#define K210_ROAD_PROFILE_TX_INTERVAL_MS  200U
+#define K210_ROAD_PROFILE_TX_REPEAT_COUNT 10U
 
 #define K210_VISION_FIELD_INFO     0x01U
 #define K210_VISION_FIELD_X        0x02U
@@ -41,6 +43,15 @@ static uint8_t s_vision_expected_count;
 static uint8_t s_vision_field_mask[K210_MAX_VISION_TARGETS];
 static uint8_t s_new_vision_result;
 static uint8_t s_have_vision_result;
+static uint8_t s_selected_road_profile;
+static uint8_t s_road_profile_tx_remaining;
+static uint32_t s_road_profile_last_tx_ms;
+
+static uint8_t K210_Comm_RoadProfileValid(uint8_t profile_id)
+{
+    return (profile_id == K210_ROAD_PROFILE_CURRENT ||
+            profile_id == K210_ROAD_PROFILE_OLD) ? 1U : 0U;
+}
 
 static uint8_t K210_Comm_CalcChecksum(const uint8_t *data,
                                       uint8_t length)
@@ -623,6 +634,13 @@ void K210_Comm_Init(void)
     s_new_vision_result = 0U;
     s_have_vision_result = 0U;
 
+    s_selected_road_profile = K210_ROAD_PROFILE_CURRENT;
+    s_road_profile_tx_remaining = K210_ROAD_PROFILE_TX_REPEAT_COUNT;
+    s_road_profile_last_tx_ms = BSP_GetTickMs() - K210_ROAD_PROFILE_TX_INTERVAL_MS;
+    s_k210_info.selected_road_profile = s_selected_road_profile;
+    s_k210_info.road_profile_tx_remaining = s_road_profile_tx_remaining;
+    s_k210_info.road_profile_last_tx_ok = 0U;
+
     BSP_UART_FlushRx(K210_UART_PORT);
 }
 
@@ -641,6 +659,24 @@ void K210_Comm_Update(void)
     }
 
     now_ms = BSP_GetTickMs();
+
+    if (s_road_profile_tx_remaining > 0U &&
+        (uint32_t)(now_ms - s_road_profile_last_tx_ms) >= K210_ROAD_PROFILE_TX_INTERVAL_MS) {
+        BSP_Status_t tx_status = K210_Comm_SendRoadProfile(s_selected_road_profile);
+        if (tx_status == BSP_OK) {
+            s_road_profile_last_tx_ms = now_ms;
+            s_road_profile_tx_remaining--;
+            s_k210_info.road_profile_last_tx_ok = 1U;
+            s_k210_info.road_profile_tx_count++;
+        } else if (tx_status == BSP_BUSY) {
+            s_k210_info.road_profile_last_tx_ok = 0U;
+            s_k210_info.road_profile_tx_busy_count++;
+        } else {
+            s_k210_info.road_profile_last_tx_ok = 0U;
+            s_road_profile_tx_remaining = 0U;
+        }
+        s_k210_info.road_profile_tx_remaining = s_road_profile_tx_remaining;
+    }
 
     if (s_k210_info.online != 0U) {
         if ((uint32_t)(
@@ -979,4 +1015,29 @@ BSP_Status_t K210_Comm_SetMode(uint8_t mode)
         0U,
         0U
     );
+}
+BSP_Status_t K210_Comm_SendRoadProfile(uint8_t profile_id)
+{
+    if (K210_Comm_RoadProfileValid(profile_id) == 0U) return BSP_PARAM;
+    return K210_Comm_SendFrame(K210_CMD_SET_ROAD_PROFILE, profile_id, 0U, 0U);
+}
+
+BSP_Status_t K210_Comm_SelectRoadProfile(uint8_t profile_id)
+{
+    if (K210_Comm_RoadProfileValid(profile_id) == 0U) return BSP_PARAM;
+    s_selected_road_profile = profile_id;
+    s_road_profile_tx_remaining = K210_ROAD_PROFILE_TX_REPEAT_COUNT;
+    s_road_profile_last_tx_ms = BSP_GetTickMs() - K210_ROAD_PROFILE_TX_INTERVAL_MS;
+    s_k210_info.selected_road_profile = profile_id;
+    s_k210_info.road_profile_tx_remaining = s_road_profile_tx_remaining;
+    s_k210_info.road_profile_last_tx_ok = 0U;
+    return BSP_OK;
+}
+
+void K210_Comm_RestartRoadProfileSync(void)
+{
+    s_road_profile_tx_remaining = K210_ROAD_PROFILE_TX_REPEAT_COUNT;
+    s_road_profile_last_tx_ms = BSP_GetTickMs() - K210_ROAD_PROFILE_TX_INTERVAL_MS;
+    s_k210_info.road_profile_tx_remaining = s_road_profile_tx_remaining;
+    s_k210_info.road_profile_last_tx_ok = 0U;
 }

@@ -171,6 +171,8 @@ extern "C" {
 #define K210_CMD_ROAD_LINE_STATE          0x30U
 #define K210_CMD_ROAD_EVENT_STATE         0x31U
 
+#define K210_CMD_SET_ROAD_PROFILE         0x40U
+
 /*
  * ============================================================================
  * STM32发送给K210：控制命令
@@ -281,6 +283,13 @@ typedef enum {
     K210_ROAD_EVENT_STOP_ENTER = 3U,
     K210_ROAD_EVENT_STOP_LEAVE = 4U
 } K210_RoadEvent_t;
+
+typedef enum {
+    K210_ROAD_PROFILE_CURRENT = 0U,
+    K210_ROAD_PROFILE_OLD = 1U,
+    K210_ROAD_PROFILE_BRIGHT = 2U,
+    K210_ROAD_PROFILE_DARK = 3U
+} K210_RoadProfile_t;
 
 /*
  * ============================================================================
@@ -651,6 +660,14 @@ typedef struct {
 
     K210_RoadState_t road;
 
+    /* 道路参数档位发送状态 */
+    uint8_t selected_road_profile;
+    uint8_t road_profile_tx_remaining;
+    uint8_t road_profile_last_tx_ok;
+    uint8_t road_profile_reserved;
+    uint32_t road_profile_tx_count;
+    uint32_t road_profile_tx_busy_count;
+
     /*
      * ------------------------------------------------------------------------
      * 通信统计
@@ -989,6 +1006,9 @@ BSP_Status_t K210_Comm_StopDetect(void);
  * mode使用K210_VisionMode_t。
  */
 BSP_Status_t K210_Comm_SetMode(uint8_t mode);
+BSP_Status_t K210_Comm_SendRoadProfile(uint8_t profile_id);
+BSP_Status_t K210_Comm_SelectRoadProfile(uint8_t profile_id);
+void K210_Comm_RestartRoadProfileSync(void);
 
 #ifdef __cplusplus
 }
