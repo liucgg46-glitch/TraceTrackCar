@@ -389,3 +389,153 @@ void Test_K210_RoadProfileUpdate(void)
         Test_K210_SendText(buf);
     }
 }
+
+
+
+void Test_K210_SingleDigitCommUpdate(void)
+{
+    static uint32_t last_status_ms = 0U;
+
+    K210_Comm_Info_t info;
+
+    uint8_t digit;
+    uint8_t valid;
+    uint8_t confidence;
+
+    char buf[192];
+    int length;
+
+
+    /*
+     * ========================================================
+     * 读取K210刚刚发送的新数字帧
+     *
+     * 协议：
+     * AA 55 01 DIGIT VALID CONF CHECK
+     * ========================================================
+     */
+
+    if (K210_Comm_GetNewDigit(
+            &digit,
+            &valid,
+            &confidence
+        ) == BSP_OK) {
+
+        length = snprintf(
+            buf,
+            sizeof(buf),
+            "K210 DIGIT RX digit=%u valid=%u confidence=%u\r\n",
+            (unsigned int)digit,
+            (unsigned int)valid,
+            (unsigned int)confidence
+        );
+
+        if ((length > 0) &&
+            (length < (int)sizeof(buf))) {
+
+            Test_K210_SendText(
+                buf
+            );
+        }
+    }
+
+
+    /*
+     * ========================================================
+     * 每500ms打印一次通信总状态
+     * ========================================================
+     */
+
+    if ((uint32_t)(
+            BSP_GetTickMs() -
+            last_status_ms
+        ) < K210_DIGIT_LOG_INTERVAL_MS) {
+
+        return;
+    }
+
+
+    last_status_ms =
+        BSP_GetTickMs();
+
+
+    if (K210_Comm_GetInfo(
+            &info
+        ) != BSP_OK) {
+
+        Test_K210_SendText(
+            "K210 GET INFO ERROR\r\n"
+        );
+
+        return;
+    }
+
+
+    /*
+     * 保存到全局变量。
+     *
+     * Debug模式下可以直接在Watch窗口观察：
+     *
+     * g_k210_digit_debug_info.digit
+     * g_k210_digit_debug_info.digit_valid
+     * g_k210_digit_debug_info.digit_confidence
+     * g_k210_digit_debug_info.valid_frame_count
+     * g_k210_digit_debug_info.checksum_error_count
+     * g_k210_digit_debug_info.format_error_count
+     */
+
+    g_k210_digit_debug_info =
+        info;
+
+
+    length = snprintf(
+        buf,
+        sizeof(buf),
+
+        "K210 STATUS "
+        "online=%u "
+        "frames=%lu "
+        "digit=%u "
+        "valid=%u "
+        "conf=%u "
+        "check_err=%lu "
+        "format_err=%lu "
+        "timeout=%lu "
+        "last_rx=%lu\r\n",
+
+        (unsigned int)info.online,
+
+        (unsigned long)
+            info.valid_frame_count,
+
+        (unsigned int)
+            info.digit,
+
+        (unsigned int)
+            info.digit_valid,
+
+        (unsigned int)
+            info.digit_confidence,
+
+        (unsigned long)
+            info.checksum_error_count,
+
+        (unsigned long)
+            info.format_error_count,
+
+        (unsigned long)
+            info.timeout_count,
+
+        (unsigned long)
+            info.last_rx_ms
+    );
+
+
+    if ((length > 0) &&
+        (length < (int)sizeof(buf))) {
+
+        Test_K210_SendText(
+            buf
+        );
+    }
+}

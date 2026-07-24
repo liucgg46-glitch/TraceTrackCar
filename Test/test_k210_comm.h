@@ -17,6 +17,7 @@ extern volatile K210_Comm_Info_t
 
 void Test_K210_RoadCommUpdate(void);
 void Test_K210_RoadProfileUpdate(void);
+void Test_K210_SingleDigitCommUpdate(void);
 
 #ifdef __cplusplus
 }
