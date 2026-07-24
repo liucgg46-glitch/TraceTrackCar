@@ -21,8 +21,8 @@ extern "C" {
  *   USART2_RX：PA3
  *
  * 当前接线：
- *   STM32 PA2（TX） -> K210 RX
- *   STM32 PA3（RX） <- K210 IO6（TX）
+ *   STM32 PA2 -> K210 RX(第4个引脚)
+ *   STM32 PA3 <- K210 TX（第3个引脚）
  *   STM32 GND       -- K210 GND
  *
  * 串口参数：
