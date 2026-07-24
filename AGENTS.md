@@ -46,3 +46,9 @@
 - 赛道规则放`Route`，整场比赛任务状态机放`APP`，器件读写放`Driver`，寄存器和引脚外设操作放`BSP`。
 - 新增或移动参与固件的`.c`文件时，必须同时更新`DroneProject.uvprojx`与`Makefile`；主机测试源文件只进入`Test/host`脚本，不加入固件源列表。
 - 正式固件保持`PROJECT_TEST_TASKS_ENABLE=0U`，`APP/app_task_config.h`不得包含`test.h`或注册`Test_*`任务；专项测试通过后立即恢复正式任务表再做最终构建。
+# STM32与MSPM0上层接口同步规则
+
+- 两个平台的Common、Algorithm、Route、APP和Test公共API、结构体字段及业务宏应保持同名同义。
+- 上层串口代码只使用UART_PORT_K210、UART_PORT_E220和DEBUG_UART_PORT，不直接使用具体USART/UART编号、GPIO、DMA或中断宏。
+- 芯片寄存器、引脚复用、DMA和中断差异只能放在BSP、Config和启动文件中，禁止在上层伪造另一平台的底层宏。
+- 从另一平台复制APP或Test文件前，先确认对应公共头文件已同步；不得通过修改上层变量名规避接口差异。

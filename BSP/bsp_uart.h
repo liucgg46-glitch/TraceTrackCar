@@ -261,6 +261,15 @@ typedef enum {
 } UART_Port_t;
 
 /*
+ * 上层只使用语义端口名，具体硬件实例由BSP配置。
+ * STM32原工程中调试口与E220共用UART_PORT1，是否连接E220由链路模式决定。
+ */
+#define UART_PORT_DEBUG  UART_PORT1
+#define UART_PORT_E220   UART_PORT1
+#define UART_PORT_K210   UART_PORT2
+#define DEBUG_UART_PORT  UART_PORT_DEBUG
+
+/*
  * UART 运行统计。
  * - rx_overflow：RX 软件环形缓冲区满时丢掉的字节数；
  * - tx_drop：调用 BSP_UART_Write() 流式写入时，因为 TX 环形缓冲区满而未写入的字节数；

@@ -5,7 +5,7 @@
 
 #include <string.h>
 
-#define K210_UART_PORT             UART_PORT2
+#define K210_UART_PORT             UART_PORT_K210
 #define K210_OFFLINE_TIMEOUT_MS    1000U
 #define K210_ROAD_PROFILE_TX_INTERVAL_MS  200U
 #define K210_ROAD_PROFILE_TX_REPEAT_COUNT 10U

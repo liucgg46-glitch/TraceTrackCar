@@ -109,7 +109,7 @@ void AppDiagnostics_TaskFSMLogUpdate(void)
         (unsigned long)info.transition_count);
 
     if ((length > 0) && (length < (int)sizeof(line))) {
-        (void)BSP_UART_WriteFrame(UART_PORT1,
+        (void)BSP_UART_WriteFrame(DEBUG_UART_PORT,
                                   (const uint8_t *)line,
                                   (uint16_t)length);
     }

@@ -11,18 +11,14 @@
  * K210统一通信测试
  * ============================================================================
  *
- * 文件编码：
- *   UTF-8
+ * 文件编码：UTF-8
  *
- * K210通信：
- *   K210 IO8 TX → STM32 PA3 USART2_RX
-K210 IO6 RX ← STM32 PA2 USART2_TX
+ * 端口由BSP语义宏统一选择：
+ *   UART_PORT_K210连接K210；
+ *   DEBUG_UART_PORT输出调试日志。
  *
- * TTL调试输出：
- *   STM32 PA9 USART1_TX -> USB-TTL RX
- *
- * 本文件统一包含数字识别、道路识别及后续视觉通信测试。
- * 不依赖printf串口重定向。
+ * 本文件统一包含单数字、多数字、道路、视觉和配置档位通信测试。
+ * 不依赖printf串口重定向，可在STM32F407和MSPM0G3519工程间直接复用。
  * ============================================================================
  */
 
@@ -57,7 +53,7 @@ static void Test_K210_SendText(const char *text)
     }
 
     (void)BSP_UART_WriteFrame(
-        UART_PORT1,
+        DEBUG_UART_PORT,
         (const uint8_t *)text,
         length
     );
