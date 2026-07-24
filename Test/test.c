@@ -41,6 +41,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
+/* LCD公开测试入口使用的内部异步显示状态机，不对任务表暴露。 */
+static void Test_AsyncDisplay_Update(void);
+
 /*
  * K210与STM32通信测试任务。
  *
@@ -2338,7 +2341,7 @@ void Test_OLED_Ascii_Update(void)
     Drv_OledI2c_Flush();
 }
 
-void Test_AsyncDisplay_Update(void)
+static void Test_AsyncDisplay_Update(void)
 {
     static uint32_t last_lcd_ms = 0U;
     static uint32_t lcd_cnt = 0U;

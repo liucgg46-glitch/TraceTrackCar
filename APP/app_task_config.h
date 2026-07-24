@@ -8,6 +8,7 @@
 #include "motion_action.h"
 #include "k210_comm.h"
 #include "task_profile_select.h"
+#include "test.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,16 +37,9 @@ extern "C" {
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
-    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 正式运行指示灯 */ \
-    { AppTask_BSP_Background,   1U, 0U }, /* BSP和Driver后台维护 */ \
-    { Sensor_Update,            1U, 0U }, /* HX711非阻塞采样 */ \
-    { K210_Comm_Update,         5U, 0U }, /* K210新快照解析 */ \
-    { Encoder_Update,          10U, 0U }, /* 轮速反馈与停车确认 */ \
-    { TaskProfile_Update,      10U, 0U }, /* 当前选择的总任务状态机 */ \
-    { LineTrack_Update,        10U, 0U }, /* 去返程循迹与路线推进 */ \
-    { Motion_Update,           10U, 0U }, /* 路口定角转弯 */ \
-    { Chassis_Update,          10U, 0U }, /* 底盘速度闭环 */ \
-    { AppDiagnostics_TaskFSMLogUpdate, 200U, 0U }, /* USART1运行日志 */ \
+    { Test_GPIO_Toggle,       10U, 0U }, /* 测试运行指示灯 */ \
+    { AppTask_BSP_Background,  1U, 0U }, /* BSP和Driver后台维护 */ \
+    { Test_E220_Link_Update,  10U, 0U }, /* E220双车通信测试 */ \
 };                                                       \
 const uint8_t TASK_NUM =                                 \
     (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))

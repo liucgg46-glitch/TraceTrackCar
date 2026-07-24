@@ -290,7 +290,8 @@ extern "C" {
 
 /* CH23：有源蜂鸣器或带驱动蜂鸣器模块控制脚。
  * PG7 在当前源码的 GPIO、PWM、编码器和通信外设配置中均未占用，仅作普通推挽输出。
- * 默认高电平鸣响；若实物模块为低电平有效，只需将 ACTIVE_LEVEL 改为 0U。 */
+ * 当前按低电平鸣响配置；若实物模块为高电平有效，将 ACTIVE_LEVEL 改为 1U。
+ * 实际模块的有效电平和响声仍待实板确认。 */
 #define BSP_GPIO_BUZZER_ACTIVE_LEVEL  0U
 
 #if ((BSP_GPIO_BUZZER_ACTIVE_LEVEL != 0U) && \

@@ -2,6 +2,16 @@
 
 本目录直接编译项目中的`Algorithm/attitude_estimator.c`和`Algorithm/odometer.c`，不复制算法实现。通用状态码来自`Common/project_status.h`，`stubs/project_critical.c`只提供主机临界区空操作实现，因此测试不依赖STM32芯片头文件、Keil工程或实物硬件。
 
+## 测试入口文档一致性检查
+
+修改`Test/test.h`中的公共测试函数、删除测试函数或调整测试任务文档后，在项目根目录执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Test\host\check_test_docs.ps1
+```
+
+脚本会核对公共`Test_*`入口是否有真实实现、是否已写入`Doc/测试任务注册函数使用方法.md`，并检查`Doc`中任务表示例是否仍使用有效名称和正确的宏续行格式。脚本还会检查任务表与测试开关一致：任务表包含`Test_*`时必须为`1U`，正式任务表时必须为`0U`。
+
 ## 运行方法
 
 在项目根目录执行：
