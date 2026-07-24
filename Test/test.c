@@ -221,49 +221,70 @@ void Test_StatusLight_Update(void)
 void Test_Buzzer_Update(void)
 {
     enum {
-        TEST_BUZZER_MODE_OFF = 0,
+        TEST_BUZZER_MODE_OFF = 0U,
         TEST_BUZZER_MODE_CONTINUOUS,
-        TEST_BUZZER_MODE_TOGGLE
+        TEST_BUZZER_MODE_INTERVAL
     };
 
-    static uint32_t last_switch_ms = 0U;
     static uint8_t mode = TEST_BUZZER_MODE_OFF;
-    uint8_t key1_pressed = 0U;
-    uint8_t key2_pressed = 0U;
-    uint8_t key3_pressed = 0U;
+    static uint8_t armed = 0U;
+    static uint8_t released_samples = 0U;
+    static uint32_t last_toggle_ms = 0U;
 
-#if BSP_KEY1_ENABLE
-    key1_pressed = BSP_Key_WasPressed(BSP_KEY1);
-#endif
-#if BSP_KEY2_ENABLE
-    key2_pressed = BSP_Key_WasPressed(BSP_KEY2);
-#endif
-#if BSP_KEY3_ENABLE
-    key3_pressed = BSP_Key_WasPressed(BSP_KEY3);
-#endif
+    /*
+     * 上电保护：
+     * 1. 持续强制关闭蜂鸣器；
+     * 2. 清除上电阶段可能残留的按键边沿；
+     * 3. KEY1～KEY3全部稳定松开约100 ms后才允许触发。
+     */
+    if (armed == 0U) {
+        Drv_Buzzer_Off();
+        mode = TEST_BUZZER_MODE_OFF;
 
-    /* 同一轮出现多个事件时停止优先，避免蜂鸣器被后续按键重新启动。 */
-    if (key2_pressed != 0U) {
+        (void)BSP_Key_WasPressed(BSP_KEY1);
+        (void)BSP_Key_WasReleased(BSP_KEY1);
+        (void)BSP_Key_WasPressed(BSP_KEY2);
+        (void)BSP_Key_WasReleased(BSP_KEY2);
+        (void)BSP_Key_WasPressed(BSP_KEY3);
+        (void)BSP_Key_WasReleased(BSP_KEY3);
+
+        if ((BSP_Key_IsPressed(BSP_KEY1) == 0U) &&
+            (BSP_Key_IsPressed(BSP_KEY2) == 0U) &&
+            (BSP_Key_IsPressed(BSP_KEY3) == 0U)) {
+            if (released_samples < 10U) {
+                released_samples++;
+            }
+
+            if (released_samples >= 10U) {
+                armed = 1U;
+                released_samples = 0U;
+                last_toggle_ms = BSP_GET_TICK();
+            }
+        } else {
+            released_samples = 0U;
+        }
+
+        return;
+    }
+
+    /* KEY2停止优先，避免多个按键同时触发时继续鸣响。 */
+    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
         mode = TEST_BUZZER_MODE_OFF;
         Drv_Buzzer_Off();
-        return;
-    }
-
-    if (key1_pressed != 0U) {
+    } else if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
         mode = TEST_BUZZER_MODE_CONTINUOUS;
         Drv_Buzzer_On();
-        return;
-    }
-
-    if (key3_pressed != 0U) {
-        mode = TEST_BUZZER_MODE_TOGGLE;
-        last_switch_ms = BSP_GET_TICK();
+    } else if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
+        mode = TEST_BUZZER_MODE_INTERVAL;
+        last_toggle_ms = BSP_GET_TICK();
         Drv_Buzzer_On();
-        return;
     }
 
-    if ((mode == TEST_BUZZER_MODE_TOGGLE) &&
-        (BSP_TimeElapsed(&last_switch_ms, 500U) != 0U)) {
+    if (mode == TEST_BUZZER_MODE_OFF) {
+        Drv_Buzzer_Off();
+    } else if (mode == TEST_BUZZER_MODE_CONTINUOUS) {
+        Drv_Buzzer_On();
+    } else if (BSP_TimeElapsed(&last_toggle_ms, 500U) != 0U) {
         Drv_Buzzer_Toggle();
     }
 }
