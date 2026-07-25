@@ -215,7 +215,10 @@ void Test_StatusLight_Update(void)
 
 //娴嬭瘯浠ｇ爜锛岀數鏈鸿浆閫熼€愭笎鍙樺揩鍦ㄥ彉鎱?
 /*
- * 蜂鸣器按键测试：KEY1 持续鸣响，KEY2 停止，KEY3 每 500 ms 翻转一次。
+ * 蜂鸣器按键测试（PG7，低电平有效）：
+ * KEY1：按下一次后持续鸣响；即使按下边沿被上电保护清除，稳定按住也能进入长响。
+ * KEY2：进入间歇鸣响模式，每 500 ms 翻转一次。
+ * KEY3：立即停止，且停止优先级最高。
  * 必须先以 10 ms 周期注册 Key_Update，再注册本任务。
  */
 void Test_Buzzer_Update(void)
@@ -230,31 +233,51 @@ void Test_Buzzer_Update(void)
     static uint8_t armed = 0U;
     static uint8_t released_samples = 0U;
     static uint32_t last_toggle_ms = 0U;
+    uint8_t key1_down = 0U;
+    uint8_t key1_event = 0U;
+    uint8_t key2_event = 0U;
+    uint8_t key3_event = 0U;
+    uint8_t all_released = 1U;
 
-    /*
-     * 上电保护：
-     * 1. 持续强制关闭蜂鸣器；
-     * 2. 清除上电阶段可能残留的按键边沿；
-     * 3. KEY1～KEY3全部稳定松开约100 ms后才允许触发。
-     */
+#if BSP_KEY1_ENABLE
+    key1_down = BSP_Key_IsPressed(BSP_KEY1);
+    if (key1_down != 0U) {
+        all_released = 0U;
+    }
+#endif
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_IsPressed(BSP_KEY2) != 0U) {
+        all_released = 0U;
+    }
+#endif
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_IsPressed(BSP_KEY3) != 0U) {
+        all_released = 0U;
+    }
+#endif
+
+    /* 上电后先确认三个按键均稳定松开约 100 ms，避免上电假触发。 */
     if (armed == 0U) {
         Drv_Buzzer_Off();
         mode = TEST_BUZZER_MODE_OFF;
 
+#if BSP_KEY1_ENABLE
         (void)BSP_Key_WasPressed(BSP_KEY1);
         (void)BSP_Key_WasReleased(BSP_KEY1);
+#endif
+#if BSP_KEY2_ENABLE
         (void)BSP_Key_WasPressed(BSP_KEY2);
         (void)BSP_Key_WasReleased(BSP_KEY2);
+#endif
+#if BSP_KEY3_ENABLE
         (void)BSP_Key_WasPressed(BSP_KEY3);
         (void)BSP_Key_WasReleased(BSP_KEY3);
+#endif
 
-        if ((BSP_Key_IsPressed(BSP_KEY1) == 0U) &&
-            (BSP_Key_IsPressed(BSP_KEY2) == 0U) &&
-            (BSP_Key_IsPressed(BSP_KEY3) == 0U)) {
+        if (all_released != 0U) {
             if (released_samples < 10U) {
                 released_samples++;
             }
-
             if (released_samples >= 10U) {
                 armed = 1U;
                 released_samples = 0U;
@@ -263,23 +286,34 @@ void Test_Buzzer_Update(void)
         } else {
             released_samples = 0U;
         }
-
         return;
     }
 
-    /* KEY2停止优先，避免多个按键同时触发时继续鸣响。 */
-    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
+    /* 每个边沿只读取一次，避免事件被重复读取或提前清除。 */
+#if BSP_KEY1_ENABLE
+    key1_event = BSP_Key_WasPressed(BSP_KEY1);
+#endif
+#if BSP_KEY2_ENABLE
+    key2_event = BSP_Key_WasPressed(BSP_KEY2);
+#endif
+#if BSP_KEY3_ENABLE
+    key3_event = BSP_Key_WasPressed(BSP_KEY3);
+#endif
+
+    /* KEY3停止优先；KEY1同时使用边沿和稳定电平，保证长响命令不会丢失。 */
+    if (key3_event != 0U) {
         mode = TEST_BUZZER_MODE_OFF;
         Drv_Buzzer_Off();
-    } else if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
+    } else if ((key1_event != 0U) || (key1_down != 0U)) {
         mode = TEST_BUZZER_MODE_CONTINUOUS;
         Drv_Buzzer_On();
-    } else if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
+    } else if (key2_event != 0U) {
         mode = TEST_BUZZER_MODE_INTERVAL;
         last_toggle_ms = BSP_GET_TICK();
         Drv_Buzzer_On();
     }
 
+    /* 每个调度周期刷新物理输出，防止其他初始化或瞬态写操作覆盖蜂鸣器状态。 */
     if (mode == TEST_BUZZER_MODE_OFF) {
         Drv_Buzzer_Off();
     } else if (mode == TEST_BUZZER_MODE_CONTINUOUS) {

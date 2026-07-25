@@ -8,7 +8,7 @@
 /* 基础板级资源测试。 */
 void Test_GPIO_Toggle(void);
 void Test_StatusLight_Update(void);
-void Test_Buzzer_Update(void);
+void Test_Buzzer_Update(void); /* KEY1持续鸣响，KEY2每500ms翻转，KEY3立即停止；先注册Key_Update */
 void Test_PWM_Ramp(void);
 void Test_Encoder_Log(void);
 void Test_Key_Update(void);
