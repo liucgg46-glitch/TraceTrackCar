@@ -9,6 +9,6 @@
 #define TASK_PROFILE_MEDICINE                     1U
 
 /* 当前使用的总任务状态机方案。 */
-#define TASK_PROFILE_SELECT                       TASK_PROFILE_MEDICINE
+#define TASK_PROFILE_SELECT                       TASK_PROFILE_NONE
 
 #endif /* __TASK_PROFILE_CONFIG_H */

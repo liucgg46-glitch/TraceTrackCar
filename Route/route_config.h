@@ -9,6 +9,6 @@
 #define ROUTE_PROFILE_MEDICINE                      1U
 
 /* 当前使用的赛道方案。 */
-#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_MEDICINE
+#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
 
 #endif /* __ROUTE_CONFIG_H */
