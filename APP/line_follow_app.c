@@ -2,6 +2,7 @@
 #include "line_follow_app.h"
 #include "drv_gray_sensor.h"
 #include "drv_encoder.h"
+#include "drv_buzzer.h"
 #include "line_detect.h"
 #include "line_track.h"
 #include "chassis.h"
@@ -11,12 +12,39 @@
 
 static LineFollow_Info_t s_lf;
 static uint8_t s_route_action_active;
+static uint8_t s_arrival_buzzer_active;
+static uint32_t s_arrival_buzzer_start_ms;
+
+#define LINE_FOLLOW_ARRIVAL_BUZZER_MS  600U
 
 static void LineFollow_ClearOutput(void)
 {
     s_lf.output.linear_cps = 0;
     s_lf.output.turn_cps = 0;
     s_lf.output.valid = 0U;
+}
+
+static void LineFollow_StopArrivalBuzzer(void)
+{
+    Drv_Buzzer_Off();
+    s_arrival_buzzer_active = 0U;
+    s_arrival_buzzer_start_ms = 0U;
+}
+
+static void LineFollow_StartArrivalBuzzer(uint32_t now_ms)
+{
+    Drv_Buzzer_On();
+    s_arrival_buzzer_active = 1U;
+    s_arrival_buzzer_start_ms = now_ms;
+}
+
+static void LineFollow_ServiceArrivalBuzzer(uint32_t now_ms)
+{
+    if ((s_arrival_buzzer_active != 0U) &&
+        ((uint32_t)(now_ms - s_arrival_buzzer_start_ms) >=
+         LINE_FOLLOW_ARRIVAL_BUZZER_MS)) {
+        LineFollow_StopArrivalBuzzer();
+    }
 }
 
 static void LineFollow_ReleaseOwnedControl(void)
@@ -40,6 +68,14 @@ static void LineFollow_Abort(void)
     s_lf.state = LINE_FOLLOW_STOP;
     LineFollow_ReleaseOwnedControl();
     LineFollow_ClearOutput();
+}
+
+static void LineFollow_Complete(uint32_t now_ms)
+{
+    s_lf.state = LINE_FOLLOW_STOP;
+    LineFollow_ReleaseOwnedControl();
+    LineFollow_ClearOutput();
+    LineFollow_StartArrivalBuzzer(now_ms);
 }
 
 static Route_ActionState_t LineFollow_GetRouteActionState(void)
@@ -89,6 +125,9 @@ void LineFollow_Init(void)
     }
     LineFollow_ClearOutput();
     s_route_action_active = 0U;
+    s_arrival_buzzer_active = 0U;
+    s_arrival_buzzer_start_ms = 0U;
+    LineFollow_StopArrivalBuzzer();
 
     LineDetect_Init();
     RouteManager_Init(BSP_GetTickMs());
@@ -109,6 +148,7 @@ BSP_Status_t LineFollow_Start(void)
     }
 
     /* 成功取得底盘后才复位本模块状态，不影响其他控制者。 */
+    LineFollow_StopArrivalBuzzer();
     RouteManager_Reset(BSP_GetTickMs());
     LineFollow_ClearOutput();
     s_route_action_active = 0U;
@@ -118,6 +158,7 @@ BSP_Status_t LineFollow_Start(void)
 
 void LineFollow_Stop(void)
 {
+    LineFollow_StopArrivalBuzzer();
     s_lf.state = LINE_FOLLOW_STOP;
     LineFollow_ReleaseOwnedControl();
     RouteManager_Reset(BSP_GetTickMs());
@@ -130,7 +171,11 @@ void LineFollow_Update(void)
     Route_ControlMode_t control;
     Route_ActionFeedback_t feedback;
     Route_ActionRequest_t request;
+    RouteManager_Info_t route_info;
     uint32_t now_ms;
+
+    now_ms = BSP_GetTickMs();
+    LineFollow_ServiceArrivalBuzzer(now_ms);
 
     if (Drv_GraySensor_IsOnline() == 0U) {
         if (s_lf.state == LINE_FOLLOW_RUN) {
@@ -152,14 +197,13 @@ void LineFollow_Update(void)
 
     /*
      * 只通过 RouteManager 输出。
-     * 当前 ROUTE_PROFILE_BASIC 内部会调用 LineTrack_Compute。
+     * 当前选择的路线方案内部会按需调用 LineTrack_Compute。
      * 后续赛道方案也从这里统一接管，不直接操作底盘或 Motion。
      */
     feedback.state = LineFollow_GetRouteActionState();
     feedback.distance_mm =
         (Drv_Encoder_GetLeftTotalMm() +
          Drv_Encoder_GetRightTotalMm()) / 2;
-    now_ms = BSP_GetTickMs();
     control = RouteManager_Update(res,
                                   &feedback,
                                   &s_lf.output,
@@ -210,7 +254,21 @@ void LineFollow_Update(void)
         return;
     }
 
-    /* 路线输出无效或动作失败时进入安全停车。 */
+    if (control == ROUTE_CONTROL_STOP) {
+        /*
+         * 到达终点和异常停车必须区分：只有路线明确置位 arrived，
+         * 才执行低电平有效蜂鸣器提示。路线状态保留给LCD/OLED查看。
+         */
+        if ((RouteManager_GetInfo(&route_info) == PROJECT_OK) &&
+            (route_info.arrived != 0U)) {
+            LineFollow_Complete(now_ms);
+        } else {
+            LineFollow_Abort();
+        }
+        return;
+    }
+
+    /* 路线输出无效或动作失败时进入安全停车，不鸣笛。 */
     LineFollow_Abort();
 }
 

@@ -144,7 +144,8 @@ SRCS := \
   Route/route_manager.c \
   Route/route_profile_select.c \
   Route/route_profile_basic.c \
-  Route/route_profile_medicine.c
+  Route/route_profile_medicine.c \
+  Route/route_profile_b_basic.c
 
 OBJS := $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
 OBJS += $(BUILD_DIR)/$(STARTUP:.s=.o)

@@ -1317,6 +1317,16 @@
               <FileType>5</FileType>
               <FilePath>.\Route\route_profile_medicine.h</FilePath>
             </File>
+            <File>
+              <FileName>route_profile_b_basic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Route\route_profile_b_basic.c</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_b_basic.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Route\route_profile_b_basic.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
