@@ -15,7 +15,7 @@
 #define VEHICLE_DRIVE_MODE_4WD             4U
 
 #ifndef VEHICLE_DRIVE_MODE
-#define VEHICLE_DRIVE_MODE                 VEHICLE_DRIVE_MODE_2WD
+#define VEHICLE_DRIVE_MODE                 VEHICLE_DRIVE_MODE_4WD  
 #endif
 
 /*
