@@ -74,13 +74,14 @@ extern "C" {
  * 最多允许两次尖角回折：第一次可作为大曲线丢线容错，
  * 第二次用于真实三角尖头；两次之间必须至少行驶一定距离。
  */
-#define B_ROUTE_TIP_MAX_COUNT                           2U
-#define B_ROUTE_TIP_REARM_MIN_TRAVEL_MM                150L
+#define B_ROUTE_TIP_REARM_MIN_TRAVEL_MM             100L
 
 /* 越过尖头并重新稳定循迹后，才允许识别终点全黑停止线。 */
 #define B_ROUTE_FINISH_MIN_TRAVEL_AFTER_TIP_MM         250L
 #define B_ROUTE_FINISH_SINGLE_CONFIRM_SAMPLES            5U
 #define B_ROUTE_FINISH_BLACK_CONFIRM_SAMPLES             3U
+#define B_ROUTE_FINISH_GLOBAL_IGNORE_MS               1000U
+#define B_ROUTE_FINISH_GLOBAL_MIN_TRAVEL_MM             500L
 
 #if ((B_ROUTE_TIP_CENTER_CONFIRM_SAMPLES == 0U) || \
      (B_ROUTE_TIP_LOST_CONFIRM_SAMPLES == 0U) || \

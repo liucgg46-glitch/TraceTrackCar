@@ -359,33 +359,49 @@ static Route_ControlMode_t BRoute_FollowLine(
     return ROUTE_CONTROL_LINE_TRACK;
 }
 
-static uint8_t BRoute_TipGateReady(int32_t distance_mm)
-{
-    if (s_tip_count >= B_ROUTE_TIP_MAX_COUNT) {
-        return 0U;
-    }
-
-    if ((s_tip_count != 0U) &&
-        (BRoute_Abs32(distance_mm -
-                      s_last_tip_exit_distance_mm) <
-         B_ROUTE_TIP_REARM_MIN_TRAVEL_MM)) {
-        return 0U;
-    }
-
-    if (s_distance_ready == 0U) {
-        return 0U;
-    }
-
-    if ((uint32_t)(s_now_ms - s_start_ms) < B_ROUTE_TIP_IGNORE_MS) {
-        return 0U;
-    }
-
-    if (BRoute_Abs32(distance_mm - s_start_distance_mm) <
-        B_ROUTE_TIP_MIN_TRAVEL_MM) {
-        return 0U;
-    }
-
-    return 1U;
+static uint8_t BRoute_TipGateReady(int32_t distance_mm)
+{
+    if ((s_tip_count != 0U) &&
+        (BRoute_Abs32(distance_mm -
+                      s_last_tip_exit_distance_mm) <
+         B_ROUTE_TIP_REARM_MIN_TRAVEL_MM)) {
+        return 0U;
+    }
+
+    if (s_distance_ready == 0U) {
+        return 0U;
+    }
+
+    if ((uint32_t)(s_now_ms - s_start_ms) <
+        B_ROUTE_TIP_IGNORE_MS) {
+        return 0U;
+    }
+
+    if (BRoute_Abs32(distance_mm - s_start_distance_mm) <
+        B_ROUTE_TIP_MIN_TRAVEL_MM) {
+        return 0U;
+    }
+
+    return 1U;
+}
+
+static uint8_t BRoute_FinishGateReady(int32_t distance_mm)
+{
+    if (s_distance_ready == 0U) {
+        return 0U;
+    }
+
+    if ((uint32_t)(s_now_ms - s_start_ms) <
+        B_ROUTE_FINISH_GLOBAL_IGNORE_MS) {
+        return 0U;
+    }
+
+    if (BRoute_Abs32(distance_mm - s_start_distance_mm) <
+        B_ROUTE_FINISH_GLOBAL_MIN_TRAVEL_MM) {
+        return 0U;
+    }
+
+    return 1U;
 }
 
 static Route_ControlMode_t BRoute_RunCornerApproach(
@@ -415,69 +431,79 @@ static void BRoute_UpdateCenterHistory(
     }
 }
 
-static Route_ControlMode_t BRoute_RunToTip(
-    const LineDetect_Result_t *line,
-    const Route_ActionFeedback_t *feedback,
-    int32_t distance_mm,
-    LineTrack_Output_t *out,
-    Route_ActionRequest_t *request)
-{
-    BRoute_UpdateCenterHistory(line);
-
-    /*
-     * Between corner 2 and corner 3, white gaps are expected.
-     * LOST here is not a fault, search request, or triangle tip.
-     */
-    if ((s_route.intersection_count ==
-         B_ROUTE_DASHED_SECTION_AFTER_CORNER_COUNT) &&
-        (line->type == LINE_TYPE_LOST)) {
-        BRoute_ClearCornerCandidate();
-        s_tip_lost_samples = 0U;
-        s_gap_reacquire_samples = 0U;
-        s_route.event_confirm_samples = 0U;
-        LineTrack_Reset();
-        BRoute_SetLineOutput(
-            out,
-            B_ROUTE_DASHED_SECTION_STRAIGHT_CPS,
-            0);
-        return ROUTE_CONTROL_LINE_TRACK;
-    }
-
-
-    if (BRoute_TryStartCorner(line) != 0U) {
-        return BRoute_RunCornerApproach(feedback, request);
-    }
-
-    if ((BRoute_TipGateReady(distance_mm) != 0U) &&
-        (line->type == LINE_TYPE_LOST) &&
-        (s_last_center_ms != 0U) &&
-        ((uint32_t)(s_now_ms - s_last_center_ms) <=
-         B_ROUTE_TIP_CENTER_TO_LOST_WINDOW_MS)) {
-        /*
-         * 第一、二帧丢线先保持低速直行，不让通用找线立即左右扫描。
-         * 这样既能平稳跨越题图中的虚线，也为尖头判定建立入口。
-         */
-        s_tip_lost_samples =
-            BRoute_IncrementU16(s_tip_lost_samples);
-        s_route.event_confirm_samples = s_tip_lost_samples;
-        BRoute_SetLineOutput(out, B_ROUTE_GAP_PROBE_CPS, 0);
-
-        if (s_tip_lost_samples >=
-            B_ROUTE_TIP_LOST_CONFIRM_SAMPLES) {
-            s_gap_probe_start_distance_mm = distance_mm;
-            s_gap_reacquire_samples = 0U;
-            s_gap_return_state = B_ROUTE_STATE_RUN_TO_TIP;
-            BRoute_EnterState(B_ROUTE_STATE_GAP_PROBE);
-        }
-
-        return ROUTE_CONTROL_LINE_TRACK;
-    }
-
-    s_tip_lost_samples = 0U;
-    s_route.event_confirm_samples = 0U;
-    return BRoute_FollowLine(line, out);
+static Route_ControlMode_t BRoute_RunToTip(
+    const LineDetect_Result_t *line,
+    const Route_ActionFeedback_t *feedback,
+    int32_t distance_mm,
+    LineTrack_Output_t *out,
+    Route_ActionRequest_t *request)
+{
+    BRoute_UpdateCenterHistory(line);
+
+    /*
+     * Full black is the only route completion condition.
+     * Stop immediately while three consecutive frames confirm it.
+     */
+    if ((BRoute_FinishGateReady(distance_mm) != 0U) &&
+        (BRoute_IsFinishLine(line) != 0U)) {
+        s_finish_black_samples = 1U;
+        BRoute_EnterState(B_ROUTE_STATE_FINISH_CONFIRM);
+        s_route.event_confirm_samples = s_finish_black_samples;
+        BRoute_SetLineOutput(out, 0, 0);
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    /*
+     * Between corner 2 and corner 3, white gaps are expected.
+     * LOST here keeps straight instead of starting recovery.
+     */
+    if ((s_route.intersection_count ==
+         B_ROUTE_DASHED_SECTION_AFTER_CORNER_COUNT) &&
+        (line->type == LINE_TYPE_LOST)) {
+        BRoute_ClearCornerCandidate();
+        s_tip_lost_samples = 0U;
+        s_gap_reacquire_samples = 0U;
+        s_route.event_confirm_samples = 0U;
+        LineTrack_Reset();
+        BRoute_SetLineOutput(
+            out,
+            B_ROUTE_DASHED_SECTION_STRAIGHT_CPS,
+            0);
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    /*
+     * Corner detection has priority over tip recovery.
+     * Later corner-like sections remain recognizable.
+     */
+    if (BRoute_TryStartCorner(line) != 0U) {
+        return BRoute_RunCornerApproach(feedback, request);
+    }
+
+    if ((BRoute_TipGateReady(distance_mm) != 0U) &&
+        (line->type == LINE_TYPE_LOST) &&
+        (s_last_center_ms != 0U) &&
+        ((uint32_t)(s_now_ms - s_last_center_ms) <=
+         B_ROUTE_TIP_CENTER_TO_LOST_WINDOW_MS)) {
+        s_tip_lost_samples =
+            BRoute_IncrementU16(s_tip_lost_samples);
+        s_route.event_confirm_samples = s_tip_lost_samples;
+        BRoute_SetLineOutput(out, B_ROUTE_GAP_PROBE_CPS, 0);
+
+        if (s_tip_lost_samples >=
+            B_ROUTE_TIP_LOST_CONFIRM_SAMPLES) {
+            s_gap_probe_start_distance_mm = distance_mm;
+            s_gap_reacquire_samples = 0U;
+            BRoute_EnterState(B_ROUTE_STATE_GAP_PROBE);
+        }
+
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    s_tip_lost_samples = 0U;
+    s_route.event_confirm_samples = 0U;
+    return BRoute_FollowLine(line, out);
 }
-
 
 static Route_ControlMode_t BRoute_FinishCorner(
     const LineDetect_Result_t *line,
@@ -740,61 +766,56 @@ static Route_ControlMode_t BRoute_RunGapProbe(
     return ROUTE_CONTROL_LINE_TRACK;
 }
 
-static Route_ControlMode_t BRoute_RunTipTurn(
-    const LineDetect_Result_t *line,
-    int32_t distance_mm,
-    LineTrack_Output_t *out)
-{
-    uint32_t elapsed_ms;
-
-    elapsed_ms = (uint32_t)(s_now_ms - s_state_enter_ms);
-
-    if (elapsed_ms >= B_ROUTE_TIP_TURN_TIMEOUT_MS) {
-        BRoute_EnterState(B_ROUTE_STATE_ERROR);
-        return ROUTE_CONTROL_ERROR;
-    }
-
-    BRoute_SetLineOutput(out, 0,
-                         (int16_t)(-B_ROUTE_TIP_TURN_CPS));
-
-    if ((elapsed_ms >= B_ROUTE_TIP_TURN_MIN_MS) &&
-        (BRoute_IsStableCenterLine(line) != 0U)) {
-        s_tip_reacquire_samples =
-            BRoute_IncrementU16(s_tip_reacquire_samples);
-    } else {
-        s_tip_reacquire_samples = 0U;
-    }
-
-    s_route.event_confirm_samples = s_tip_reacquire_samples;
-
-    if (s_tip_reacquire_samples >=
-        B_ROUTE_TIP_REACQUIRE_CONFIRM_SAMPLES) {
-        if (s_tip_count < B_ROUTE_TIP_MAX_COUNT) {
-            s_tip_count++;
-        }
-
-        /* 保持原有最终intersection_count语义，只增加一次。 */
-        if ((s_tip_count == 1U) &&
-            (s_route.intersection_count < 0xFFU)) {
-            s_route.intersection_count++;
-        }
-
-        s_last_tip_exit_distance_mm = distance_mm;
-        s_tip_exit_distance_mm = distance_mm;
-        s_finish_armed = 0U;
-        s_finish_single_samples = 0U;
-        s_finish_black_samples = 0U;
-        s_center_samples = 0U;
-        s_tip_lost_samples = 0U;
-        s_gap_reacquire_samples = 0U;
-        s_tip_reacquire_samples = 0U;
-        s_last_center_ms = 0U;
-        LineTrack_Reset();
-        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_FINISH);
-        return BRoute_FollowLine(line, out);
-    }
-
-    return ROUTE_CONTROL_LINE_TRACK;
+static Route_ControlMode_t BRoute_RunTipTurn(
+    const LineDetect_Result_t *line,
+    int32_t distance_mm,
+    LineTrack_Output_t *out)
+{
+    uint32_t elapsed_ms;
+
+    elapsed_ms = (uint32_t)(s_now_ms - s_state_enter_ms);
+
+    if (elapsed_ms >= B_ROUTE_TIP_TURN_TIMEOUT_MS) {
+        BRoute_EnterState(B_ROUTE_STATE_ERROR);
+        return ROUTE_CONTROL_ERROR;
+    }
+
+    BRoute_SetLineOutput(out, 0,
+                         (int16_t)(-B_ROUTE_TIP_TURN_CPS));
+
+    if ((elapsed_ms >= B_ROUTE_TIP_TURN_MIN_MS) &&
+        (BRoute_IsStableCenterLine(line) != 0U)) {
+        s_tip_reacquire_samples =
+            BRoute_IncrementU16(s_tip_reacquire_samples);
+    } else {
+        s_tip_reacquire_samples = 0U;
+    }
+
+    s_route.event_confirm_samples = s_tip_reacquire_samples;
+
+    if (s_tip_reacquire_samples >=
+        B_ROUTE_TIP_REACQUIRE_CONFIRM_SAMPLES) {
+        if (s_tip_count < 0xFFU) {
+            s_tip_count++;
+        }
+
+        /*
+         * Tip recovery does not consume route progress.
+         * Return to the same loop so any later loss can recover again.
+         */
+        s_last_tip_exit_distance_mm = distance_mm;
+        s_tip_exit_distance_mm = distance_mm;
+        s_center_samples = 0U;
+        s_tip_lost_samples = 0U;
+        s_gap_reacquire_samples = 0U;
+        s_tip_reacquire_samples = 0U;
+        s_last_center_ms = 0U;
+        LineTrack_Reset();
+        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_TIP);
+        return BRoute_FollowLine(line, out);
+    }
+
+    return ROUTE_CONTROL_LINE_TRACK;
 }
 
 static void BRoute_UpdateFinishGate(
@@ -824,82 +845,54 @@ static void BRoute_UpdateFinishGate(
     }
 }
 
-static Route_ControlMode_t BRoute_RunToFinish(
-    const LineDetect_Result_t *line,
-    int32_t distance_mm,
-    LineTrack_Output_t *out)
-{
-    BRoute_UpdateCenterHistory(line);
-
-    /*
-     * 第一次尖角可能只是大曲线丢线后的容错回正。
-     * 在终点段保留一次相同的尖角识别机会。
-     */
-    if ((s_tip_count < B_ROUTE_TIP_MAX_COUNT) &&
-        (BRoute_TipGateReady(distance_mm) != 0U) &&
-        (line->type == LINE_TYPE_LOST) &&
-        (s_last_center_ms != 0U) &&
-        ((uint32_t)(s_now_ms - s_last_center_ms) <=
-         B_ROUTE_TIP_CENTER_TO_LOST_WINDOW_MS)) {
-        s_tip_lost_samples =
-            BRoute_IncrementU16(s_tip_lost_samples);
-        s_route.event_confirm_samples = s_tip_lost_samples;
-        BRoute_SetLineOutput(out, B_ROUTE_GAP_PROBE_CPS, 0);
-
-        if (s_tip_lost_samples >=
-            B_ROUTE_TIP_LOST_CONFIRM_SAMPLES) {
-            s_gap_probe_start_distance_mm = distance_mm;
-            s_gap_reacquire_samples = 0U;
-            s_gap_return_state = B_ROUTE_STATE_RUN_TO_FINISH;
-            BRoute_EnterState(B_ROUTE_STATE_GAP_PROBE);
-        }
-
-        return ROUTE_CONTROL_LINE_TRACK;
-    }
-
-    s_tip_lost_samples = 0U;
-    s_route.event_confirm_samples = 0U;
-
-    BRoute_UpdateFinishGate(line, distance_mm);
-
-    if ((s_finish_armed != 0U) &&
-        (BRoute_IsFinishLine(line) != 0U)) {
-        /* 第一帧看到停止线就把速度目标置零，确认期间保持停车。 */
-        s_finish_black_samples = 1U;
-        BRoute_EnterState(B_ROUTE_STATE_FINISH_CONFIRM);
-        s_route.event_confirm_samples = s_finish_black_samples;
-        BRoute_SetLineOutput(out, 0, 0);
-        return ROUTE_CONTROL_LINE_TRACK;
-    }
-
-    return BRoute_FollowLine(line, out);
+static Route_ControlMode_t BRoute_RunToFinish(
+    const LineDetect_Result_t *line,
+    int32_t distance_mm,
+    LineTrack_Output_t *out)
+{
+    /*
+     * Compatibility state for older saved diagnostics.
+     * New tip recovery returns to RUN_TO_TIP, but full black remains valid.
+     */
+    BRoute_UpdateCenterHistory(line);
+    BRoute_UpdateFinishGate(line, distance_mm);
+
+    if ((BRoute_FinishGateReady(distance_mm) != 0U) &&
+        (BRoute_IsFinishLine(line) != 0U)) {
+        s_finish_black_samples = 1U;
+        BRoute_EnterState(B_ROUTE_STATE_FINISH_CONFIRM);
+        s_route.event_confirm_samples = s_finish_black_samples;
+        BRoute_SetLineOutput(out, 0, 0);
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    return BRoute_FollowLine(line, out);
 }
 
-static Route_ControlMode_t BRoute_ConfirmFinish(
-    const LineDetect_Result_t *line,
-    LineTrack_Output_t *out)
-{
-    BRoute_SetLineOutput(out, 0, 0);
-
-    if (BRoute_IsFinishLine(line) == 0U) {
-        /* 单帧全黑按干扰处理，复位PD后继续巡线。 */
-        s_finish_black_samples = 0U;
-        LineTrack_Reset();
-        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_FINISH);
-        return BRoute_FollowLine(line, out);
-    }
-
-    s_finish_black_samples =
-        BRoute_IncrementU16(s_finish_black_samples);
-    s_route.event_confirm_samples = s_finish_black_samples;
-
-    if (s_finish_black_samples >=
-        B_ROUTE_FINISH_BLACK_CONFIRM_SAMPLES) {
-        BRoute_EnterState(B_ROUTE_STATE_ARRIVED);
-        return ROUTE_CONTROL_STOP;
-    }
-
-    return ROUTE_CONTROL_LINE_TRACK;
+static Route_ControlMode_t BRoute_ConfirmFinish(
+    const LineDetect_Result_t *line,
+    LineTrack_Output_t *out)
+{
+    BRoute_SetLineOutput(out, 0, 0);
+
+    if (BRoute_IsFinishLine(line) == 0U) {
+        s_finish_black_samples = 0U;
+        LineTrack_Reset();
+        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_TIP);
+        return BRoute_FollowLine(line, out);
+    }
+
+    s_finish_black_samples =
+        BRoute_IncrementU16(s_finish_black_samples);
+    s_route.event_confirm_samples = s_finish_black_samples;
+
+    if (s_finish_black_samples >=
+        B_ROUTE_FINISH_BLACK_CONFIRM_SAMPLES) {
+        BRoute_EnterState(B_ROUTE_STATE_ARRIVED);
+        return ROUTE_CONTROL_STOP;
+    }
+
+    return ROUTE_CONTROL_LINE_TRACK;
 }
 
 void BRoute_Init(uint32_t now_ms)
