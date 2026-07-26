@@ -2,8 +2,10 @@
 
 static RouteProfile_Info_t s_route;
 static BRoute_State_t s_state;
+static BRoute_State_t s_gap_return_state;
 static uint8_t s_distance_ready;
 static uint8_t s_finish_armed;
+static uint8_t s_tip_count;
 static uint8_t s_corner_action_requested;
 static uint16_t s_center_samples;
 static uint16_t s_corner_candidate_samples;
@@ -18,6 +20,7 @@ static int8_t s_corner_turn_direction;
 static int32_t s_start_distance_mm;
 static int32_t s_gap_probe_start_distance_mm;
 static int32_t s_tip_exit_distance_mm;
+static int32_t s_last_tip_exit_distance_mm;
 static uint32_t s_start_ms;
 static uint32_t s_state_enter_ms;
 static uint32_t s_last_center_ms;
@@ -358,6 +361,17 @@ static Route_ControlMode_t BRoute_FollowLine(
 
 static uint8_t BRoute_TipGateReady(int32_t distance_mm)
 {
+    if (s_tip_count >= B_ROUTE_TIP_MAX_COUNT) {
+        return 0U;
+    }
+
+    if ((s_tip_count != 0U) &&
+        (BRoute_Abs32(distance_mm -
+                      s_last_tip_exit_distance_mm) <
+         B_ROUTE_TIP_REARM_MIN_TRAVEL_MM)) {
+        return 0U;
+    }
+
     if (s_distance_ready == 0U) {
         return 0U;
     }
@@ -452,6 +466,7 @@ static Route_ControlMode_t BRoute_RunToTip(
             B_ROUTE_TIP_LOST_CONFIRM_SAMPLES) {
             s_gap_probe_start_distance_mm = distance_mm;
             s_gap_reacquire_samples = 0U;
+            s_gap_return_state = B_ROUTE_STATE_RUN_TO_TIP;
             BRoute_EnterState(B_ROUTE_STATE_GAP_PROBE);
         }
 
@@ -708,7 +723,7 @@ static Route_ControlMode_t BRoute_RunGapProbe(
         s_gap_reacquire_samples = 0U;
         s_last_center_ms = 0U;
         LineTrack_Reset();
-        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_TIP);
+        BRoute_EnterState(s_gap_return_state);
         return BRoute_FollowLine(line, out);
     }
 
@@ -754,13 +769,26 @@ static Route_ControlMode_t BRoute_RunTipTurn(
 
     if (s_tip_reacquire_samples >=
         B_ROUTE_TIP_REACQUIRE_CONFIRM_SAMPLES) {
-        if (s_route.intersection_count < 0xFFU) {
+        if (s_tip_count < B_ROUTE_TIP_MAX_COUNT) {
+            s_tip_count++;
+        }
+
+        /* 保持原有最终intersection_count语义，只增加一次。 */
+        if ((s_tip_count == 1U) &&
+            (s_route.intersection_count < 0xFFU)) {
             s_route.intersection_count++;
         }
+
+        s_last_tip_exit_distance_mm = distance_mm;
         s_tip_exit_distance_mm = distance_mm;
         s_finish_armed = 0U;
         s_finish_single_samples = 0U;
         s_finish_black_samples = 0U;
+        s_center_samples = 0U;
+        s_tip_lost_samples = 0U;
+        s_gap_reacquire_samples = 0U;
+        s_tip_reacquire_samples = 0U;
+        s_last_center_ms = 0U;
         LineTrack_Reset();
         BRoute_EnterState(B_ROUTE_STATE_RUN_TO_FINISH);
         return BRoute_FollowLine(line, out);
@@ -801,6 +829,37 @@ static Route_ControlMode_t BRoute_RunToFinish(
     int32_t distance_mm,
     LineTrack_Output_t *out)
 {
+    BRoute_UpdateCenterHistory(line);
+
+    /*
+     * 第一次尖角可能只是大曲线丢线后的容错回正。
+     * 在终点段保留一次相同的尖角识别机会。
+     */
+    if ((s_tip_count < B_ROUTE_TIP_MAX_COUNT) &&
+        (BRoute_TipGateReady(distance_mm) != 0U) &&
+        (line->type == LINE_TYPE_LOST) &&
+        (s_last_center_ms != 0U) &&
+        ((uint32_t)(s_now_ms - s_last_center_ms) <=
+         B_ROUTE_TIP_CENTER_TO_LOST_WINDOW_MS)) {
+        s_tip_lost_samples =
+            BRoute_IncrementU16(s_tip_lost_samples);
+        s_route.event_confirm_samples = s_tip_lost_samples;
+        BRoute_SetLineOutput(out, B_ROUTE_GAP_PROBE_CPS, 0);
+
+        if (s_tip_lost_samples >=
+            B_ROUTE_TIP_LOST_CONFIRM_SAMPLES) {
+            s_gap_probe_start_distance_mm = distance_mm;
+            s_gap_reacquire_samples = 0U;
+            s_gap_return_state = B_ROUTE_STATE_RUN_TO_FINISH;
+            BRoute_EnterState(B_ROUTE_STATE_GAP_PROBE);
+        }
+
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    s_tip_lost_samples = 0U;
+    s_route.event_confirm_samples = 0U;
+
     BRoute_UpdateFinishGate(line, distance_mm);
 
     if ((s_finish_armed != 0U) &&
@@ -852,8 +911,10 @@ void BRoute_Reset(uint32_t now_ms)
 {
     s_now_ms = now_ms;
     s_state = B_ROUTE_STATE_RUN_TO_TIP;
+    s_gap_return_state = B_ROUTE_STATE_RUN_TO_TIP;
     s_distance_ready = 0U;
     s_finish_armed = 0U;
+    s_tip_count = 0U;
     s_corner_action_requested = 0U;
     s_center_samples = 0U;
     s_corner_candidate_samples = 0U;
@@ -868,6 +929,7 @@ void BRoute_Reset(uint32_t now_ms)
     s_start_distance_mm = 0;
     s_gap_probe_start_distance_mm = 0;
     s_tip_exit_distance_mm = 0;
+    s_last_tip_exit_distance_mm = 0;
     s_start_ms = now_ms;
     s_state_enter_ms = now_ms;
     s_last_center_ms = 0U;
