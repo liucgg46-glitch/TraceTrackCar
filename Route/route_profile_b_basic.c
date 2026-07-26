@@ -4,7 +4,6 @@ static RouteProfile_Info_t s_route;
 static BRoute_State_t s_state;
 static uint8_t s_distance_ready;
 static uint8_t s_finish_armed;
-static uint8_t s_dashed_seen;
 static uint8_t s_corner_action_requested;
 static uint16_t s_center_samples;
 static uint16_t s_corner_candidate_samples;
@@ -219,7 +218,7 @@ static int8_t BRoute_DetectCornerDirection(
 
 static uint8_t BRoute_CornerGateReady(void)
 {
-    if (s_dashed_seen != 0U) {
+    if (s_route.intersection_count >= B_ROUTE_CORNER_TOTAL_COUNT) {
         return 0U;
     }
 
@@ -410,6 +409,26 @@ static Route_ControlMode_t BRoute_RunToTip(
     Route_ActionRequest_t *request)
 {
     BRoute_UpdateCenterHistory(line);
+
+    /*
+     * Between corner 2 and corner 3, white gaps are expected.
+     * LOST here is not a fault, search request, or triangle tip.
+     */
+    if ((s_route.intersection_count ==
+         B_ROUTE_DASHED_SECTION_AFTER_CORNER_COUNT) &&
+        (line->type == LINE_TYPE_LOST)) {
+        BRoute_ClearCornerCandidate();
+        s_tip_lost_samples = 0U;
+        s_gap_reacquire_samples = 0U;
+        s_route.event_confirm_samples = 0U;
+        LineTrack_Reset();
+        BRoute_SetLineOutput(
+            out,
+            B_ROUTE_DASHED_SECTION_STRAIGHT_CPS,
+            0);
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
 
     if (BRoute_TryStartCorner(line) != 0U) {
         return BRoute_RunCornerApproach(feedback, request);
@@ -613,9 +632,6 @@ static Route_ControlMode_t BRoute_RunCornerExitGap(
                  * 第二个直角之后紧邻的白区可视为第一段虚线。
                  * 第一个直角若因安装误差短暂丢线，不提前关闭第二个直角识别。
                  */
-                if (s_route.intersection_count >= 1U) {
-                    s_dashed_seen = 1U;
-                }
                 return BRoute_FinishCorner(line, out);
             }
             return ROUTE_CONTROL_MOTION;
@@ -687,7 +703,6 @@ static Route_ControlMode_t BRoute_RunGapProbe(
     if (s_gap_reacquire_samples >=
         B_ROUTE_GAP_REACQUIRE_CONFIRM_SAMPLES) {
         /* 短时间内重新见线：这是虚线间隙，不是三角尖头。 */
-        s_dashed_seen = 1U;
         s_center_samples = 0U;
         s_tip_lost_samples = 0U;
         s_gap_reacquire_samples = 0U;
@@ -839,7 +854,6 @@ void BRoute_Reset(uint32_t now_ms)
     s_state = B_ROUTE_STATE_RUN_TO_TIP;
     s_distance_ready = 0U;
     s_finish_armed = 0U;
-    s_dashed_seen = 0U;
     s_corner_action_requested = 0U;
     s_center_samples = 0U;
     s_corner_candidate_samples = 0U;

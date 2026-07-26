@@ -41,6 +41,14 @@ extern "C" {
 #define B_ROUTE_CORNER_CENTER_TO_EVENT_WINDOW_MS       350U
 #define B_ROUTE_CORNER_CONFIRM_SAMPLES                   2U
 #define B_ROUTE_CORNER_TO_LOST_WINDOW_MS               180U
+
+/*
+ * Corner 2 to corner 3 is an intentional dashed section.
+ * LOST in this interval keeps the car moving straight.
+ */
+#define B_ROUTE_CORNER_TOTAL_COUNT                       3U
+#define B_ROUTE_DASHED_SECTION_AFTER_CORNER_COUNT        2U
+#define B_ROUTE_DASHED_SECTION_STRAIGHT_CPS            1800
 /*
  * 直角识别后先沿当前航向前进到驱动轮轴转弯中心，再执行一次定角原地转弯。
  * 转角完成后立即使用普通PD；若正好落在紧邻直角的虚线白区，则用IMU
