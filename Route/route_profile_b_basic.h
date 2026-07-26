@@ -42,15 +42,18 @@ extern "C" {
 #define B_ROUTE_CORNER_CONFIRM_SAMPLES                   2U
 #define B_ROUTE_CORNER_TO_LOST_WINDOW_MS               180U
 /*
- * 直角先由Motion按角度粗转，再由灰度低速补转到中线。
- * 这里故意小于几何90度，避免灰度板位于车轴前方时一次转过头；
- * 实车只需要优先调整这个宏，不改状态机代码。
+ * 直角识别后先沿当前航向前进到驱动轮轴转弯中心，再执行一次定角原地转弯。
+ * 转角完成后立即使用普通PD；若正好落在紧邻直角的虚线白区，则用IMU
+ * 保持新航向短距离穿越，重新见线后立刻取消距离动作并恢复PD。
  */
-#define B_ROUTE_CORNER_TURN_ANGLE_DEG                   45
-#define B_ROUTE_CORNER_REACQUIRE_TURN_CPS              900
-#define B_ROUTE_CORNER_REACQUIRE_TIMEOUT_MS           1000U
-#define B_ROUTE_CORNER_REACQUIRE_CONFIRM_SAMPLES         3U
-#define B_ROUTE_CORNER_RECOVERY_IGNORE_MS              250U
+#define B_ROUTE_CORNER_APPROACH_DISTANCE_MM              80L
+#define B_ROUTE_CORNER_APPROACH_SPEED_CPS              1200
+#define B_ROUTE_CORNER_TURN_ANGLE_DEG                    90
+#define B_ROUTE_CORNER_EXIT_GUARD_MS                    400U
+#define B_ROUTE_CORNER_EXIT_GAP_DISTANCE_MM              60L
+#define B_ROUTE_CORNER_EXIT_GAP_SPEED_CPS              1200
+#define B_ROUTE_CORNER_EXIT_REACQUIRE_CONFIRM_SAMPLES     2U
+#define B_ROUTE_CORNER_RECOVERY_IGNORE_MS               250U
 #define B_ROUTE_CORNER_EDGE_ERROR_X1000                2500
 
 /* 图中尖头需要向右回折；turn<0表示右转。 */
@@ -73,11 +76,14 @@ extern "C" {
      (B_ROUTE_CORNER_CENTER_TO_EVENT_WINDOW_MS == 0U) || \
      (B_ROUTE_CORNER_CONFIRM_SAMPLES == 0U) || \
      (B_ROUTE_CORNER_TO_LOST_WINDOW_MS == 0U) || \
+     (B_ROUTE_CORNER_APPROACH_DISTANCE_MM <= 0L) || \
+     (B_ROUTE_CORNER_APPROACH_SPEED_CPS <= 0) || \
      (B_ROUTE_CORNER_TURN_ANGLE_DEG <= 0) || \
-     (B_ROUTE_CORNER_TURN_ANGLE_DEG >= 90) || \
-     (B_ROUTE_CORNER_REACQUIRE_TURN_CPS <= 0) || \
-     (B_ROUTE_CORNER_REACQUIRE_TIMEOUT_MS == 0U) || \
-     (B_ROUTE_CORNER_REACQUIRE_CONFIRM_SAMPLES == 0U) || \
+     (B_ROUTE_CORNER_TURN_ANGLE_DEG > 120) || \
+     (B_ROUTE_CORNER_EXIT_GUARD_MS == 0U) || \
+     (B_ROUTE_CORNER_EXIT_GAP_DISTANCE_MM <= 0L) || \
+     (B_ROUTE_CORNER_EXIT_GAP_SPEED_CPS <= 0) || \
+     (B_ROUTE_CORNER_EXIT_REACQUIRE_CONFIRM_SAMPLES == 0U) || \
      (B_ROUTE_CORNER_EDGE_ERROR_X1000 <= 0) || \
      (B_ROUTE_TIP_TURN_CPS <= 0) || \
      (B_ROUTE_TIP_TURN_MIN_MS == 0U) || \
@@ -90,8 +96,9 @@ extern "C" {
 
 typedef enum {
     B_ROUTE_STATE_RUN_TO_TIP = 0,
+    B_ROUTE_STATE_CORNER_APPROACH,
     B_ROUTE_STATE_CORNER_TURN,
-    B_ROUTE_STATE_CORNER_REACQUIRE,
+    B_ROUTE_STATE_CORNER_EXIT_GAP,
     B_ROUTE_STATE_GAP_PROBE,
     B_ROUTE_STATE_TIP_RIGHT_TURN,
     B_ROUTE_STATE_RUN_TO_FINISH,

@@ -22,7 +22,7 @@ extern "C" {
  *   - Route巡线推进和底盘闭环。
  *
  * 不注册Test日志、K210、称重业务和LCD/OLED刷新；
- * Motion_Update仅用于直角的角度粗转，属于本赛道必要任务。
+ * Motion_Update用于转弯中心补偿、定角转弯和虚线航向保持，属于必要任务。
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
@@ -33,7 +33,7 @@ Task_t task_list[] = {                                                          
     { Encoder_Update, 10U, 0U }, /* 轮速和路线里程反馈 */                          \
     { TaskProfile_Update, 10U, 0U }, /* B题整车正式任务状态机 */                   \
     { LineTrack_Update, 10U, 0U }, /* B题赛道巡线与路段推进 */                     \
-    { Motion_Update, 10U, 0U }, /* 直角按角度粗转动作 */                            \
+    { Motion_Update, 10U, 0U }, /* 直角中心补偿、定角与虚线保护 */                            \
     { Chassis_Update, 10U, 0U }, /* 底盘速度闭环 */                                \
 };                                                                                  \
 const uint8_t TASK_NUM =                                                             \

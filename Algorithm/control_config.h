@@ -160,6 +160,16 @@
 
 /* 动作库统一参数（待实测）。 */
 #define CONTROL_MOTION_DISTANCE_TOLERANCE_MM      8       /* 直行距离容差：差8mm内算完成 */
+
+/*
+ * 距离动作的IMU航向保持。
+ * 只抵消动作期间产生的偏航，不负责灰度搜线或改变Route目标方向。
+ */
+#define CONTROL_MOTION_DISTANCE_HEADING_ENABLE          1U
+#define CONTROL_MOTION_DISTANCE_HEADING_DEADBAND_DEG    1.0f
+#define CONTROL_MOTION_DISTANCE_HEADING_KP_CPS_PER_DEG  20.0f
+#define CONTROL_MOTION_DISTANCE_HEADING_MAX_TURN_CPS    600
+
 #define CONTROL_MOTION_ANGLE_TOLERANCE_DEG        3.0f    /* 转角容差：误差≤3°进入稳定确认 */
 #define CONTROL_MOTION_DEFAULT_TIMEOUT_MS         8000U   /* 单动作超时：超8秒报错 */
 #define CONTROL_MOTION_MIN_ABS_SPEED_CPS          150     /* 直行最低速度：防止推不动 */
@@ -169,5 +179,15 @@
 #define CONTROL_MOTION_TURN_CORRECTION_SPEED_CPS  500     /* 转弯末段修正速度 */
 #define CONTROL_MOTION_TURN_KP_CPS_PER_DEG        25.0f   /* 角度误差→转向速度的比例 */
 #define CONTROL_MOTION_TURN_SETTLE_SAMPLES        10U     /* 连续稳定N次(每次10ms)算完成 */
+
+#if ((CONTROL_MOTION_DISTANCE_HEADING_ENABLE != 0U) && \
+     (CONTROL_MOTION_DISTANCE_HEADING_ENABLE != 1U))
+#error "CONTROL_MOTION_DISTANCE_HEADING_ENABLE must be 0U or 1U"
+#endif
+
+#if ((CONTROL_MOTION_DISTANCE_HEADING_MAX_TURN_CPS <= 0) || \
+     (CONTROL_MOTION_DISTANCE_HEADING_MAX_TURN_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS))
+#error "distance heading turn limit is invalid"
+#endif
 
 #endif /* __CONTROL_CONFIG_H */

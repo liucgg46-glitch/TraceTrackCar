@@ -10,6 +10,7 @@
 static Motion_Info_t s_motion;
 static uint8_t s_turn_settle_samples;
 static uint8_t s_turn_correction_mode;
+static uint8_t s_distance_heading_enable;
 
 static int32_t Motion_Abs32(int32_t x)
 {
@@ -40,6 +41,7 @@ static void Motion_SetDone(void)
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
     s_turn_correction_mode = 0U;
+    s_distance_heading_enable = 0U;
 }
 
 static void Motion_SetError(void)
@@ -49,6 +51,7 @@ static void Motion_SetError(void)
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
     s_turn_correction_mode = 0U;
+    s_distance_heading_enable = 0U;
 }
 
 void Motion_Init(void)
@@ -64,6 +67,7 @@ void Motion_Init(void)
     s_motion.timeout_ms = CONTROL_MOTION_DEFAULT_TIMEOUT_MS;
     s_turn_settle_samples = 0U;
     s_turn_correction_mode = 0U;
+    s_distance_heading_enable = 0U;
 }
 
 BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
@@ -76,6 +80,8 @@ BSP_Status_t Motion_GoDistance(int32_t distance_mm, int16_t speed_cps)
 
     AppOdometer_Clear();
     Heading_Reset();
+    s_distance_heading_enable =
+        (Sensor_IsImuReadyForMotion() != 0U) ? 1U : 0U;
 
     s_motion.action = MOTION_ACTION_GO_DISTANCE;
     s_motion.state = MOTION_RUNNING;
@@ -108,6 +114,7 @@ BSP_Status_t Motion_TurnAngle(int16_t angle_deg)
 
     AppOdometer_Clear();
     Heading_Reset();
+    s_distance_heading_enable = 0U;
 
     s_motion.action = MOTION_ACTION_TURN_ANGLE;
     s_motion.state = MOTION_RUNNING;
@@ -137,6 +144,7 @@ void Motion_Stop(void)
     s_motion.action = MOTION_ACTION_NONE;
     s_turn_settle_samples = 0U;
     s_turn_correction_mode = 0U;
+    s_distance_heading_enable = 0U;
 }
 
 void Motion_Update(void)
@@ -146,6 +154,7 @@ void Motion_Update(void)
     float err_deg;
     float cmd_f;
     int16_t cmd;
+    int16_t distance_turn_limit;
 
     if (s_motion.state != MOTION_RUNNING) {
         return;
@@ -170,9 +179,36 @@ void Motion_Update(void)
             if (dist_abs + CONTROL_MOTION_DISTANCE_TOLERANCE_MM >= target_abs) {
                 Motion_SetDone();
             } else {
+                cmd = 0;
+
+                /*
+                 * 距离动作以启动时航向为0°。IMU可用时只修正动作期间
+                 * 新产生的偏航，不改变Route已经决定的前进方向。
+                 */
+                if (s_distance_heading_enable != 0U) {
+                    err_deg = Heading_GetErrorDeg(0.0f);
+                    if (Motion_AbsFloat(err_deg) >
+                        CONTROL_MOTION_DISTANCE_HEADING_DEADBAND_DEG) {
+                        cmd_f = Motion_AbsFloat(err_deg) *
+                                CONTROL_MOTION_DISTANCE_HEADING_KP_CPS_PER_DEG;
+                        distance_turn_limit =
+                            CONTROL_MOTION_DISTANCE_HEADING_MAX_TURN_CPS;
+                        if (Motion_Abs32((int32_t)s_motion.speed_cps) <
+                            (int32_t)distance_turn_limit) {
+                            distance_turn_limit = (int16_t)Motion_Abs32(
+                                (int32_t)s_motion.speed_cps);
+                        }
+                        if (cmd_f > (float)distance_turn_limit) {
+                            cmd_f = (float)distance_turn_limit;
+                        }
+                        cmd = (err_deg > 0.0f) ?
+                              (int16_t)cmd_f : (int16_t)(-cmd_f);
+                    }
+                }
+
                 if (Chassis_SetSpeed(CHASSIS_OWNER_MOTION,
                                      s_motion.speed_cps,
-                                     0) != BSP_OK) {
+                                     cmd) != BSP_OK) {
                     Motion_SetError();
                 }
             }

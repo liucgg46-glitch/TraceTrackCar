@@ -130,6 +130,7 @@ void LineFollow_Update(void)
     Route_ControlMode_t control;
     Route_ActionFeedback_t feedback;
     Route_ActionRequest_t request;
+    MotionState_t motion_state;
     uint32_t now_ms;
 
     if (Drv_GraySensor_IsOnline() == 0U) {
@@ -168,14 +169,26 @@ void LineFollow_Update(void)
 
     if (control == ROUTE_CONTROL_MOTION) {
         if (request.type != ROUTE_ACTION_NONE) {
+            /*
+             * 允许Route在一个动作DONE后立即提交下一个动作。
+             * B题直角需要“前进到旋转中心→定角转弯”连续执行，
+             * 中间不把底盘控制权交回普通循迹。
+             */
             if (s_route_action_active != 0U) {
-                LineFollow_Abort();
-                return;
+                if (Motion_GetState() != MOTION_DONE) {
+                    LineFollow_Abort();
+                    return;
+                }
+                Motion_Stop();
+                s_route_action_active = 0U;
+            } else if (Chassis_GetOwner() == CHASSIS_OWNER_LINE_FOLLOW) {
+                if (Chassis_ReleaseControl(
+                        CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
+                    LineFollow_Abort();
+                    return;
+                }
             }
-            if (Chassis_ReleaseControl(CHASSIS_OWNER_LINE_FOLLOW) != BSP_OK) {
-                LineFollow_Abort();
-                return;
-            }
+
             if (LineFollow_StartRouteAction(&request) != BSP_OK) {
                 LineFollow_Abort();
                 return;
@@ -191,7 +204,14 @@ void LineFollow_Update(void)
     if ((control == ROUTE_CONTROL_LINE_TRACK) &&
         (s_lf.output.valid != 0U)) {
         if (s_route_action_active != 0U) {
-            if (Motion_GetState() != MOTION_DONE) {
+            motion_state = Motion_GetState();
+
+            /*
+             * Route重新见线时可以提前结束正在运行的短距离动作，
+             * 立即把控制权交回PD；动作ERROR或异常IDLE仍按故障处理。
+             */
+            if ((motion_state == MOTION_ERROR) ||
+                (motion_state == MOTION_IDLE)) {
                 LineFollow_Abort();
                 return;
             }
