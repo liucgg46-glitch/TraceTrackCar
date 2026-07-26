@@ -1243,6 +1243,16 @@
               <FilePath>.\APP\task_fsm.h</FilePath>
             </File>
             <File>
+              <FileName>task_profile_b_basic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\task_profile_b_basic.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_profile_b_basic.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\task_profile_b_basic.h</FilePath>
+            </File>
+            <File>
               <FileName>task_profile_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\task_profile_config.h</FilePath>

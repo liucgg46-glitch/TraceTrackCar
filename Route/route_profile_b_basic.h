@@ -11,7 +11,7 @@ extern "C" {
  * 2026通信系电赛模拟赛B题：基础巡线赛道。
  *
  * 普通路段完全复用 Algorithm/line_track.c 的现有速度和PD参数；
- * 本文件只定义虚线、三角尖头和终点停止线的赛道事件参数。
+ * 本文件定义直角、虚线、三角尖头和终点停止线的赛道事件参数。
  */
 
 /* 启动后先离开起点，避免把起点附近的异常线型误判成三角尖头。 */
@@ -31,6 +31,28 @@ extern "C" {
 #define B_ROUTE_GAP_PROBE_MAX_MM                        60L
 #define B_ROUTE_GAP_REACQUIRE_CONFIRM_SAMPLES            2U
 
+
+/*
+ * 第一段虚线之前的两个直角使用独立状态处理。
+ * 明确侧边图案连续确认后直接转弯；车身带偏角时允许记录弱侧边特征，
+ * 若随后快速丢线，仍按记录的方向进入直角转弯，而不是进入虚线探测。
+ */
+#define B_ROUTE_CORNER_IGNORE_MS                       500U
+#define B_ROUTE_CORNER_CENTER_TO_EVENT_WINDOW_MS       350U
+#define B_ROUTE_CORNER_CONFIRM_SAMPLES                   2U
+#define B_ROUTE_CORNER_TO_LOST_WINDOW_MS               180U
+/*
+ * 直角先由Motion按角度粗转，再由灰度低速补转到中线。
+ * 这里故意小于几何90度，避免灰度板位于车轴前方时一次转过头；
+ * 实车只需要优先调整这个宏，不改状态机代码。
+ */
+#define B_ROUTE_CORNER_TURN_ANGLE_DEG                   45
+#define B_ROUTE_CORNER_REACQUIRE_TURN_CPS              900
+#define B_ROUTE_CORNER_REACQUIRE_TIMEOUT_MS           1000U
+#define B_ROUTE_CORNER_REACQUIRE_CONFIRM_SAMPLES         3U
+#define B_ROUTE_CORNER_RECOVERY_IGNORE_MS              250U
+#define B_ROUTE_CORNER_EDGE_ERROR_X1000                2500
+
 /* 图中尖头需要向右回折；turn<0表示右转。 */
 #define B_ROUTE_TIP_TURN_CPS                          1600
 #define B_ROUTE_TIP_TURN_MIN_MS                       220U
@@ -48,6 +70,15 @@ extern "C" {
      (B_ROUTE_GAP_PROBE_MS == 0U) || \
      (B_ROUTE_GAP_PROBE_MAX_MM <= 0L) || \
      (B_ROUTE_GAP_REACQUIRE_CONFIRM_SAMPLES == 0U) || \
+     (B_ROUTE_CORNER_CENTER_TO_EVENT_WINDOW_MS == 0U) || \
+     (B_ROUTE_CORNER_CONFIRM_SAMPLES == 0U) || \
+     (B_ROUTE_CORNER_TO_LOST_WINDOW_MS == 0U) || \
+     (B_ROUTE_CORNER_TURN_ANGLE_DEG <= 0) || \
+     (B_ROUTE_CORNER_TURN_ANGLE_DEG >= 90) || \
+     (B_ROUTE_CORNER_REACQUIRE_TURN_CPS <= 0) || \
+     (B_ROUTE_CORNER_REACQUIRE_TIMEOUT_MS == 0U) || \
+     (B_ROUTE_CORNER_REACQUIRE_CONFIRM_SAMPLES == 0U) || \
+     (B_ROUTE_CORNER_EDGE_ERROR_X1000 <= 0) || \
      (B_ROUTE_TIP_TURN_CPS <= 0) || \
      (B_ROUTE_TIP_TURN_MIN_MS == 0U) || \
      (B_ROUTE_TIP_TURN_TIMEOUT_MS <= B_ROUTE_TIP_TURN_MIN_MS) || \
@@ -59,6 +90,8 @@ extern "C" {
 
 typedef enum {
     B_ROUTE_STATE_RUN_TO_TIP = 0,
+    B_ROUTE_STATE_CORNER_TURN,
+    B_ROUTE_STATE_CORNER_REACQUIRE,
     B_ROUTE_STATE_GAP_PROBE,
     B_ROUTE_STATE_TIP_RIGHT_TURN,
     B_ROUTE_STATE_RUN_TO_FINISH,

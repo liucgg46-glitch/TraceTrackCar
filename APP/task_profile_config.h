@@ -7,8 +7,9 @@
  */
 #define TASK_PROFILE_NONE                         0U
 #define TASK_PROFILE_MEDICINE                     1U
+#define TASK_PROFILE_B_BASIC                      2U
 
-/* 当前使用的总任务状态机方案。 */
-#define TASK_PROFILE_SELECT                       TASK_PROFILE_NONE
+/* 当前使用2026通信系电赛模拟赛B题基础巡线正式任务状态机。 */
+#define TASK_PROFILE_SELECT                       TASK_PROFILE_B_BASIC
 
 #endif /* __TASK_PROFILE_CONFIG_H */

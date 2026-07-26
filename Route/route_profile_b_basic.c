@@ -4,18 +4,26 @@ static RouteProfile_Info_t s_route;
 static BRoute_State_t s_state;
 static uint8_t s_distance_ready;
 static uint8_t s_finish_armed;
+static uint8_t s_dashed_seen;
+static uint8_t s_corner_action_requested;
 static uint16_t s_center_samples;
+static uint16_t s_corner_candidate_samples;
+static uint16_t s_corner_reacquire_samples;
 static uint16_t s_tip_lost_samples;
 static uint16_t s_gap_reacquire_samples;
 static uint16_t s_tip_reacquire_samples;
 static uint16_t s_finish_single_samples;
 static uint16_t s_finish_black_samples;
+static int8_t s_corner_candidate_direction;
+static int8_t s_corner_turn_direction;
 static int32_t s_start_distance_mm;
 static int32_t s_gap_probe_start_distance_mm;
 static int32_t s_tip_exit_distance_mm;
 static uint32_t s_start_ms;
 static uint32_t s_state_enter_ms;
 static uint32_t s_last_center_ms;
+static uint32_t s_last_corner_candidate_ms;
+static uint32_t s_last_corner_exit_ms;
 static uint32_t s_now_ms;
 
 static int32_t BRoute_Abs32(int32_t value)
@@ -118,6 +126,254 @@ static uint8_t BRoute_IsFinishLine(
             (line->black_mask == 0xFFU)) ? 1U : 0U;
 }
 
+
+static uint8_t BRoute_CountBits3(uint8_t value)
+{
+    uint8_t count = 0U;
+
+    value &= 0x07U;
+    while (value != 0U) {
+        count = (uint8_t)(count + (value & 0x01U));
+        value >>= 1U;
+    }
+
+    return count;
+}
+
+/*
+ * 直角转弯结束时只要求中间两路重新压线。
+ * 不再要求LINE_TYPE_SINGLE和最外侧完全松开，避免车身带偏角时
+ * 已经转到目标线附近却迟迟不能退出强制转弯。
+ */
+static uint8_t BRoute_IsCornerCenterLine(
+    const LineDetect_Result_t *line)
+{
+    if (line == 0) {
+        return 0U;
+    }
+
+    if ((line->type == LINE_TYPE_LOST) ||
+        (line->type == LINE_TYPE_FULL_BLACK) ||
+        (line->black_count == 0U) ||
+        (line->black_count > 5U)) {
+        return 0U;
+    }
+
+    if ((line->black_mask & 0x18U) == 0U) {
+        return 0U;
+    }
+
+    if ((line->error_x1000 < -1500) ||
+        (line->error_x1000 > 1500)) {
+        return 0U;
+    }
+
+    return 1U;
+}
+
+/*
+ * 返回值：+1左转，-1右转，0表示当前帧没有直角入口特征。
+ * strength=2是明确分支/侧边多路压线，可连续确认后直接转弯；
+ * strength=1是车身带偏角时的弱特征，只在随后快速丢线时采用。
+ */
+static int8_t BRoute_DetectCornerDirection(
+    const LineDetect_Result_t *line,
+    uint8_t *strength)
+{
+    uint8_t left_count;
+    uint8_t right_count;
+
+    if (strength != 0) {
+        *strength = 0U;
+    }
+
+    if ((line == 0) || (strength == 0)) {
+        return 0;
+    }
+
+    if (line->type == LINE_TYPE_LEFT_BRANCH) {
+        *strength = 2U;
+        return 1;
+    }
+
+    if (line->type == LINE_TYPE_RIGHT_BRANCH) {
+        *strength = 2U;
+        return -1;
+    }
+
+    if ((line->black_count == 0U) ||
+        (line->black_count > 5U)) {
+        return 0;
+    }
+
+    left_count = BRoute_CountBits3(
+        (uint8_t)(line->black_mask & 0x07U));
+    right_count = BRoute_CountBits3(
+        (uint8_t)((line->black_mask >> 5U) & 0x07U));
+
+    /*
+     * 放宽原来的“侧边至少两路且中间必须压线”条件。
+     * 现在侧边两路压线、另一侧没有压线即可视为明确直角入口。
+     */
+    if ((left_count >= 2U) && (right_count == 0U)) {
+        *strength = 2U;
+        return 1;
+    }
+
+    if ((right_count >= 2U) && (left_count == 0U)) {
+        *strength = 2U;
+        return -1;
+    }
+
+    /*
+     * 车头带偏角时可能只剩最外侧一至两路看到线。
+     * 这种图案不立即触发，只记录方向；若很快丢线再进入直角转弯。
+     */
+    if (((line->black_mask & 0x03U) != 0U) &&
+        (right_count == 0U) &&
+        (line->error_x1000 <=
+         (int16_t)(-B_ROUTE_CORNER_EDGE_ERROR_X1000))) {
+        *strength = 1U;
+        return 1;
+    }
+
+    if (((line->black_mask & 0xC0U) != 0U) &&
+        (left_count == 0U) &&
+        (line->error_x1000 >=
+         B_ROUTE_CORNER_EDGE_ERROR_X1000)) {
+        *strength = 1U;
+        return -1;
+    }
+
+    return 0;
+}
+
+static uint8_t BRoute_CornerGateReady(void)
+{
+    if (s_dashed_seen != 0U) {
+        return 0U;
+    }
+
+    if ((uint32_t)(s_now_ms - s_start_ms) <
+        B_ROUTE_CORNER_IGNORE_MS) {
+        return 0U;
+    }
+
+    if ((s_last_corner_exit_ms != 0U) &&
+        ((uint32_t)(s_now_ms - s_last_corner_exit_ms) <
+         B_ROUTE_CORNER_RECOVERY_IGNORE_MS)) {
+        return 0U;
+    }
+
+    return 1U;
+}
+
+static void BRoute_ClearCornerCandidate(void)
+{
+    s_corner_candidate_samples = 0U;
+    s_corner_candidate_direction = 0;
+    s_last_corner_candidate_ms = 0U;
+}
+
+static void BRoute_StartCornerTurn(int8_t direction)
+{
+    s_corner_turn_direction = direction;
+    s_corner_action_requested = 0U;
+    s_corner_reacquire_samples = 0U;
+    s_tip_lost_samples = 0U;
+    s_gap_reacquire_samples = 0U;
+    LineTrack_Reset();
+    BRoute_EnterState(B_ROUTE_STATE_CORNER_TURN);
+}
+
+/*
+ * 在虚线出现前处理两个直角。
+ * 优先级高于“丢线→虚线/尖头探测”，避免第二个直角被当成虚线，
+ * 先直行160 ms后才转向，导致车头完全冲出黑线。
+ */
+static uint8_t BRoute_TryStartCorner(
+    const LineDetect_Result_t *line)
+{
+    uint8_t strength = 0U;
+    uint8_t recent_center;
+    int8_t direction;
+
+    if (BRoute_CornerGateReady() == 0U) {
+        BRoute_ClearCornerCandidate();
+        return 0U;
+    }
+
+    recent_center =
+        ((s_last_center_ms != 0U) &&
+         ((uint32_t)(s_now_ms - s_last_center_ms) <=
+          B_ROUTE_CORNER_CENTER_TO_EVENT_WINDOW_MS)) ? 1U : 0U;
+
+    direction = BRoute_DetectCornerDirection(line, &strength);
+
+    if (direction != 0) {
+        if (direction == s_corner_candidate_direction) {
+            s_corner_candidate_samples =
+                BRoute_IncrementU16(
+                    s_corner_candidate_samples);
+        } else {
+            s_corner_candidate_direction = direction;
+            s_corner_candidate_samples = 1U;
+        }
+
+        s_last_corner_candidate_ms = s_now_ms;
+        s_route.event_confirm_samples =
+            s_corner_candidate_samples;
+
+        if ((strength >= 2U) &&
+            (s_corner_candidate_samples >=
+             B_ROUTE_CORNER_CONFIRM_SAMPLES)) {
+            BRoute_StartCornerTurn(direction);
+            return 1U;
+        }
+
+        return 0U;
+    }
+
+    if (line->type == LINE_TYPE_LOST) {
+        if ((s_corner_candidate_direction != 0) &&
+            (s_last_corner_candidate_ms != 0U) &&
+            ((uint32_t)(s_now_ms -
+                        s_last_corner_candidate_ms) <=
+             B_ROUTE_CORNER_TO_LOST_WINDOW_MS)) {
+            BRoute_StartCornerTurn(
+                s_corner_candidate_direction);
+            return 1U;
+        }
+
+        /*
+         * 极端偏角可能只留下最后误差而没有形成完整分支图案。
+         * 仅在刚刚稳定压过中线且误差已到最外侧时使用该兜底。
+         */
+        if (recent_center != 0U) {
+            if (line->error_x1000 <=
+                (int16_t)(-B_ROUTE_CORNER_EDGE_ERROR_X1000)) {
+                BRoute_StartCornerTurn(1);
+                return 1U;
+            }
+
+            if (line->error_x1000 >=
+                B_ROUTE_CORNER_EDGE_ERROR_X1000) {
+                BRoute_StartCornerTurn(-1);
+                return 1U;
+            }
+        }
+    }
+
+    if ((s_last_corner_candidate_ms != 0U) &&
+        ((uint32_t)(s_now_ms -
+                    s_last_corner_candidate_ms) >
+         B_ROUTE_CORNER_TO_LOST_WINDOW_MS)) {
+        BRoute_ClearCornerCandidate();
+    }
+
+    return 0U;
+}
+
 static Route_ControlMode_t BRoute_FollowLine(
     const LineDetect_Result_t *line,
     LineTrack_Output_t *out)
@@ -150,6 +406,11 @@ static uint8_t BRoute_TipGateReady(int32_t distance_mm)
     return 1U;
 }
 
+static Route_ControlMode_t BRoute_RunCornerTurn(
+    const Route_ActionFeedback_t *feedback,
+    Route_ActionRequest_t *request,
+    LineTrack_Output_t *out);
+
 static void BRoute_UpdateCenterHistory(
     const LineDetect_Result_t *line)
 {
@@ -165,10 +426,16 @@ static void BRoute_UpdateCenterHistory(
 
 static Route_ControlMode_t BRoute_RunToTip(
     const LineDetect_Result_t *line,
+    const Route_ActionFeedback_t *feedback,
     int32_t distance_mm,
-    LineTrack_Output_t *out)
+    LineTrack_Output_t *out,
+    Route_ActionRequest_t *request)
 {
     BRoute_UpdateCenterHistory(line);
+
+    if (BRoute_TryStartCorner(line) != 0U) {
+        return BRoute_RunCornerTurn(feedback, request, out);
+    }
 
     if ((BRoute_TipGateReady(distance_mm) != 0U) &&
         (line->type == LINE_TYPE_LOST) &&
@@ -199,6 +466,109 @@ static Route_ControlMode_t BRoute_RunToTip(
     return BRoute_FollowLine(line, out);
 }
 
+
+static Route_ControlMode_t BRoute_RunCornerTurn(
+    const Route_ActionFeedback_t *feedback,
+    Route_ActionRequest_t *request,
+    LineTrack_Output_t *out)
+{
+    int16_t angle_deg;
+
+    if ((s_corner_turn_direction == 0) ||
+        (feedback == 0) || (request == 0) || (out == 0)) {
+        BRoute_EnterState(B_ROUTE_STATE_ERROR);
+        return ROUTE_CONTROL_ERROR;
+    }
+
+    if (feedback->state == ROUTE_ACTION_STATE_ERROR) {
+        BRoute_EnterState(B_ROUTE_STATE_ERROR);
+        return ROUTE_CONTROL_ERROR;
+    }
+
+    if (s_corner_action_requested == 0U) {
+        if (feedback->state != ROUTE_ACTION_STATE_IDLE) {
+            BRoute_EnterState(B_ROUTE_STATE_ERROR);
+            return ROUTE_CONTROL_ERROR;
+        }
+
+        angle_deg = (int16_t)(
+            (int16_t)s_corner_turn_direction *
+            B_ROUTE_CORNER_TURN_ANGLE_DEG);
+        request->type = ROUTE_ACTION_TURN_ANGLE;
+        request->angle_deg = angle_deg;
+        s_corner_action_requested = 1U;
+        return ROUTE_CONTROL_MOTION;
+    }
+
+    if (feedback->state == ROUTE_ACTION_STATE_RUNNING) {
+        return ROUTE_CONTROL_MOTION;
+    }
+
+    if (feedback->state == ROUTE_ACTION_STATE_DONE) {
+        s_corner_action_requested = 0U;
+        s_corner_reacquire_samples = 0U;
+        BRoute_EnterState(B_ROUTE_STATE_CORNER_REACQUIRE);
+        BRoute_SetLineOutput(
+            out,
+            0,
+            (int16_t)((int16_t)s_corner_turn_direction *
+                      B_ROUTE_CORNER_REACQUIRE_TURN_CPS));
+        return ROUTE_CONTROL_LINE_TRACK;
+    }
+
+    BRoute_EnterState(B_ROUTE_STATE_ERROR);
+    return ROUTE_CONTROL_ERROR;
+}
+
+static Route_ControlMode_t BRoute_RunCornerReacquire(
+    const LineDetect_Result_t *line,
+    LineTrack_Output_t *out)
+{
+    uint32_t elapsed_ms;
+
+    elapsed_ms = (uint32_t)(s_now_ms - s_state_enter_ms);
+    if ((s_corner_turn_direction == 0) ||
+        (elapsed_ms >= B_ROUTE_CORNER_REACQUIRE_TIMEOUT_MS)) {
+        BRoute_EnterState(B_ROUTE_STATE_ERROR);
+        return ROUTE_CONTROL_ERROR;
+    }
+
+    /* Motion完成粗转后，沿同方向低速补转，直到灰度中间重新压线。 */
+    BRoute_SetLineOutput(
+        out,
+        0,
+        (int16_t)((int16_t)s_corner_turn_direction *
+                  B_ROUTE_CORNER_REACQUIRE_TURN_CPS));
+
+    if (BRoute_IsCornerCenterLine(line) != 0U) {
+        s_corner_reacquire_samples =
+            BRoute_IncrementU16(s_corner_reacquire_samples);
+    } else {
+        s_corner_reacquire_samples = 0U;
+    }
+
+    s_route.event_confirm_samples = s_corner_reacquire_samples;
+
+    if (s_corner_reacquire_samples >=
+        B_ROUTE_CORNER_REACQUIRE_CONFIRM_SAMPLES) {
+        if (s_route.intersection_count < 0xFFU) {
+            s_route.intersection_count++;
+        }
+
+        s_last_corner_exit_ms = s_now_ms;
+        s_center_samples = B_ROUTE_TIP_CENTER_CONFIRM_SAMPLES;
+        s_last_center_ms = s_now_ms;
+        s_corner_turn_direction = 0;
+        s_corner_reacquire_samples = 0U;
+        BRoute_ClearCornerCandidate();
+        LineTrack_Reset();
+        BRoute_EnterState(B_ROUTE_STATE_RUN_TO_TIP);
+        return BRoute_FollowLine(line, out);
+    }
+
+    return ROUTE_CONTROL_LINE_TRACK;
+}
+
 static Route_ControlMode_t BRoute_RunGapProbe(
     const LineDetect_Result_t *line,
     int32_t distance_mm,
@@ -225,6 +595,7 @@ static Route_ControlMode_t BRoute_RunGapProbe(
     if (s_gap_reacquire_samples >=
         B_ROUTE_GAP_REACQUIRE_CONFIRM_SAMPLES) {
         /* 短时间内重新见线：这是虚线间隙，不是三角尖头。 */
+        s_dashed_seen = 1U;
         s_center_samples = 0U;
         s_tip_lost_samples = 0U;
         s_gap_reacquire_samples = 0U;
@@ -276,7 +647,9 @@ static Route_ControlMode_t BRoute_RunTipTurn(
 
     if (s_tip_reacquire_samples >=
         B_ROUTE_TIP_REACQUIRE_CONFIRM_SAMPLES) {
-        s_route.intersection_count = 1U;
+        if (s_route.intersection_count < 0xFFU) {
+            s_route.intersection_count++;
+        }
         s_tip_exit_distance_mm = distance_mm;
         s_finish_armed = 0U;
         s_finish_single_samples = 0U;
@@ -374,18 +747,26 @@ void BRoute_Reset(uint32_t now_ms)
     s_state = B_ROUTE_STATE_RUN_TO_TIP;
     s_distance_ready = 0U;
     s_finish_armed = 0U;
+    s_dashed_seen = 0U;
+    s_corner_action_requested = 0U;
     s_center_samples = 0U;
+    s_corner_candidate_samples = 0U;
+    s_corner_reacquire_samples = 0U;
     s_tip_lost_samples = 0U;
     s_gap_reacquire_samples = 0U;
     s_tip_reacquire_samples = 0U;
     s_finish_single_samples = 0U;
     s_finish_black_samples = 0U;
+    s_corner_candidate_direction = 0;
+    s_corner_turn_direction = 0;
     s_start_distance_mm = 0;
     s_gap_probe_start_distance_mm = 0;
     s_tip_exit_distance_mm = 0;
     s_start_ms = now_ms;
     s_state_enter_ms = now_ms;
     s_last_center_ms = 0U;
+    s_last_corner_candidate_ms = 0U;
+    s_last_corner_exit_ms = 0U;
 
     s_route.state = (uint8_t)s_state;
     s_route.configured = 1U;
@@ -447,7 +828,17 @@ Route_ControlMode_t BRoute_Update(
 
     switch (s_state) {
     case B_ROUTE_STATE_RUN_TO_TIP:
-        return BRoute_RunToTip(line, feedback->distance_mm, out);
+        return BRoute_RunToTip(line,
+                               feedback,
+                               feedback->distance_mm,
+                               out,
+                               request);
+
+    case B_ROUTE_STATE_CORNER_TURN:
+        return BRoute_RunCornerTurn(feedback, request, out);
+
+    case B_ROUTE_STATE_CORNER_REACQUIRE:
+        return BRoute_RunCornerReacquire(line, out);
 
     case B_ROUTE_STATE_GAP_PROBE:
         return BRoute_RunGapProbe(line, feedback->distance_mm, out);
