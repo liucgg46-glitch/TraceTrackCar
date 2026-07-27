@@ -11,7 +11,6 @@
 #include "bsp_uart.h"
 #include "bsp_i2c.h"
 #include "bsp_spi.h"
-
 #include "drv_motor.h"
 #include "drv_encoder.h"
 #include "chassis.h"
@@ -66,7 +65,6 @@ void Test_K210_CommUpdate(void)
     int n;
     int used;
     uint8_t i;
-
     /*
      * 读取一个已经完整接收的数字快照。
      *
@@ -177,8 +175,409 @@ void Test_K210_CommUpdate(void)
     }
 }
 
+/*
+ * ============================================================================
+ * K210 LAB调参UART命令测试
+ * ============================================================================
+ *
+ * 测试目的：
+ *   只验证 STM32 -> K210 的 0x41 命令。
+ *
+ * 测试行为：
+ *   STM32启动3秒后，只发送一次：
+ *
+ *       K210_CMD_LAB_TUNE_MODE
+ *       DATA1 = K210_LAB_TUNE_RED
+ *
+ * 预期：
+ *   K210从正常道路画面切换到RED LAB二值化调参页面。
+ *
+ * 建议任务周期：
+ *   { Test_K210_LabTuneUpdate, 20U, 0U },
+ *
+ * 请使用UTF-8编码保存。
+ * ============================================================================
+ */
+/*
+ * ============================================================================
+ * K210 LAB调参UART完整链路测试
+ * ============================================================================
+ *
+ * 测试顺序：
+ *
+ *   3秒：
+ *       0x41 -> 进入 RED LAB TUNE
+ *
+ *   5秒：
+ *       0x42 -> 选择 L_MAX
+ *
+ *   7秒：
+ *       0x43 -> L_MAX +10
+ *
+ *   9秒：
+ *       0x43 -> L_MAX +10
+ *
+ *   11秒：
+ *       0x43 -> L_MAX -10
+ *
+ * 预期：
+ *   K210屏幕上的 > 参数选择改变；
+ *   L_MAX数值改变；
+ *   黑白二值化区域同步发生变化。
+ *
+ * 建议任务周期：
+ *   { Test_K210_LabTuneUpdate, 20U, 0U },
+ *
+ * 请使用UTF-8编码保存。
+ * ============================================================================
+ */
+/*
+ * ============================================================================
+ * K210 LAB现场按键调参测试
+ * ============================================================================
+ *
+ * KEY1：
+ *   进入/退出LAB调参模式
+ *
+ * KEY2：
+ *   选择下一个LAB参数
+ *
+ *   L_MIN -> L_MAX -> A_MIN -> A_MAX
+ *         -> B_MIN -> B_MAX -> L_MIN
+ *
+ * KEY3：
+ *   当前参数 +1
+ *
+ * KEY4：
+ *   当前参数 -1
+ *
+ * KEY5：
+ *   RED / BLACK 切换
+ *
+ * K210 LCD：
+ *   调参模式下显示实时黑白二值化结果。
+ *
+ * 建议任务周期：
+ *
+ *   { Key_Update,               10U, 0U },
+ *   { K210_Comm_Update,          5U, 0U },
+ *   { Test_K210_LabTuneUpdate,  20U, 0U },
+ *
+ * 文件请使用UTF-8编码保存。
+ * ============================================================================
+ */
+/*
+ * ============================================================================
+ * K210 LAB四按键现场调参测试
+ * ============================================================================
+ *
+ * KEY1：
+ *   OFF -> RED -> BLACK -> OFF
+ *
+ * KEY2：
+ *   选择下一个LAB参数
+ *
+ * KEY3：
+ *   当前参数 +1
+ *
+ * KEY4：
+ *   当前参数 -1
+ *
+ * 文件请使用 UTF-8 编码保存。
+ * ============================================================================
+ */
+void Test_K210_LabTuneUpdate(void)
+{
+    static uint8_t initialized = 0U;
+
+    static uint8_t tune_mode =
+        K210_LAB_TUNE_OFF;
+
+    static uint8_t selected_param =
+        K210_LAB_PARAM_L_MIN;
+
+    BSP_Status_t status;
 
 
+    /* ========================================================
+     * 启动提示
+     * ======================================================== */
+
+    if (initialized == 0U) {
+
+        static const char message[] =
+            "\r\n"
+            "===== K210 LAB KEY TEST =====\r\n"
+            "KEY1 : OFF -> RED -> BLACK -> OFF\r\n"
+            "KEY2 : NEXT PARAM\r\n"
+            "KEY3 : +1\r\n"
+            "KEY4 : -1\r\n"
+            "=============================\r\n";
+
+        (void)BSP_UART_WriteFrame(
+            UART_PORT1,
+            (const uint8_t *)message,
+            (uint16_t)(sizeof(message) - 1U)
+        );
+
+        initialized = 1U;
+    }
+
+
+    /* ========================================================
+     * KEY1
+     *
+     * OFF -> RED -> BLACK -> OFF
+     * ======================================================== */
+
+#if BSP_KEY1_ENABLE
+
+    if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
+
+        if (tune_mode == K210_LAB_TUNE_OFF) {
+
+            tune_mode =
+                K210_LAB_TUNE_RED;
+        }
+        else if (tune_mode == K210_LAB_TUNE_RED) {
+
+            tune_mode =
+                K210_LAB_TUNE_BLACK;
+        }
+        else {
+
+            tune_mode =
+                K210_LAB_TUNE_OFF;
+        }
+
+
+        /*
+         * 每次切换模式，
+         * 参数重新从L_MIN开始。
+         */
+        selected_param =
+            K210_LAB_PARAM_L_MIN;
+
+
+        status =
+            K210_Comm_SetLabTuneMode(
+                tune_mode
+            );
+
+
+        if (status == BSP_OK) {
+
+            /*
+             * RED / BLACK模式下同步参数选择。
+             */
+            if (tune_mode != K210_LAB_TUNE_OFF) {
+
+                (void)K210_Comm_SelectLabParam(
+                    selected_param
+                );
+            }
+
+
+            if (tune_mode == K210_LAB_TUNE_RED) {
+
+                static const char message[] =
+                    "LAB MODE -> RED\r\n";
+
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)(sizeof(message) - 1U)
+                );
+            }
+
+            else if (tune_mode == K210_LAB_TUNE_BLACK) {
+
+                static const char message[] =
+                    "LAB MODE -> BLACK\r\n";
+
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)(sizeof(message) - 1U)
+                );
+            }
+
+            else {
+
+                static const char message[] =
+                    "LAB MODE -> OFF\r\n";
+
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)(sizeof(message) - 1U)
+                );
+            }
+        }
+
+        return;
+    }
+
+#endif
+
+
+    /* ========================================================
+     * 正常模式下忽略KEY2~KEY4
+     * ======================================================== */
+
+    if (tune_mode == K210_LAB_TUNE_OFF) {
+        return;
+    }
+
+
+    /* ========================================================
+     * KEY2
+     *
+     * 下一个LAB参数
+     * ======================================================== */
+
+#if BSP_KEY2_ENABLE
+
+    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
+
+        selected_param++;
+
+        if (
+            selected_param >
+            K210_LAB_PARAM_B_MAX
+        ) {
+            selected_param =
+                K210_LAB_PARAM_L_MIN;
+        }
+
+
+        status =
+            K210_Comm_SelectLabParam(
+                selected_param
+            );
+
+
+        if (status == BSP_OK) {
+
+            char message[48];
+            int length;
+
+            length = snprintf(
+                message,
+                sizeof(message),
+                "LAB SELECT=%u\r\n",
+                (unsigned int)selected_param
+            );
+
+            if (
+                length > 0 &&
+                length < (int)sizeof(message)
+            ) {
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)length
+                );
+            }
+        }
+
+        return;
+    }
+
+#endif
+
+/* ========================================================
+ * KEY3
+ *
+ * 当前参数 +5
+ * ======================================================== */
+
+#if BSP_KEY3_ENABLE
+
+    if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
+
+        status =
+            K210_Comm_AdjustLabParam(
+                selected_param,
+                +5
+            );
+
+
+        if (status == BSP_OK) {
+
+            char message[48];
+            int length;
+
+            length = snprintf(
+                message,
+                sizeof(message),
+                "LAB PARAM=%u +5\r\n",
+                (unsigned int)selected_param
+            );
+
+            if (
+                length > 0 &&
+                length < (int)sizeof(message)
+            ) {
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)length
+                );
+            }
+        }
+
+        return;
+    }
+
+#endif
+
+   /* ========================================================
+ * KEY4
+ *
+ * 当前参数 -5
+ * ======================================================== */
+
+#if BSP_KEY4_ENABLE
+
+    if (BSP_Key_WasPressed(BSP_KEY4) != 0U) {
+
+        status =
+            K210_Comm_AdjustLabParam(
+                selected_param,
+                -5
+            );
+
+
+        if (status == BSP_OK) {
+
+            char message[48];
+            int length;
+
+            length = snprintf(
+                message,
+                sizeof(message),
+                "LAB PARAM=%u -5\r\n",
+                (unsigned int)selected_param
+            );
+
+            if (
+                length > 0 &&
+                length < (int)sizeof(message)
+            ) {
+                (void)BSP_UART_WriteFrame(
+                    UART_PORT1,
+                    (const uint8_t *)message,
+                    (uint16_t)length
+                );
+            }
+        }
+
+        return;
+    }
+
+#endif
+}
 //娴嬭瘯鍑芥暟锛孫LED闂儊
 void Test_GPIO_Toggle(void)
 {

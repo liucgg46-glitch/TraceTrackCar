@@ -166,6 +166,63 @@ extern "C" {
 #define K210_CMD_ROAD_EVENT_STATE         0x31U
 
 #define K210_CMD_SET_ROAD_PROFILE         0x40U
+/*
+ * ============================================================================
+ * STM32发送给K210：现场LAB调参命令
+ * ============================================================================
+ *
+ * 文件请使用 UTF-8 编码保存。
+ *
+ * LAB_TUNE_MODE：
+ *   DATA1：
+ *       0 = 退出LAB调参，恢复正常视觉画面
+ *       1 = 调节红色RED_THRESHOLD
+ *       2 = 调节黑色BLACK_THRESHOLD
+ *
+ *   DATA2 = 0
+ *   DATA3 = 0
+ *
+ *
+ * LAB_TUNE_SELECT：
+ *   DATA1：
+ *       0 = L_MIN
+ *       1 = L_MAX
+ *       2 = A_MIN
+ *       3 = A_MAX
+ *       4 = B_MIN
+ *       5 = B_MAX
+ *
+ *   DATA2 = 0
+ *   DATA3 = 0
+ *
+ *
+ * LAB_TUNE_ADJUST：
+ *   DATA1 = 参数编号，0~5
+ *
+ *   DATA2：
+ *       0 = 减小
+ *       1 = 增大
+ *
+ *   DATA3：
+ *       调节步长，例如1或5
+ *
+ * 例如：
+ *
+ *   修改A_MIN +1：
+ *
+ *   CMD   = 0x43
+ *   DATA1 = 2
+ *   DATA2 = 1
+ *   DATA3 = 1
+ *
+ * 这样即使LAB_TUNE_SELECT帧偶尔丢失，
+ * K210仍然知道真正需要修改的是A_MIN。
+ * ============================================================================
+ */
+
+#define K210_CMD_LAB_TUNE_MODE            0x41U
+#define K210_CMD_LAB_TUNE_SELECT          0x42U
+#define K210_CMD_LAB_TUNE_ADJUST          0x43U
 
 /*
  * ============================================================================
@@ -285,6 +342,29 @@ typedef enum {
     K210_ROAD_PROFILE_DARK = 3U
 } K210_RoadProfile_t;
 
+/*
+ * ============================================================================
+ * K210 LAB现场调参
+ * ============================================================================
+ */
+
+/* 当前正在调哪一种阈值 */
+typedef enum {
+    K210_LAB_TUNE_OFF   = 0U,
+    K210_LAB_TUNE_RED   = 1U,
+    K210_LAB_TUNE_BLACK = 2U
+} K210_LabTuneMode_t;
+
+
+/* LAB六个独立参数 */
+typedef enum {
+    K210_LAB_PARAM_L_MIN = 0U,
+    K210_LAB_PARAM_L_MAX = 1U,
+    K210_LAB_PARAM_A_MIN = 2U,
+    K210_LAB_PARAM_A_MAX = 3U,
+    K210_LAB_PARAM_B_MIN = 4U,
+    K210_LAB_PARAM_B_MAX = 5U
+} K210_LabParam_t;
 /*
  * ============================================================================
  * 通用视觉目标类别
@@ -1003,7 +1083,21 @@ BSP_Status_t K210_Comm_SetMode(uint8_t mode);
 BSP_Status_t K210_Comm_SendRoadProfile(uint8_t profile_id);
 BSP_Status_t K210_Comm_SelectRoadProfile(uint8_t profile_id);
 void K210_Comm_RestartRoadProfileSync(void);
+/*
+ * ============================================================================
+ * LAB现场调参发送接口
+ * ============================================================================
+ */
 
+/* 进入/退出LAB调参模式 */
+BSP_Status_t K210_Comm_SetLabTuneMode(uint8_t mode);
+
+/* 选择LCD上当前高亮的LAB参数 */
+BSP_Status_t K210_Comm_SelectLabParam(uint8_t param_id);
+
+/* 修改LAB参数，delta支持正负 */
+BSP_Status_t K210_Comm_AdjustLabParam(uint8_t param_id,
+                                      int8_t delta);
 #ifdef __cplusplus
 }
 #endif

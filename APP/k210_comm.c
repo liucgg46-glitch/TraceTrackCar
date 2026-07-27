@@ -1041,3 +1041,114 @@ void K210_Comm_RestartRoadProfileSync(void)
     s_k210_info.road_profile_tx_remaining = s_road_profile_tx_remaining;
     s_k210_info.road_profile_last_tx_ok = 0U;
 }
+
+/*
+ * ============================================================================
+ * K210 LAB现场调参
+ * ============================================================================
+ *
+ * 文件请使用 UTF-8 编码保存。
+ */
+
+
+/*
+ * 进入或退出LAB调参模式。
+ *
+ * mode：
+ *   K210_LAB_TUNE_OFF
+ *   K210_LAB_TUNE_RED
+ *   K210_LAB_TUNE_BLACK
+ */
+BSP_Status_t K210_Comm_SetLabTuneMode(uint8_t mode)
+{
+    if (mode > K210_LAB_TUNE_BLACK) {
+        return BSP_PARAM;
+    }
+
+    return K210_Comm_SendFrame(
+        K210_CMD_LAB_TUNE_MODE,
+        mode,
+        0U,
+        0U
+    );
+}
+
+
+/*
+ * 选择当前正在调节的LAB参数。
+ *
+ * param_id：
+ *   0 L_MIN
+ *   1 L_MAX
+ *   2 A_MIN
+ *   3 A_MAX
+ *   4 B_MIN
+ *   5 B_MAX
+ */
+BSP_Status_t K210_Comm_SelectLabParam(uint8_t param_id)
+{
+    if (param_id > K210_LAB_PARAM_B_MAX) {
+        return BSP_PARAM;
+    }
+
+    return K210_Comm_SendFrame(
+        K210_CMD_LAB_TUNE_SELECT,
+        param_id,
+        0U,
+        0U
+    );
+}
+
+
+/*
+ * 调节一个LAB参数。
+ *
+ * delta：
+ *   +1  增加1
+ *   -1  减少1
+ *   +5  增加5
+ *   -5  减少5
+ *
+ * 协议实际发送：
+ *
+ *   DATA1 = param_id
+ *   DATA2 = 0减少 / 1增加
+ *   DATA3 = 步长
+ */
+BSP_Status_t K210_Comm_AdjustLabParam(uint8_t param_id,
+                                      int8_t delta)
+{
+    uint8_t direction;
+    uint8_t step;
+
+    if (param_id > K210_LAB_PARAM_B_MAX) {
+        return BSP_PARAM;
+    }
+
+    if (delta == 0) {
+        return BSP_PARAM;
+    }
+
+    /*
+     * 暂时限制单次最多调10，
+     * 防止错误按键或错误参数导致阈值突然跳很大。
+     */
+    if ((delta > 10) || (delta < -10)) {
+        return BSP_PARAM;
+    }
+
+    if (delta > 0) {
+        direction = 1U;
+        step = (uint8_t)delta;
+    } else {
+        direction = 0U;
+        step = (uint8_t)(-delta);
+    }
+
+    return K210_Comm_SendFrame(
+        K210_CMD_LAB_TUNE_ADJUST,
+        param_id,
+        direction,
+        step
+    );
+}

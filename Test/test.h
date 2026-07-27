@@ -57,6 +57,7 @@ void Test_K210_RoadCommUpdate(void);
 void Test_K210_VisionCommUpdate(void);
 void Test_K210_RoadProfileUpdate(void);
 void Test_K210_SingleDigitCommUpdate(void);
+void Test_K210_LabTuneUpdate(void);
 
 #endif /* PROJECT_TEST_TASKS_ENABLE */
 
