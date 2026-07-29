@@ -2129,7 +2129,7 @@ void Test_RouteLog(void)
         "H2 task=%u route=%u elapsed=%lu mask=0x%02X "
         "black=%u span=%u err=%d turn=%d curve_ms=%lu "
         "armed=%u cand=%u speed=%ld/%ld enc_mm=%ld "
-        "stop_delay=%lu stop_offset=%ld enc_ok=%u fault=%u/%u\r\n",
+        "stop=immediate stop_offset=%ld enc_ok=%u fault=%u/%u\r\n",
         (unsigned int)task.state,
         (unsigned int)route.state,
         (unsigned long)task.elapsed_ms,
@@ -2144,7 +2144,6 @@ void Test_RouteLog(void)
         (long)task.left_speed_cps,
         (long)task.right_speed_cps,
         (long)task.encoder_distance_mm,
-        (unsigned long)H2_STOP_DELAY_MS,
         (long)task.stop_offset_mm,
         (unsigned int)task.encoder_reliable,
         (unsigned int)task.fault,

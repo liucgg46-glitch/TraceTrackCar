@@ -10,12 +10,15 @@ typedef struct {
     float kp;
     float kd;
     int16_t error_deadband;
+    uint16_t error_filter_num;
+    uint16_t error_filter_den;
     int16_t speed_full_error;
     int16_t speed_min_error;
     uint16_t lost_confirm_samples;
     uint16_t reacquire_confirm_samples;
     int16_t search_turn_step_cps;
     int16_t search_turn_max_cps;
+    int16_t search_min_inner_cps;
     uint32_t search_initial_phase_ms;
     uint32_t search_phase_step_ms;
     uint32_t search_phase_max_ms;
@@ -26,6 +29,7 @@ static LineTrack_InternalConfig_t s_cfg;
 static LineTrack_Mode_t s_mode;
 static int16_t s_raw_error;
 static int16_t s_error_filt;
+static uint8_t s_error_filter_valid;
 static int16_t s_last_error;
 static int16_t s_last_linear_cmd;
 static int16_t s_last_turn_cmd;
@@ -71,6 +75,35 @@ static int16_t LineTrack_LimitFloat(float value,
 static uint16_t LineTrack_IncrementU16(uint16_t value)
 {
     return (value < 0xFFFFU) ? (uint16_t)(value + 1U) : value;
+}
+
+/*
+ * 数字量灰度的误差只能在有限位置之间跳变。这里在算法层做一阶滤波，
+ * 避免相邻通道切换直接变成左右轮目标的阶跃，同时保持10ms非阻塞更新。
+ */
+static int16_t LineTrack_FilterError(int16_t raw_error)
+{
+    int32_t difference;
+    int32_t step;
+
+    if (s_error_filter_valid == 0U) {
+        s_error_filt = raw_error;
+        s_error_filter_valid = 1U;
+        return s_error_filt;
+    }
+
+    difference = (int32_t)raw_error - (int32_t)s_error_filt;
+    step = difference * (int32_t)s_cfg.error_filter_num /
+           (int32_t)s_cfg.error_filter_den;
+
+    if ((step == 0) && (difference != 0)) {
+        step = (difference > 0) ? 1 : -1;
+    }
+
+    s_error_filt = LineTrack_LimitI16((int32_t)s_error_filt + step,
+                                      -3500,
+                                      3500);
+    return s_error_filt;
 }
 
 /*
@@ -159,10 +192,28 @@ static void LineTrack_UpdateSearchPhase(uint32_t now)
 
 static void LineTrack_OutputSearch(LineTrack_Output_t *out)
 {
+    int16_t linear_cps;
+    int16_t max_turn_cps;
     int16_t turn_cps;
 
+    linear_cps = s_last_linear_cmd;
+    if (linear_cps <= 0) {
+        linear_cps = s_cfg.base_speed_cps;
+    }
+    if (linear_cps < s_cfg.min_track_speed_cps) {
+        linear_cps = s_cfg.min_track_speed_cps;
+    }
+
     turn_cps = LineTrack_GetSearchTurnCps(s_search_phase);
-    LineTrack_SetOutput(0,
+    max_turn_cps = (int16_t)(linear_cps - s_cfg.search_min_inner_cps);
+    if (max_turn_cps < 0) {
+        max_turn_cps = 0;
+    }
+    if (turn_cps > max_turn_cps) {
+        turn_cps = max_turn_cps;
+    }
+
+    LineTrack_SetOutput(linear_cps,
                         (int16_t)(s_search_direction * turn_cps),
                         1U,
                         out);
@@ -243,6 +294,8 @@ static void LineTrack_LoadDefaultConfig(void)
     s_cfg.kp = CONTROL_LINE_KP;
     s_cfg.kd = CONTROL_LINE_KD;
     s_cfg.error_deadband = CONTROL_LINE_ERROR_DEADBAND;
+    s_cfg.error_filter_num = CONTROL_LINE_ERROR_FILTER_NUM;
+    s_cfg.error_filter_den = CONTROL_LINE_ERROR_FILTER_DEN;
     s_cfg.speed_full_error = CONTROL_LINE_SPEED_FULL_ERROR;
     s_cfg.speed_min_error = CONTROL_LINE_SPEED_MIN_ERROR;
     s_cfg.lost_confirm_samples = CONTROL_LINE_LOST_CONFIRM_SAMPLES;
@@ -250,6 +303,7 @@ static void LineTrack_LoadDefaultConfig(void)
         CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES;
     s_cfg.search_turn_step_cps = CONTROL_LINE_SEARCH_TURN_STEP_CPS;
     s_cfg.search_turn_max_cps = CONTROL_LINE_SEARCH_TURN_MAX_CPS;
+    s_cfg.search_min_inner_cps = CONTROL_LINE_SEARCH_MIN_INNER_CPS;
     s_cfg.search_initial_phase_ms =
         CONTROL_LINE_SEARCH_INITIAL_PHASE_MS;
     s_cfg.search_phase_step_ms = CONTROL_LINE_SEARCH_PHASE_STEP_MS;
@@ -268,6 +322,7 @@ void LineTrack_Reset(void)
     s_mode = LINE_TRACK_MODE_TRACK;
     s_raw_error = 0;
     s_error_filt = 0;
+    s_error_filter_valid = 0U;
     s_last_error = 0;
     s_last_linear_cmd = 0;
     s_last_turn_cmd = 0;
@@ -386,20 +441,20 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     was_recovering = (s_mode != LINE_TRACK_MODE_TRACK) ? 1U : 0U;
 
     /*
-     * 搜索过程中看到线路后先停止扫描，必须连续确认多帧才恢复PD。
-     * 中间再次丢线会清零确认计数并继续原扫描阶段。
+     * 搜索过程中看到线路后仍连续确认多帧，但首帧立即按当前线路误差修正，
+     * 不再输出0/0造成制动；中间再次丢线会继续原扫描阶段。
      */
     if (s_mode == LINE_TRACK_MODE_SEARCH) {
         s_reacquire_samples =
             LineTrack_IncrementU16(s_reacquire_samples);
-        if (s_reacquire_samples < s_cfg.reacquire_confirm_samples) {
-            LineTrack_SetOutput(0, 0, 1U, out);
-            return;
+        if (s_reacquire_samples >= s_cfg.reacquire_confirm_samples) {
+            s_mode = LINE_TRACK_MODE_TRACK;
+            LineTrack_ClearLossRecovery();
         }
+    } else {
+        s_mode = LINE_TRACK_MODE_TRACK;
+        LineTrack_ClearLossRecovery();
     }
-
-    s_mode = LINE_TRACK_MODE_TRACK;
-    LineTrack_ClearLossRecovery();
 
     /*
      * 十字和全黑区域在基础模式下统一低速直行。
@@ -409,22 +464,34 @@ void LineTrack_Compute(const LineDetect_Result_t *line,
     if ((line->type == LINE_TYPE_CROSS) ||
         (line->type == LINE_TYPE_FULL_BLACK)) {
         s_error_filt = 0;
+        s_error_filter_valid = 1U;
         s_last_error = 0;
         LineTrack_SetOutput(s_cfg.cross_speed_cps, 0, 1U, out);
         return;
     }
 
-    /*
-     * 基础版不做误差低通滤波，直接使用当前帧误差。
-     * 这样黑线从最外侧返回中间时，不会继续保留旧方向的大误差。
-     */
     error = line->error_x1000;
     if ((error > (int16_t)(-s_cfg.error_deadband)) &&
         (error < s_cfg.error_deadband)) {
         error = 0;
     }
 
-    s_error_filt = error;
+    /*
+     * 正常循迹时平滑数字量位置跳变；刚从丢线恢复时直接采用当前误差，
+     * 避免旧方向残留延迟重新建立转向。
+     */
+    if (was_recovering != 0U) {
+        s_error_filt = error;
+        s_error_filter_valid = 1U;
+    } else {
+        error = LineTrack_FilterError(error);
+        if ((error > (int16_t)(-s_cfg.error_deadband)) &&
+            (error < s_cfg.error_deadband)) {
+            error = 0;
+            s_error_filt = 0;
+        }
+    }
+    error = s_error_filt;
 
     /* 刚刚重新找到线时不使用搜索前的旧误差计算微分。 */
     if (was_recovering != 0U) {

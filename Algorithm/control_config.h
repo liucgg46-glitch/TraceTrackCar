@@ -106,19 +106,22 @@
 #define CONTROL_LINE_BASE_SPEED_CPS               2000    /* 中线正常循迹速度 */
 #define CONTROL_LINE_CROSS_SPEED_CPS              1500    /* 十字/全黑区域低速直行 */
 #define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
-#define CONTROL_LINE_TURN_MAX_CPS                 800     /* 最大转向量；实际还会限制到不让内侧轮反转 */
+#define CONTROL_LINE_TURN_MAX_CPS                 1200     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
-#define CONTROL_LINE_KP                           0.35f    /* 比例增大：转弯更积极；过大易摆动 */
-#define CONTROL_LINE_KD                           0.20f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
+#define CONTROL_LINE_KP                           0.30f    /* 比例增大：转弯更积极；过大易摆动 */
+#define CONTROL_LINE_KD                           0.04f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
 #define CONTROL_LINE_ERROR_DEADBAND               80      /* 误差死区：±80 内按 0 处理 */
+#define CONTROL_LINE_ERROR_FILTER_NUM             1U      /* 数字量误差一阶滤波分子 */
+#define CONTROL_LINE_ERROR_FILTER_DEN             2U      /* 数字量误差一阶滤波分母 */
 #define CONTROL_LINE_SPEED_FULL_ERROR             200     /* |误差|≤200 保持全速 */
 #define CONTROL_LINE_SPEED_MIN_ERROR              1500    /* |误差|≥1500 降到最低速度 */
 
 #define CONTROL_LINE_LOST_CONFIRM_SAMPLES         2U      /* 连续丢线达到该帧数才进入搜索 */
 #define CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES    3U      /* 搜索时连续看到线达到该帧数才恢复循迹 */
-#define CONTROL_LINE_SEARCH_TURN_CPS              1000    /* 第一阶段原地找线转向量 */
+#define CONTROL_LINE_SEARCH_TURN_CPS              1000    /* 第一阶段向前找线转向量 */
 #define CONTROL_LINE_SEARCH_TURN_STEP_CPS         200     /* 每阶段增加的找线转向量 */
 #define CONTROL_LINE_SEARCH_TURN_MAX_CPS          1800    /* 找线转向量上限 */
+#define CONTROL_LINE_SEARCH_MIN_INNER_CPS         800     /* 向前找线时内侧轮最低目标 */
 #define CONTROL_LINE_SEARCH_INITIAL_PHASE_MS      300U    /* 第一阶段沿最后线路方向扫描时间 */
 #define CONTROL_LINE_SEARCH_PHASE_STEP_MS         200U    /* 每阶段增加的扫描时间 */
 #define CONTROL_LINE_SEARCH_PHASE_MAX_MS          900U    /* 单阶段扫描时间上限 */
@@ -140,6 +143,9 @@
 #endif
 
 #if ((CONTROL_LINE_ERROR_DEADBAND < 0) || \
+     (CONTROL_LINE_ERROR_FILTER_NUM == 0U) || \
+     (CONTROL_LINE_ERROR_FILTER_DEN == 0U) || \
+     (CONTROL_LINE_ERROR_FILTER_NUM > CONTROL_LINE_ERROR_FILTER_DEN) || \
      (CONTROL_LINE_SPEED_FULL_ERROR < 0) || \
      (CONTROL_LINE_SPEED_MIN_ERROR <= CONTROL_LINE_SPEED_FULL_ERROR))
 #error "line error thresholds are invalid"
@@ -151,6 +157,8 @@
      (CONTROL_LINE_SEARCH_TURN_STEP_CPS < 0) || \
      (CONTROL_LINE_SEARCH_TURN_MAX_CPS < CONTROL_LINE_SEARCH_TURN_CPS) || \
      (CONTROL_LINE_SEARCH_TURN_MAX_CPS > CONTROL_CHASSIS_TARGET_MAX_CPS) || \
+     (CONTROL_LINE_SEARCH_MIN_INNER_CPS < 0) || \
+     (CONTROL_LINE_SEARCH_MIN_INNER_CPS >= CONTROL_CHASSIS_TARGET_MAX_CPS) || \
      (CONTROL_LINE_SEARCH_INITIAL_PHASE_MS == 0U) || \
      (CONTROL_LINE_SEARCH_PHASE_STEP_MS == 0U) || \
      (CONTROL_LINE_SEARCH_PHASE_MAX_MS < CONTROL_LINE_SEARCH_INITIAL_PHASE_MS) || \

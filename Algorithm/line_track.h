@@ -51,7 +51,7 @@ typedef struct {
 typedef struct {
     LineTrack_Mode_t mode;
     int16_t raw_error;
-    int16_t filtered_error;      /* 当前不做低通滤波，等于经过死区处理的误差 */
+    int16_t filtered_error;      /* 数字量位置误差经过一阶滤波和死区后的值 */
     int16_t target_linear_cps;
     int16_t target_turn_cps;
     int16_t output_linear_cps;

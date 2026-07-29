@@ -9,7 +9,7 @@
  * APP/app_task_config.h 中的任务表；测试完成后应恢复为 0U。
  */
 #ifndef PROJECT_TEST_TASKS_ENABLE
-#define PROJECT_TEST_TASKS_ENABLE 1U
+#define PROJECT_TEST_TASKS_ENABLE 0U
 #endif
 
 #if ((PROJECT_TEST_TASKS_ENABLE != 0U) && \

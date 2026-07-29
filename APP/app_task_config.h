@@ -6,7 +6,6 @@
 #include "app_diagnostics.h"
 #include "task_profile_select.h"
 #include "line_calibration.h"
-#include "test.h"
 
 #ifdef __cplusplus
 extern "C" {
