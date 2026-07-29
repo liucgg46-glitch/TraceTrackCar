@@ -9,16 +9,23 @@ extern "C" {
 #endif
 
 /*
- * Unified gray sensor facade for upper layers.
+ * 上层统一灰度传感器封装。
  *
- * Current default uses the GW MCU I2C gray sensor.
- * To switch between the 74HC4051 and MCU I2C versions, only change
- * GRAY_SENSOR_SOURCE here.
+ * 当前默认使用 Yahboom 8路串口灰度模块。需要切换 74HC4051、
+ * MCU-I2C 或 Yahboom-UART 时，只修改 GRAY_SENSOR_SOURCE。
  */
 #define GRAY_SENSOR_SOURCE_4051       0U
 #define GRAY_SENSOR_SOURCE_MCU_I2C    1U
+#define GRAY_SENSOR_SOURCE_YAHBOOM_UART 2U
 
-#define GRAY_SENSOR_SOURCE            GRAY_SENSOR_SOURCE_MCU_I2C 
+#ifndef GRAY_SENSOR_SOURCE
+#define GRAY_SENSOR_SOURCE            GRAY_SENSOR_SOURCE_YAHBOOM_UART
+#endif
+
+#if ((GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_YAHBOOM_UART) && \
+     (VEHICLE_YAHBOOM_UART_ENABLE == 0U))
+#error "Yahboom UART gray sensor requires VEHICLE_DRIVE_MODE_2WD"
+#endif
 
 #define GRAY_SENSOR_CHANNEL_NUM       8U
 
@@ -26,7 +33,10 @@ typedef struct {
     uint16_t raw[GRAY_SENSOR_CHANNEL_NUM];
     uint16_t filt[GRAY_SENSOR_CHANNEL_NUM];
     uint8_t  online;
+    uint8_t  valid;
     uint8_t  source;
+    uint32_t last_update_ms;
+    uint32_t error_count;
 } Drv_GraySensor_Info_t;
 
 void Drv_GraySensor_Init(void);

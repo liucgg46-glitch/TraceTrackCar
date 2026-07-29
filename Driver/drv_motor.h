@@ -57,8 +57,8 @@ typedef enum {
 /* 某个电机方向反了，优先改这里，不要在 chassis 里取反。 */
 #define MOTOR_FL_REVERSE         0
 #define MOTOR_FR_REVERSE         0
-#define MOTOR_RL_REVERSE         1
-#define MOTOR_RR_REVERSE         1
+#define MOTOR_RL_REVERSE         0
+#define MOTOR_RR_REVERSE         0
 
 /* 输出单位是 permille：-1000~1000，对应 -100%~100% 占空比。 */
 #define MOTOR_MAX_ABS_PERMILLE   1000

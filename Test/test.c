@@ -27,6 +27,7 @@
 #include "route_manager.h"
 #include "drv_gray_sensor.h"
 #include "drv_gray_mcu_i2c.h"
+#include "drv_gray_yahboom_uart.h"
 #include "drv_lcd_tft.h"
 #include "drv_oled_i2c.h"
 #include "drv_vl53l1x.h"
@@ -39,9 +40,10 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 /* LCD公开测试入口使用的内部异步显示状态机，不对任务表暴露。 */
-static void Test_AsyncDisplay_Update(void);
+void Test_AsyncDisplay_Update(void);
 
 /*
  * K210与STM32通信测试任务。
@@ -1850,127 +1852,205 @@ static const char *LineTypeName(LineType_t type)
     }
 }
 
-static void Test_Line_PrintThreshold(void)
+#define TEST_LINE_LOG_BUF_SIZE 896U
+
+static uint8_t Test_Line_Append(char *buf,
+                                uint16_t size,
+                                uint16_t *used,
+                                const char *fmt,
+                                ...)
+{
+    va_list args;
+    int n;
+    uint16_t remain;
+
+    if ((buf == 0) || (used == 0) || (fmt == 0) || (*used >= size)) {
+        return 0U;
+    }
+
+    remain = (uint16_t)(size - *used);
+    va_start(args, fmt);
+    n = vsnprintf(&buf[*used], remain, fmt, args);
+    va_end(args);
+
+    if ((n <= 0) || (n >= (int)remain)) {
+        return 0U;
+    }
+
+    *used = (uint16_t)(*used + (uint16_t)n);
+    return 1U;
+}
+
+static uint8_t Test_Line_AppendThreshold(char *buf,
+                                         uint16_t size,
+                                         uint16_t *used)
 {
     uint16_t threshold[LINE_DETECT_SENSOR_NUM];
-    char buf[128];
-    int n;
 
-    /* Read the 8 thresholds currently used by line_detect. */
     if (LineDetect_GetThresholdArray(threshold, LINE_DETECT_SENSOR_NUM) != BSP_OK) {
-        return;
+        return 0U;
     }
 
-    n = sprintf(buf,
-                "TH   %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
-                (unsigned int)threshold[0],
-                (unsigned int)threshold[1],
-                (unsigned int)threshold[2],
-                (unsigned int)threshold[3],
-                (unsigned int)threshold[4],
-                (unsigned int)threshold[5],
-                (unsigned int)threshold[6],
-                (unsigned int)threshold[7]);
+    return Test_Line_Append(buf,
+                            size,
+                            used,
+                            "TH   %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
+                            (unsigned int)threshold[0],
+                            (unsigned int)threshold[1],
+                            (unsigned int)threshold[2],
+                            (unsigned int)threshold[3],
+                            (unsigned int)threshold[4],
+                            (unsigned int)threshold[5],
+                            (unsigned int)threshold[6],
+                            (unsigned int)threshold[7]);
+}
 
-    if ((n > 0) && (n < (int)sizeof(buf))) {
+static void Test_Line_SendBuffer(const char *buf, uint16_t used)
+{
+    if ((buf != 0) && (used != 0U)) {
         (void)BSP_UART_WriteFrame(UART_PORT1,
                                   (const uint8_t *)buf,
-                                  (uint16_t)n);
+                                  used);
     }
+}
+
+static void Test_Line_SendMessageAndThreshold(const char *message)
+{
+    char buf[192];
+    uint16_t used = 0U;
+
+    if (message != 0) {
+        (void)Test_Line_Append(buf, sizeof(buf), &used, "%s", message);
+    }
+    (void)Test_Line_AppendThreshold(buf, sizeof(buf), &used);
+    Test_Line_SendBuffer(buf, used);
 }
 
 static void Test_Line_Print(void)
 {
     LineFollow_Info_t info;
     Drv_GraySensor_Info_t sensor;
+#if (GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_MCU_I2C)
     Drv_GrayMcu_Info_t mcu;
     BSP_I2C_Debug_t i2c;
-    char buf[192];
-    int n;
+#elif (GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_YAHBOOM_UART)
+    Drv_GrayYahboom_Info_t yahboom;
+#endif
+    static char buf[TEST_LINE_LOG_BUF_SIZE];
+    uint16_t used = 0U;
 
     if (LineFollow_GetInfo(&info) != BSP_OK) return;
     if (Drv_GraySensor_GetInfo(&sensor) != BSP_OK) return;
+    buf[0] = '\0';
 
+#if (GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_MCU_I2C)
     (void)Drv_GrayMcu_GetInfo(&mcu);
     (void)BSP_I2C_GetDebug(I2C_BUS1, &i2c);
 
-    n = sprintf(buf,
-                "GRAY on=%u valid=%u busy=%u st=%d i2c=%d ph=%u op=%u reg=0x%02X len=%u ping=0x%02X upd=%lu err=%lu pok=%lu perr=%lu addr=0x%02X\r\n",
-                (unsigned int)sensor.online,
-                (unsigned int)mcu.valid,
-                (unsigned int)Drv_GrayMcu_IsBusy(),
-                (int)mcu.last_status,
-                (int)mcu.last_i2c_result,
-                (unsigned int)mcu.last_phase,
-                (unsigned int)mcu.last_op,
-                (unsigned int)mcu.last_reg,
-                (unsigned int)mcu.last_rx_len,
-                (unsigned int)mcu.ping_value,
-                (unsigned long)mcu.update_count,
-                (unsigned long)mcu.error_count,
-                (unsigned long)mcu.ping_ok_count,
-                (unsigned long)mcu.ping_error_count,
-                (unsigned int)mcu.active_addr);
+    (void)Test_Line_Append(
+        buf,
+        sizeof(buf),
+        &used,
+        "GRAY on=%u valid=%u busy=%u st=%d i2c=%d ph=%u op=%u reg=0x%02X len=%u ping=0x%02X upd=%lu err=%lu pok=%lu perr=%lu addr=0x%02X\r\n",
+        (unsigned int)sensor.online,
+        (unsigned int)mcu.valid,
+        (unsigned int)Drv_GrayMcu_IsBusy(),
+        (int)mcu.last_status,
+        (int)mcu.last_i2c_result,
+        (unsigned int)mcu.last_phase,
+        (unsigned int)mcu.last_op,
+        (unsigned int)mcu.last_reg,
+        (unsigned int)mcu.last_rx_len,
+        (unsigned int)mcu.ping_value,
+        (unsigned long)mcu.update_count,
+        (unsigned long)mcu.error_count,
+        (unsigned long)mcu.ping_ok_count,
+        (unsigned long)mcu.ping_error_count,
+        (unsigned int)mcu.active_addr);
+#elif (GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_YAHBOOM_UART)
+    (void)Drv_GrayYahboom_GetInfo(&yahboom);
+    (void)Test_Line_Append(
+        buf,
+        sizeof(buf),
+        &used,
+        "GRAY src=YB on=%u valid=%u init=%u cmd=%u/%u "
+        "age=%lu vf=%lu bad=%lu parse=%lu ovf=%lu uart=%lu\r\n",
+        (unsigned int)yahboom.online,
+        (unsigned int)yahboom.valid,
+        (unsigned int)yahboom.initialized,
+        (unsigned int)yahboom.command_sent,
+        (unsigned int)yahboom.command_count,
+        (unsigned long)yahboom.frame_age_ms,
+        (unsigned long)yahboom.valid_frame_count,
+        (unsigned long)yahboom.invalid_frame_count,
+        (unsigned long)yahboom.parse_error_count,
+        (unsigned long)yahboom.rx_overflow_count,
+        (unsigned long)yahboom.uart_error_count);
+#else
+    (void)Test_Line_Append(buf,
+                           sizeof(buf),
+                           &used,
+                           "GRAY src=4051 on=%u valid=%u\r\n",
+                           (unsigned int)sensor.online,
+                           (unsigned int)sensor.valid);
+#endif
 
-    if (n > 0 && n < (int)sizeof(buf)) {
-        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-    }
+#if (GRAY_SENSOR_SOURCE == GRAY_SENSOR_SOURCE_MCU_I2C)
+    (void)Test_Line_Append(
+        buf,
+        sizeof(buf),
+        &used,
+        "I2C s=%u a=0x%02X tx=%u/%u rx=%u rd=%u sr1=0x%04X sr2=0x%04X | "
+        "ERR src=%u s=%u a=0x%02X tx=%u/%u rx=%u sr1=0x%04X sr2=0x%04X n=%lu\r\n",
+        (unsigned int)i2c.state,
+        (unsigned int)i2c.dev_addr,
+        (unsigned int)i2c.tx_pos,
+        (unsigned int)i2c.tx_len,
+        (unsigned int)i2c.rx_len,
+        (unsigned int)i2c.need_read,
+        (unsigned int)i2c.sr1,
+        (unsigned int)i2c.sr2,
+        (unsigned int)i2c.error_source,
+        (unsigned int)i2c.error_state,
+        (unsigned int)i2c.error_dev_addr,
+        (unsigned int)i2c.error_tx_pos,
+        (unsigned int)i2c.error_tx_len,
+        (unsigned int)i2c.error_rx_len,
+        (unsigned int)i2c.error_sr1,
+        (unsigned int)i2c.error_sr2,
+        (unsigned long)i2c.error_count);
+#endif
 
-    n = sprintf(buf,
-                "I2C s=%u a=0x%02X tx=%u/%u rx=%u rd=%u sr1=0x%04X sr2=0x%04X | "
-                "ERR src=%u s=%u a=0x%02X tx=%u/%u rx=%u sr1=0x%04X sr2=0x%04X n=%lu\r\n",
-                (unsigned int)i2c.state,
-                (unsigned int)i2c.dev_addr,
-                (unsigned int)i2c.tx_pos,
-                (unsigned int)i2c.tx_len,
-                (unsigned int)i2c.rx_len,
-                (unsigned int)i2c.need_read,
-                (unsigned int)i2c.sr1,
-                (unsigned int)i2c.sr2,
-                (unsigned int)i2c.error_source,
-                (unsigned int)i2c.error_state,
-                (unsigned int)i2c.error_dev_addr,
-                (unsigned int)i2c.error_tx_pos,
-                (unsigned int)i2c.error_tx_len,
-                (unsigned int)i2c.error_rx_len,
-                (unsigned int)i2c.error_sr1,
-                (unsigned int)i2c.error_sr2,
-                (unsigned long)i2c.error_count);
+    (void)Test_Line_Append(
+        buf,
+        sizeof(buf),
+        &used,
+        "RAW  %4u %4u %4u %4u %4u %4u %4u %4u | FILT %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
+        (unsigned int)sensor.raw[0], (unsigned int)sensor.raw[1],
+        (unsigned int)sensor.raw[2], (unsigned int)sensor.raw[3],
+        (unsigned int)sensor.raw[4], (unsigned int)sensor.raw[5],
+        (unsigned int)sensor.raw[6], (unsigned int)sensor.raw[7],
+        (unsigned int)sensor.filt[0], (unsigned int)sensor.filt[1],
+        (unsigned int)sensor.filt[2], (unsigned int)sensor.filt[3],
+        (unsigned int)sensor.filt[4], (unsigned int)sensor.filt[5],
+        (unsigned int)sensor.filt[6], (unsigned int)sensor.filt[7]);
 
-    if (n > 0 && n < (int)sizeof(buf)) {
-        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-    }
+    (void)Test_Line_AppendThreshold(buf, sizeof(buf), &used);
 
-    n = sprintf(buf,
-                "RAW  %4u %4u %4u %4u %4u %4u %4u %4u | FILT %4u %4u %4u %4u %4u %4u %4u %4u\r\n",
-                (unsigned int)sensor.raw[0], (unsigned int)sensor.raw[1],
-                (unsigned int)sensor.raw[2], (unsigned int)sensor.raw[3],
-                (unsigned int)sensor.raw[4], (unsigned int)sensor.raw[5],
-                (unsigned int)sensor.raw[6], (unsigned int)sensor.raw[7],
-                (unsigned int)sensor.filt[0], (unsigned int)sensor.filt[1],
-                (unsigned int)sensor.filt[2], (unsigned int)sensor.filt[3],
-                (unsigned int)sensor.filt[4], (unsigned int)sensor.filt[5],
-                (unsigned int)sensor.filt[6], (unsigned int)sensor.filt[7]);
+    (void)Test_Line_Append(
+        buf,
+        sizeof(buf),
+        &used,
+        "LINE st=%d type=%s mask=0x%02X cnt=%d err=%d out(v=%d,t=%d)\r\n",
+        (int)info.state,
+        LineTypeName(info.detect.type),
+        (unsigned int)info.detect.black_mask,
+        (int)info.detect.black_count,
+        (int)info.detect.error_x1000,
+        (int)info.output.linear_cps,
+        (int)info.output.turn_cps);
 
-    if (n > 0 && n < (int)sizeof(buf)) {
-        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-    }
-
-    Test_Line_PrintThreshold();
-
-    n = sprintf(buf,
-                "LINE st=%d type=%s mask=0x%02X cnt=%d err=%d out(v=%d,t=%d)\r\n",
-                (int)info.state,
-                LineTypeName(info.detect.type),
-                (unsigned int)info.detect.black_mask,
-                (int)info.detect.black_count,
-                (int)info.detect.error_x1000,
-                (int)info.output.linear_cps,
-                (int)info.output.turn_cps);
-
-    if (n > 0 && n < (int)sizeof(buf)) {
-        (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)buf, (uint16_t)n);
-    }
+    Test_Line_SendBuffer(buf, used);
 }
 
 void Test_LineCmd_Update(void)
@@ -2008,12 +2088,10 @@ void Test_LineCmd_Update(void)
             (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"capture black ok\r\n", (uint16_t)(sizeof("capture black ok\r\n") - 1U));
         } else if (ch == 't') {
             LineDetect_MakeThresholdFromWhiteBlack();
-            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"make threshold ok\r\n", (uint16_t)(sizeof("make threshold ok\r\n") - 1U));
-            Test_Line_PrintThreshold();
+            Test_Line_SendMessageAndThreshold("make threshold ok\r\n");
         } else if (ch == 'd') {
             LineDetect_SetAllThreshold(LINE_DETECT_DEFAULT_THRESHOLD);
-            (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)"default threshold\r\n", (uint16_t)(sizeof("default threshold\r\n") - 1U));
-            Test_Line_PrintThreshold();
+            Test_Line_SendMessageAndThreshold("default threshold\r\n");
         } else if (ch == 'p') {
             Test_Line_Print();
         } else if (ch == 'k') {
@@ -2795,7 +2873,7 @@ void Test_OLED_Ascii_Update(void)
     Drv_OledI2c_Flush();
 }
 
-static void Test_AsyncDisplay_Update(void)
+void Test_AsyncDisplay_Update(void)
 {
     static uint32_t last_lcd_ms = 0U;
     static uint32_t lcd_cnt = 0U;

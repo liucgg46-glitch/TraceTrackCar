@@ -10,6 +10,6 @@
 #define TASK_PROFILE_B_BASIC                      2U
 
 /* 当前使用2026通信系电赛模拟赛B题基础巡线正式任务状态机。 */
-#define TASK_PROFILE_SELECT                       TASK_PROFILE_B_BASIC
+#define TASK_PROFILE_SELECT                       TASK_PROFILE_NONE
 
 #endif /* __TASK_PROFILE_CONFIG_H */

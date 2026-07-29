@@ -38,7 +38,11 @@ typedef struct {
     DMA_Stream_TypeDef  *dma_rx_stream;
     DMA_Stream_TypeDef  *dma_tx_stream;
     uint32_t             dma_channel;
+    uint8_t              tx_use_dma;
     uint32_t             dma_rx_flags_all;
+    uint32_t             dma_rx_flag_te;
+    uint32_t             dma_rx_flag_dme;
+    uint32_t             dma_rx_flag_fe;
     uint32_t             dma_tx_flags_all;
     uint32_t             dma_tx_it_tc;
     uint32_t             dma_tx_it_te;
@@ -71,7 +75,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT1_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT1_DMA_TX_STREAM,
         .dma_channel       = UART_PORT1_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT1_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT1_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT1_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT1_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT1_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT1_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT1_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT1_DMA_TX_STREAM_NUM),
@@ -102,7 +110,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT2_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT2_DMA_TX_STREAM,
         .dma_channel       = UART_PORT2_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT2_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT2_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT2_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT2_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT2_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT2_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT2_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT2_DMA_TX_STREAM_NUM),
@@ -133,7 +145,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT3_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT3_DMA_TX_STREAM,
         .dma_channel       = UART_PORT3_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT3_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT3_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT3_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT3_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT3_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT3_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT3_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT3_DMA_TX_STREAM_NUM),
@@ -164,7 +180,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT4_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT4_DMA_TX_STREAM,
         .dma_channel       = UART_PORT4_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT4_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT4_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT4_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT4_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT4_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT4_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT4_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT4_DMA_TX_STREAM_NUM),
@@ -195,7 +215,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT5_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT5_DMA_TX_STREAM,
         .dma_channel       = UART_PORT5_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT5_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT5_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT5_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT5_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT5_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT5_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT5_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT5_DMA_TX_STREAM_NUM),
@@ -226,7 +250,11 @@ static const UART_Cfg_t s_uart_cfg[UART_PORT_COUNT] = {
         .dma_rx_stream     = UART_PORT6_DMA_RX_STREAM,
         .dma_tx_stream     = UART_PORT6_DMA_TX_STREAM,
         .dma_channel       = UART_PORT6_DMA_CHANNEL,
+        .tx_use_dma        = UART_PORT6_TX_USE_DMA,
         .dma_rx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT6_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_te    = BSP_DMA_FLAG_TE(UART_PORT6_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_dme   = BSP_DMA_FLAG_DME(UART_PORT6_DMA_RX_STREAM_NUM),
+        .dma_rx_flag_fe    = BSP_DMA_FLAG_FE(UART_PORT6_DMA_RX_STREAM_NUM),
         .dma_tx_flags_all  = BSP_DMA_FLAGS_ALL(UART_PORT6_DMA_TX_STREAM_NUM),
         .dma_tx_it_tc      = BSP_DMA_IT_TC(UART_PORT6_DMA_TX_STREAM_NUM),
         .dma_tx_it_te      = BSP_DMA_IT_TE(UART_PORT6_DMA_TX_STREAM_NUM),
@@ -246,6 +274,7 @@ typedef struct {
     volatile uint16_t rx_tail;
     volatile uint16_t rx_count;
     volatile uint16_t rx_overflow;
+    volatile uint16_t rx_error;
     volatile uint16_t rx_dma_pos;
 
     volatile uint16_t tx_head;
@@ -288,6 +317,33 @@ static void UART_DrainRxDMA(UART_Port_t port)
     const UART_Cfg_t *cfg = &s_uart_cfg[port];
     volatile UART_Runtime_t *rt = &s_uart_rt[port];
     uint16_t pos;
+    uint8_t dma_error = 0U;
+
+    if (rt->initialized == 0U) {
+        return;
+    }
+
+    if (DMA_GetFlagStatus(cfg->dma_rx_stream, cfg->dma_rx_flag_te) != RESET) {
+        DMA_ClearFlag(cfg->dma_rx_stream, cfg->dma_rx_flag_te);
+        dma_error = 1U;
+    }
+    if (DMA_GetFlagStatus(cfg->dma_rx_stream, cfg->dma_rx_flag_dme) != RESET) {
+        DMA_ClearFlag(cfg->dma_rx_stream, cfg->dma_rx_flag_dme);
+        dma_error = 1U;
+    }
+    if (DMA_GetFlagStatus(cfg->dma_rx_stream, cfg->dma_rx_flag_fe) != RESET) {
+        DMA_ClearFlag(cfg->dma_rx_stream, cfg->dma_rx_flag_fe);
+        dma_error = 1U;
+    }
+    if (dma_error != 0U) {
+        rt->rx_error++;
+        if (DMA_GetCmdStatus(cfg->dma_rx_stream) == DISABLE) {
+            cfg->dma_rx_stream->M0AR = (uint32_t)s_uart_dma_rx_buf[port];
+            cfg->dma_rx_stream->NDTR = UART_DMA_RX_BUF_SIZE;
+            rt->rx_dma_pos = 0U;
+            DMA_Cmd(cfg->dma_rx_stream, ENABLE);
+        }
+    }
 
     pos = (uint16_t)(UART_DMA_RX_BUF_SIZE - DMA_GetCurrDataCounter(cfg->dma_rx_stream));
     if (pos >= UART_DMA_RX_BUF_SIZE) {
@@ -307,6 +363,13 @@ static void UART_TxStart(UART_Port_t port)
     uint16_t len;
 
     if (rt->tx_busy || rt->tx_count == 0U) {
+        return;
+    }
+
+    if (cfg->tx_use_dma == 0U) {
+        rt->tx_dma_len = 0U;
+        rt->tx_busy = 1U;
+        USART_ITConfig(cfg->periph, USART_IT_TXE, ENABLE);
         return;
     }
 
@@ -367,6 +430,10 @@ void BSP_UART_Init(UART_Port_t port)
     }
 
     cfg = &s_uart_cfg[port];
+    s_uart_rt[port].initialized = 0U;
+    if (cfg->baudrate == 0U) {
+        return;
+    }
 
     BSP_GPIO_ClockEnable(cfg->tx_port);
     BSP_GPIO_ClockEnable(cfg->rx_port);
@@ -395,9 +462,11 @@ void BSP_UART_Init(UART_Port_t port)
     USART_Init(cfg->periph, &usart);
 
     DMA_Cmd(cfg->dma_rx_stream, DISABLE);
-    DMA_Cmd(cfg->dma_tx_stream, DISABLE);
     (void)BSP_DMA_WaitDisable(cfg->dma_rx_stream, UART_DMA_WAIT_TIMEOUT);
-    (void)BSP_DMA_WaitDisable(cfg->dma_tx_stream, UART_DMA_WAIT_TIMEOUT);
+    if (cfg->tx_use_dma != 0U) {
+        DMA_Cmd(cfg->dma_tx_stream, DISABLE);
+        (void)BSP_DMA_WaitDisable(cfg->dma_tx_stream, UART_DMA_WAIT_TIMEOUT);
+    }
 
     DMA_DeInit(cfg->dma_rx_stream);
     DMA_StructInit(&dma);
@@ -418,34 +487,40 @@ void BSP_UART_Init(UART_Port_t port)
     dma.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
     DMA_Init(cfg->dma_rx_stream, &dma);
 
-    DMA_DeInit(cfg->dma_tx_stream);
-    DMA_StructInit(&dma);
-    dma.DMA_Channel            = cfg->dma_channel;
-    dma.DMA_PeripheralBaseAddr = (uint32_t)&cfg->periph->DR;
-    dma.DMA_Memory0BaseAddr    = (uint32_t)s_uart_tx_ring[port];
-    dma.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
-    dma.DMA_BufferSize         = 1;
-    dma.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
-    dma.DMA_MemoryInc          = DMA_MemoryInc_Enable;
-    dma.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-    dma.DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte;
-    dma.DMA_Mode               = DMA_Mode_Normal;
-    dma.DMA_Priority           = DMA_Priority_High;
-    dma.DMA_FIFOMode           = DMA_FIFOMode_Disable;
-    dma.DMA_FIFOThreshold      = DMA_FIFOThreshold_1QuarterFull;
-    dma.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
-    dma.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-    DMA_Init(cfg->dma_tx_stream, &dma);
+    if (cfg->tx_use_dma != 0U) {
+        DMA_DeInit(cfg->dma_tx_stream);
+        DMA_StructInit(&dma);
+        dma.DMA_Channel            = cfg->dma_channel;
+        dma.DMA_PeripheralBaseAddr = (uint32_t)&cfg->periph->DR;
+        dma.DMA_Memory0BaseAddr    = (uint32_t)s_uart_tx_ring[port];
+        dma.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
+        dma.DMA_BufferSize         = 1;
+        dma.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
+        dma.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+        dma.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
+        dma.DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte;
+        dma.DMA_Mode               = DMA_Mode_Normal;
+        dma.DMA_Priority           = DMA_Priority_High;
+        dma.DMA_FIFOMode           = DMA_FIFOMode_Disable;
+        dma.DMA_FIFOThreshold      = DMA_FIFOThreshold_1QuarterFull;
+        dma.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
+        dma.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
+        DMA_Init(cfg->dma_tx_stream, &dma);
+    }
 
     DMA_ClearFlag(cfg->dma_rx_stream, cfg->dma_rx_flags_all);
-    DMA_ClearFlag(cfg->dma_tx_stream, cfg->dma_tx_flags_all);
+    if (cfg->tx_use_dma != 0U) {
+        DMA_ClearFlag(cfg->dma_tx_stream, cfg->dma_tx_flags_all);
+    }
     /*
      * TX DMA 使用 Direct Mode（FIFO disabled）。
      * 不开启 FE 中断：在 STM32F4 上 FIFO disabled 时 FEIF 可能出现干扰，
      * 如果把 FE 当作发送完成/错误处理，可能导致只发出前 1~2 字节就丢弃整包。
      * 因此 TX 只开启 TC/TE/DME；FE 标志在启动前统一清除即可。
      */
-    DMA_ITConfig(cfg->dma_tx_stream, DMA_IT_TC | DMA_IT_TE | DMA_IT_DME, ENABLE);
+    if (cfg->tx_use_dma != 0U) {
+        DMA_ITConfig(cfg->dma_tx_stream, DMA_IT_TC | DMA_IT_TE | DMA_IT_DME, ENABLE);
+    }
 
     nvic.NVIC_IRQChannel = cfg->usart_irqn;
     nvic.NVIC_IRQChannelPreemptionPriority = UART_IRQ_PREEMPT_PRIO;
@@ -453,15 +528,18 @@ void BSP_UART_Init(UART_Port_t port)
     nvic.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&nvic);
 
-    nvic.NVIC_IRQChannel = cfg->dma_tx_irqn;
-    nvic.NVIC_IRQChannelPreemptionPriority = UART_DMA_TX_PREEMPT_PRIO;
-    nvic.NVIC_IRQChannelSubPriority = UART_DMA_TX_SUB_PRIO;
-    NVIC_Init(&nvic);
+    if (cfg->tx_use_dma != 0U) {
+        nvic.NVIC_IRQChannel = cfg->dma_tx_irqn;
+        nvic.NVIC_IRQChannelPreemptionPriority = UART_DMA_TX_PREEMPT_PRIO;
+        nvic.NVIC_IRQChannelSubPriority = UART_DMA_TX_SUB_PRIO;
+        NVIC_Init(&nvic);
+    }
 
     s_uart_rt[port].rx_head = 0;
     s_uart_rt[port].rx_tail = 0;
     s_uart_rt[port].rx_count = 0;
     s_uart_rt[port].rx_overflow = 0;
+    s_uart_rt[port].rx_error = 0;
     s_uart_rt[port].rx_dma_pos = 0;
     s_uart_rt[port].tx_head = 0;
     s_uart_rt[port].tx_tail = 0;
@@ -472,7 +550,9 @@ void BSP_UART_Init(UART_Port_t port)
     s_uart_rt[port].initialized = 1U;
 
     USART_DMACmd(cfg->periph, USART_DMAReq_Rx, ENABLE);
-    USART_DMACmd(cfg->periph, USART_DMAReq_Tx, ENABLE);
+    USART_DMACmd(cfg->periph,
+                 USART_DMAReq_Tx,
+                 (cfg->tx_use_dma != 0U) ? ENABLE : DISABLE);
     USART_ITConfig(cfg->periph, USART_IT_IDLE, ENABLE);
 
     DMA_Cmd(cfg->dma_rx_stream, ENABLE);
@@ -490,6 +570,14 @@ void BSP_UART_InitAll(void)
     for (port = (UART_Port_t)0; port < UART_PORT_COUNT; port = (UART_Port_t)(port + 1)) {
         BSP_UART_Init(port);
     }
+}
+
+uint8_t BSP_UART_IsInitialized(UART_Port_t port)
+{
+    if (port >= UART_PORT_COUNT) {
+        return 0U;
+    }
+    return s_uart_rt[port].initialized;
 }
 
 void BSP_UART_SetTxReadyGuard(UART_Port_t port, BSP_UART_TxReadyFn_t guard)
@@ -517,7 +605,8 @@ uint16_t BSP_UART_Write(UART_Port_t port, const uint8_t *data, uint16_t len)
     uint8_t need_start = 0;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT || data == 0 || len == 0U) {
+    if (port >= UART_PORT_COUNT || data == 0 || len == 0U ||
+        s_uart_rt[port].initialized == 0U) {
         return 0;
     }
 
@@ -562,7 +651,8 @@ BSP_Status_t BSP_UART_WriteFrameNow(UART_Port_t port, const uint8_t *data, uint1
     uint8_t need_start = 0U;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT || data == 0 || len == 0U || len > UART_TX_BUF_SIZE) {
+    if (port >= UART_PORT_COUNT || data == 0 || len == 0U ||
+        len > UART_TX_BUF_SIZE || s_uart_rt[port].initialized == 0U) {
         return BSP_PARAM;
     }
 
@@ -652,7 +742,8 @@ uint8_t BSP_UART_GetChar(UART_Port_t port, uint8_t *ch)
     uint8_t ok = 0;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT || ch == 0) {
+    if (port >= UART_PORT_COUNT || ch == 0 ||
+        s_uart_rt[port].initialized == 0U) {
         return 0U;
     }
 
@@ -675,7 +766,7 @@ uint16_t BSP_UART_Available(UART_Port_t port)
     uint16_t count;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return 0;
     }
 
@@ -688,8 +779,8 @@ uint16_t BSP_UART_Available(UART_Port_t port)
 
 uint8_t BSP_UART_IsTxBusy(UART_Port_t port)
 {
-    if (port >= UART_PORT_COUNT) {
-        return 1U;
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
+        return 0U;
     }
     return (uint8_t)(s_uart_rt[port].tx_busy || s_uart_rt[port].tx_count > 0U);
 }
@@ -699,7 +790,7 @@ uint16_t BSP_UART_TxFree(UART_Port_t port)
     uint16_t free_count;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return 0;
     }
 
@@ -715,7 +806,7 @@ void BSP_UART_FlushRx(UART_Port_t port)
     volatile UART_Runtime_t *rt;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return;
     }
 
@@ -738,16 +829,20 @@ void BSP_UART_FlushTx(UART_Port_t port)
     volatile UART_Runtime_t *rt;
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return;
     }
 
     cfg = &s_uart_cfg[port];
     rt = &s_uart_rt[port];
 
-    DMA_Cmd(cfg->dma_tx_stream, DISABLE);
-    (void)BSP_DMA_WaitDisable(cfg->dma_tx_stream, UART_DMA_WAIT_TIMEOUT);
-    DMA_ClearFlag(cfg->dma_tx_stream, cfg->dma_tx_flags_all);
+    if (cfg->tx_use_dma != 0U) {
+        DMA_Cmd(cfg->dma_tx_stream, DISABLE);
+        (void)BSP_DMA_WaitDisable(cfg->dma_tx_stream, UART_DMA_WAIT_TIMEOUT);
+        DMA_ClearFlag(cfg->dma_tx_stream, cfg->dma_tx_flags_all);
+    } else {
+        USART_ITConfig(cfg->periph, USART_IT_TXE, DISABLE);
+    }
 
     primask = BSP_EnterCritical();
     rt->tx_head = 0;
@@ -770,6 +865,7 @@ BSP_Status_t BSP_UART_GetStats(UART_Port_t port, UART_Stats_t *stats)
 
     primask = BSP_EnterCritical();
     stats->rx_overflow = s_uart_rt[port].rx_overflow;
+    stats->rx_error    = s_uart_rt[port].rx_error;
     stats->tx_drop     = s_uart_rt[port].tx_drop;
     stats->rx_count    = s_uart_rt[port].rx_count;
     stats->tx_count    = s_uart_rt[port].tx_count;
@@ -788,6 +884,7 @@ void BSP_UART_ClearStats(UART_Port_t port)
 
     primask = BSP_EnterCritical();
     s_uart_rt[port].rx_overflow = 0U;
+    s_uart_rt[port].rx_error = 0U;
     s_uart_rt[port].tx_drop = 0U;
     BSP_ExitCritical(primask);
 }
@@ -796,7 +893,7 @@ void BSP_UART_Task(UART_Port_t port)
 {
     uint32_t primask;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return;
     }
 
@@ -817,20 +914,37 @@ void BSP_UART_TaskAll(void)
 void BSP_UART_USART_ISR(UART_Port_t port)
 {
     const UART_Cfg_t *cfg;
+    volatile UART_Runtime_t *rt;
     uint32_t sr;
     uint32_t tmp;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT || s_uart_rt[port].initialized == 0U) {
         return;
     }
 
     cfg = &s_uart_cfg[port];
+    rt = &s_uart_rt[port];
     sr = cfg->periph->SR;
 
     if ((sr & (USART_SR_IDLE | USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) != 0U) {
+        if ((sr & (USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) != 0U) {
+            rt->rx_error++;
+        }
         tmp = cfg->periph->DR;
         (void)tmp;
         UART_DrainRxDMA(port);
+    }
+
+    if ((cfg->tx_use_dma == 0U) && ((sr & USART_SR_TXE) != 0U)) {
+        if (rt->tx_count > 0U) {
+            cfg->periph->DR = s_uart_tx_ring[port][rt->tx_tail];
+            rt->tx_tail = (uint16_t)((rt->tx_tail + 1U) % UART_TX_BUF_SIZE);
+            rt->tx_count--;
+        }
+        if (rt->tx_count == 0U) {
+            USART_ITConfig(cfg->periph, USART_IT_TXE, DISABLE);
+            rt->tx_busy = 0U;
+        }
     }
 }
 
@@ -838,7 +952,9 @@ void BSP_UART_DMA_TX_ISR(UART_Port_t port)
 {
     const UART_Cfg_t *cfg;
 
-    if (port >= UART_PORT_COUNT) {
+    if (port >= UART_PORT_COUNT ||
+        s_uart_rt[port].initialized == 0U ||
+        s_uart_cfg[port].tx_use_dma == 0U) {
         return;
     }
 
@@ -878,10 +994,12 @@ void UART_PORT1_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT1);
 }
 
+#if UART_PORT1_TX_USE_DMA
 void UART_PORT1_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT1);
 }
+#endif
 #endif
 
 #if UART_PORT2_ENABLE
@@ -890,10 +1008,12 @@ void UART_PORT2_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT2);
 }
 
+#if UART_PORT2_TX_USE_DMA
 void UART_PORT2_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT2);
 }
+#endif
 #endif
 
 #if UART_PORT3_ENABLE
@@ -902,10 +1022,12 @@ void UART_PORT3_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT3);
 }
 
+#if UART_PORT3_TX_USE_DMA
 void UART_PORT3_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT3);
 }
+#endif
 #endif
 
 #if UART_PORT4_ENABLE
@@ -914,10 +1036,12 @@ void UART_PORT4_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT4);
 }
 
+#if UART_PORT4_TX_USE_DMA
 void UART_PORT4_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT4);
 }
+#endif
 #endif
 
 #if UART_PORT5_ENABLE
@@ -926,10 +1050,12 @@ void UART_PORT5_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT5);
 }
 
+#if UART_PORT5_TX_USE_DMA
 void UART_PORT5_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT5);
 }
+#endif
 #endif
 
 #if UART_PORT6_ENABLE
@@ -938,8 +1064,10 @@ void UART_PORT6_IRQ_HANDLER(void)
     BSP_UART_USART_ISR(UART_PORT6);
 }
 
+#if UART_PORT6_TX_USE_DMA
 void UART_PORT6_DMA_TX_IRQ_HANDLER(void)
 {
     BSP_UART_DMA_TX_ISR(UART_PORT6);
 }
+#endif
 #endif

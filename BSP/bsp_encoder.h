@@ -85,7 +85,7 @@ extern "C" {
 #define BSP_ENCODER_CH2_GPIO_PINSRC_B      GPIO_PinSource1
 #define BSP_ENCODER_CH2_GPIO_AF            GPIO_AF_TIM2
 #define BSP_ENCODER_CH2_PERIOD             0xFFFFU
-#define BSP_ENCODER_CH2_REVERSE            1
+#define BSP_ENCODER_CH2_REVERSE            0
 
 /* ============================ CH3：TIM3 PA6/PA7 ============================ */
 #define BSP_ENCODER_CH3_ENABLE             VEHICLE_REAR_DRIVE_ENABLE
@@ -115,7 +115,7 @@ extern "C" {
 #define BSP_ENCODER_CH4_GPIO_PINSRC_B      GPIO_PinSource7
 #define BSP_ENCODER_CH4_GPIO_AF            GPIO_AF_TIM4
 #define BSP_ENCODER_CH4_PERIOD             0xFFFFU
-#define BSP_ENCODER_CH4_REVERSE            1
+#define BSP_ENCODER_CH4_REVERSE            0
 
 /*
  * 编码器通道枚举。

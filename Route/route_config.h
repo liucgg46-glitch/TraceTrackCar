@@ -10,6 +10,6 @@
 #define ROUTE_PROFILE_B_BASIC                       2U
 
 /* 当前使用2026通信系电赛模拟赛B题基础巡线赛道。 */
-#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_B_BASIC
+#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
 
 #endif /* __ROUTE_CONFIG_H */

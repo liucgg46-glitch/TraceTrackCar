@@ -39,7 +39,7 @@
 #define CONTROL_CHASSIS_SPEED_INTEGRAL_LIMIT       20000.0f
 
 /* 每10 ms最多改变的左右轮控制目标，限制命令阶跃带来的机械冲击。 */
-#define CONTROL_CHASSIS_TARGET_SLEW_STEP_CPS       400
+#define CONTROL_CHASSIS_TARGET_SLEW_STEP_CPS       200
 
 /*
  * 编码器安全保护仅在速度闭环开启时生效。
@@ -103,16 +103,16 @@
 #error "CONTROL_LINE_DIRECTION_REVERSE must be 0U or 1U"
 #endif
 
-#define CONTROL_LINE_BASE_SPEED_CPS               1800    /* 中线正常循迹速度 */
+#define CONTROL_LINE_BASE_SPEED_CPS               2000    /* 中线正常循迹速度 */
 #define CONTROL_LINE_CROSS_SPEED_CPS              1500    /* 十字/全黑区域低速直行 */
 #define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
-#define CONTROL_LINE_TURN_MAX_CPS                 1200     /* 最大转向量；实际还会限制到不让内侧轮反转 */
+#define CONTROL_LINE_TURN_MAX_CPS                 800     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
-#define CONTROL_LINE_KP                           0.40f    /* 比例增大：转弯更积极；过大易摆动 */
-#define CONTROL_LINE_KD                           0.18f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
+#define CONTROL_LINE_KP                           0.35f    /* 比例增大：转弯更积极；过大易摆动 */
+#define CONTROL_LINE_KD                           0.04f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
 #define CONTROL_LINE_ERROR_DEADBAND               80      /* 误差死区：±80 内按 0 处理 */
-#define CONTROL_LINE_SPEED_FULL_ERROR             300     /* |误差|≤200 保持全速 */
-#define CONTROL_LINE_SPEED_MIN_ERROR              2000    /* |误差|≥1500 降到最低速度 */
+#define CONTROL_LINE_SPEED_FULL_ERROR             200     /* |误差|≤200 保持全速 */
+#define CONTROL_LINE_SPEED_MIN_ERROR              1500    /* |误差|≥1500 降到最低速度 */
 
 #define CONTROL_LINE_LOST_CONFIRM_SAMPLES         2U      /* 连续丢线达到该帧数才进入搜索 */
 #define CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES    3U      /* 搜索时连续看到线达到该帧数才恢复循迹 */

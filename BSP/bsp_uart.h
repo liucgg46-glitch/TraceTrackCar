@@ -69,6 +69,7 @@ extern "C" {
 #define UART_PORT1_DMA_TX_STREAM      DMA2_Stream7
 #define UART_PORT1_DMA_TX_STREAM_NUM  7
 #define UART_PORT1_DMA_CHANNEL        DMA_Channel_4
+#define UART_PORT1_TX_USE_DMA         1U
 #define UART_PORT1_IRQn               USART1_IRQn
 #define UART_PORT1_DMA_TX_IRQn        DMA2_Stream7_IRQn
 #define UART_PORT1_IRQ_HANDLER        USART1_IRQHandler
@@ -119,6 +120,7 @@ extern "C" {
 #define UART_PORT2_DMA_TX_STREAM_NUM     6
 
 #define UART_PORT2_DMA_CHANNEL           DMA_Channel_4
+#define UART_PORT2_TX_USE_DMA            1U
 
 #define UART_PORT2_IRQn                  USART2_IRQn
 #define UART_PORT2_DMA_TX_IRQn           DMA1_Stream6_IRQn
@@ -130,28 +132,29 @@ extern "C" {
  * 下面是常用备用通道模板，默认关闭。启用前请按芯片手册核对引脚复用、
  * DMA Stream/Channel 是否与工程中其他外设冲突。
  * ------------------------------------------------------------------------- */
-#define UART_PORT3_ENABLE             0
+#define UART_PORT3_ENABLE             VEHICLE_YAHBOOM_UART_ENABLE
 #define UART_PORT3_PERIPH             USART3
 #define UART_PORT3_PERIPH_CLOCK_FN    RCC_APB1PeriphClockCmd
 #define UART_PORT3_PERIPH_CLOCK_MASK  RCC_APB1Periph_USART3
 #define UART_PORT3_DMA_RCC_MASK       RCC_AHB1Periph_DMA1
-#define UART_PORT3_BAUDRATE           115200UL
+#define UART_PORT3_BAUDRATE           YAHBOOM_GRAY_UART_BAUDRATE
 #define UART_PORT3_WORD_LENGTH        USART_WordLength_8b
 #define UART_PORT3_STOP_BITS          USART_StopBits_1
 #define UART_PORT3_PARITY             USART_Parity_No
 #define UART_PORT3_FLOW_CONTROL       USART_HardwareFlowControl_None
-#define UART_PORT3_TX_GPIO_PORT       GPIOB
-#define UART_PORT3_TX_PIN             GPIO_Pin_10
-#define UART_PORT3_TX_PINSRC          GPIO_PinSource10
-#define UART_PORT3_RX_GPIO_PORT       GPIOB
-#define UART_PORT3_RX_PIN             GPIO_Pin_11
-#define UART_PORT3_RX_PINSRC          GPIO_PinSource11
+#define UART_PORT3_TX_GPIO_PORT       GPIOD
+#define UART_PORT3_TX_PIN             GPIO_Pin_8
+#define UART_PORT3_TX_PINSRC          GPIO_PinSource8
+#define UART_PORT3_RX_GPIO_PORT       GPIOD
+#define UART_PORT3_RX_PIN             GPIO_Pin_9
+#define UART_PORT3_RX_PINSRC          GPIO_PinSource9
 #define UART_PORT3_AF                 GPIO_AF_USART3
 #define UART_PORT3_DMA_RX_STREAM      DMA1_Stream1
 #define UART_PORT3_DMA_RX_STREAM_NUM  1
 #define UART_PORT3_DMA_TX_STREAM      DMA1_Stream3
 #define UART_PORT3_DMA_TX_STREAM_NUM  3
 #define UART_PORT3_DMA_CHANNEL        DMA_Channel_4
+#define UART_PORT3_TX_USE_DMA         0U
 #define UART_PORT3_IRQn               USART3_IRQn
 #define UART_PORT3_DMA_TX_IRQn        DMA1_Stream3_IRQn
 #define UART_PORT3_IRQ_HANDLER        USART3_IRQHandler
@@ -179,6 +182,7 @@ extern "C" {
 #define UART_PORT4_DMA_TX_STREAM      DMA1_Stream4
 #define UART_PORT4_DMA_TX_STREAM_NUM  4
 #define UART_PORT4_DMA_CHANNEL        DMA_Channel_4
+#define UART_PORT4_TX_USE_DMA         1U
 #define UART_PORT4_IRQn               UART4_IRQn
 #define UART_PORT4_DMA_TX_IRQn        DMA1_Stream4_IRQn
 #define UART_PORT4_IRQ_HANDLER        UART4_IRQHandler
@@ -206,6 +210,7 @@ extern "C" {
 #define UART_PORT5_DMA_TX_STREAM      DMA1_Stream7
 #define UART_PORT5_DMA_TX_STREAM_NUM  7
 #define UART_PORT5_DMA_CHANNEL        DMA_Channel_4
+#define UART_PORT5_TX_USE_DMA         1U
 #define UART_PORT5_IRQn               UART5_IRQn
 #define UART_PORT5_DMA_TX_IRQn        DMA1_Stream7_IRQn
 #define UART_PORT5_IRQ_HANDLER        UART5_IRQHandler
@@ -233,6 +238,7 @@ extern "C" {
 #define UART_PORT6_DMA_TX_STREAM      DMA2_Stream6
 #define UART_PORT6_DMA_TX_STREAM_NUM  6
 #define UART_PORT6_DMA_CHANNEL        DMA_Channel_5
+#define UART_PORT6_TX_USE_DMA         1U
 #define UART_PORT6_IRQn               USART6_IRQn
 #define UART_PORT6_DMA_TX_IRQn        DMA2_Stream6_IRQn
 #define UART_PORT6_IRQ_HANDLER        USART6_IRQHandler
@@ -267,6 +273,9 @@ typedef enum {
 #define UART_PORT_DEBUG  UART_PORT1
 #define UART_PORT_E220   UART_PORT1
 #define UART_PORT_K210   UART_PORT2
+#if UART_PORT3_ENABLE
+#define UART_PORT_YAHBOOM_GRAY UART_PORT3
+#endif
 #define DEBUG_UART_PORT  UART_PORT_DEBUG
 
 /*
@@ -277,6 +286,7 @@ typedef enum {
  */
 typedef struct {
     uint16_t rx_overflow;
+    uint16_t rx_error;
     uint16_t tx_drop;
     uint16_t rx_count;
     uint16_t tx_count;
@@ -298,6 +308,7 @@ typedef BSP_Status_t (*BSP_UART_TxDeferredFn_t)(const uint8_t *data, uint16_t le
 
 void BSP_UART_Init(UART_Port_t port);
 void BSP_UART_InitAll(void);
+uint8_t BSP_UART_IsInitialized(UART_Port_t port);
 void BSP_UART_SetTxReadyGuard(UART_Port_t port, BSP_UART_TxReadyFn_t guard);
 void BSP_UART_SetTxDeferredHandler(UART_Port_t port, BSP_UART_TxDeferredFn_t handler);
 
