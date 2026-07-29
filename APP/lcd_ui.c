@@ -38,6 +38,8 @@ static uint8_t s_lcd_dashboard_dirty = 1U;
 static uint8_t s_lcd_chassis_test_active = 0U;
 static uint8_t s_lcd_route_test_active = 0U;
 static uint8_t s_lcd_line_cal_active = 0U;
+static uint8_t s_lcd_status_active = 0U;
+static uint8_t s_lcd_status_base_drawn = 0U;
 static LcdUi_LineCalibrationPage_t s_lcd_line_cal_page = LCD_UI_LINE_CAL_READY;
 static uint16_t s_lcd_line_cal_threshold[LINE_DETECT_SENSOR_NUM];
 static char s_lcd_status_line[3][DRV_LCD_TFT_ASYNC_TEXT_MAX_CHARS + 1U];
@@ -90,17 +92,23 @@ static void LcdUi_CopyDashboardLine(uint8_t index, const char *line)
 
 static void LcdUi_CopyLine(uint8_t index, const char *line)
 {
-    uint8_t i;
+    uint8_t i = 0U;
 
     if (index >= 3U) {
         return;
     }
 
-    for (i = 0U; i < DRV_LCD_TFT_ASYNC_TEXT_MAX_CHARS; i++) {
-        if ((line == 0) || (line[i] == '\0')) {
-            break;
-        }
+    while ((i < DRV_LCD_TFT_ASYNC_TEXT_MAX_CHARS) &&
+           (line != 0) && (line[i] != '\0')) {
         s_lcd_status_line[index][i] = line[i];
+        i++;
+    }
+    /*
+     * 状态页复用同一显示区域，短文本必须用背景色覆盖上一帧较长文本，
+     * 否则 "CODE 4" 后会残留旧的 "PHASE CURVE1" 字符。
+     */
+    while (i < DRV_LCD_TFT_ASYNC_TEXT_MAX_CHARS) {
+        s_lcd_status_line[index][i++] = ' ';
     }
     s_lcd_status_line[index][i] = '\0';
 }
@@ -197,9 +205,15 @@ static BSP_Status_t LcdUi_DrawStatusStep(uint8_t step)
 {
     switch (step) {
         case 0U:
+            if (s_lcd_status_base_drawn != 0U) {
+                return BSP_OK;
+            }
             return Drv_LcdTft_TryClear(DRV_LCD_COLOR_BLACK);
 
         case 1U:
+            if (s_lcd_status_base_drawn != 0U) {
+                return BSP_OK;
+            }
             return Drv_LcdTft_TryDrawRect(4U, 4U, 232U, 232U, DRV_LCD_COLOR_BLUE);
 
         case 2U:
@@ -283,6 +297,7 @@ static void LcdUi_RunJob(void)
         } else if (ret == BSP_PARAM) {
             s_lcd_ui_job = LCD_UI_JOB_NONE;
             s_lcd_ui_step = 0U;
+            s_lcd_status_base_drawn = 1U;
         }
     }
 }
@@ -578,6 +593,8 @@ void LcdUi_Init(void)
     s_lcd_line_cal_active = 0U;
     s_lcd_chassis_test_active = 0U;
     s_lcd_route_test_active = 0U;
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_line_cal_page = LCD_UI_LINE_CAL_READY;
     s_lcd_dashboard_dirty = 1U;
     for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
@@ -590,6 +607,8 @@ void LcdUi_Init(void)
 void LcdUi_ShowDashboard(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     if (s_lcd_ui_job != LCD_UI_JOB_NONE) {
         return;
     }
@@ -695,8 +714,12 @@ void LcdUi_ShowStatus(const char *line1, const char *line2, const char *line3)
     LcdUi_CopyLine(0U, line1);
     LcdUi_CopyLine(1U, line2);
     LcdUi_CopyLine(2U, line3);
-    s_lcd_ui_job = LCD_UI_JOB_STATUS;
-    s_lcd_ui_step = 0U;
+    s_lcd_status_active = 1U;
+    s_lcd_boot_visible = 0U;
+    if (s_lcd_ui_job != LCD_UI_JOB_STATUS) {
+        s_lcd_ui_job = LCD_UI_JOB_STATUS;
+        s_lcd_ui_step = 0U;
+    }
 #else
     (void)line1;
     (void)line2;
@@ -736,7 +759,12 @@ void LcdUi_Update(void)
         }
     }
 
-    LcdUi_ShowDashboard();
+    if (s_lcd_status_active != 0U) {
+        s_lcd_ui_job = LCD_UI_JOB_STATUS;
+        s_lcd_ui_step = 0U;
+    } else {
+        LcdUi_ShowDashboard();
+    }
 #endif
 }
 

@@ -280,6 +280,25 @@ void LineTrack_Reset(void)
     LineTrack_ClearLossRecovery();
 }
 
+Project_Status_t LineTrack_SetSpeedProfile(int16_t base_speed_cps,
+                                           int16_t cross_speed_cps,
+                                           int16_t min_track_speed_cps)
+{
+    if ((base_speed_cps < 0) ||
+        (base_speed_cps > CONTROL_CHASSIS_TARGET_MAX_CPS) ||
+        (cross_speed_cps < 0) ||
+        (cross_speed_cps > CONTROL_CHASSIS_TARGET_MAX_CPS) ||
+        (min_track_speed_cps < 0) ||
+        (min_track_speed_cps > base_speed_cps)) {
+        return PROJECT_PARAM;
+    }
+
+    s_cfg.base_speed_cps = base_speed_cps;
+    s_cfg.cross_speed_cps = cross_speed_cps;
+    s_cfg.min_track_speed_cps = min_track_speed_cps;
+    return PROJECT_OK;
+}
+
 Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
 {
     if (info == 0) return PROJECT_PARAM;

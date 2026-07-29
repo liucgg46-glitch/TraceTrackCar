@@ -35,6 +35,12 @@ void LineFollow_Init(void);
 BSP_Status_t LineFollow_Start(void);
 /* 只停止循迹及其发起的动作，不清除其他模块的底盘控制权。 */
 void LineFollow_Stop(void);
+/* 停车但保留刚产生的Route诊断快照，供任务层完成停稳计时。 */
+void LineFollow_StopPreserveRoute(void);
+/* 通过APP适配层切换Algorithm的运行速度方案。 */
+BSP_Status_t LineFollow_SetSpeedProfile(int16_t base_speed_cps,
+                                        int16_t cross_speed_cps,
+                                        int16_t min_track_speed_cps);
 void LineFollow_Update(void);
 LineFollow_State_t LineFollow_GetState(void);
 BSP_Status_t LineFollow_GetInfo(LineFollow_Info_t *info);

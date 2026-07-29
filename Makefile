@@ -133,6 +133,7 @@ SRCS := \
   APP/gimbal_app.c \
   APP/task_fsm.c \
   APP/task_profile_b_basic.c \
+  APP/task_profile_h2_round_stop.c \
   APP/task_profile_select.c \
   APP/motion_action.c \
   APP/line_follow_app.c \
@@ -147,7 +148,8 @@ SRCS := \
   Route/route_profile_select.c \
   Route/route_profile_basic.c \
   Route/route_profile_medicine.c \
-  Route/route_profile_b_basic.c
+  Route/route_profile_b_basic.c \
+  Route/route_profile_h_oval.c
 
 OBJS := $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
 OBJS += $(BUILD_DIR)/$(STARTUP:.s=.o)

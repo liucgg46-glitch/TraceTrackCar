@@ -65,6 +65,13 @@ typedef struct {
 
 void LineTrack_Init(void);
 void LineTrack_Reset(void);
+/*
+ * 运行时速度方案只修改纯算法目标，不接触底盘。
+ * 用于不同正式任务复用同一套循迹算法和PID参数。
+ */
+Project_Status_t LineTrack_SetSpeedProfile(int16_t base_speed_cps,
+                                           int16_t cross_speed_cps,
+                                           int16_t min_track_speed_cps);
 Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info);
 void LineTrack_Compute(const LineDetect_Result_t *line,
                        LineTrack_Output_t *out,

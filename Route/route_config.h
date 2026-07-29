@@ -8,8 +8,9 @@
 #define ROUTE_PROFILE_BASIC                         0U
 #define ROUTE_PROFILE_MEDICINE                      1U
 #define ROUTE_PROFILE_B_BASIC                       2U
+#define ROUTE_PROFILE_H_OVAL                        3U
 
-/* 当前使用2026通信系电赛模拟赛B题基础巡线赛道。 */
-#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_BASIC
+/* 当前使用2026年电赛H题顺时针椭圆赛道。 */
+#define ROUTE_PROFILE_SELECT                        ROUTE_PROFILE_H_OVAL
 
 #endif /* __ROUTE_CONFIG_H */

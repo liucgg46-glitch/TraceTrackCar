@@ -8,8 +8,9 @@
 #define TASK_PROFILE_NONE                         0U
 #define TASK_PROFILE_MEDICINE                     1U
 #define TASK_PROFILE_B_BASIC                      2U
+#define TASK_PROFILE_H2_ROUND_STOP                3U
 
-/* 当前使用2026通信系电赛模拟赛B题基础巡线正式任务状态机。 */
-#define TASK_PROFILE_SELECT                       TASK_PROFILE_NONE
+/* 当前使用2026年电赛H题第2项整圈停车正式任务状态机。 */
+#define TASK_PROFILE_SELECT                       TASK_PROFILE_H2_ROUND_STOP
 
 #endif /* __TASK_PROFILE_CONFIG_H */

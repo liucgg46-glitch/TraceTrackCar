@@ -25,6 +25,9 @@
 #include "line_detect.h"
 #include "line_track.h"
 #include "route_manager.h"
+#include "task_profile_config.h"
+#include "task_profile_h2_round_stop.h"
+#include "route_profile_h_oval.h"
 #include "drv_gray_sensor.h"
 #include "drv_gray_mcu_i2c.h"
 #include "drv_gray_yahboom_uart.h"
@@ -2107,8 +2110,50 @@ void Test_LineCmd_Log(void)
 
 void Test_RouteLog(void)
 {
+#if (TASK_PROFILE_SELECT == TASK_PROFILE_H2_ROUND_STOP)
+    H2Task_Info_t task;
+    HOvalRoute_Info_t route;
+    char buf[384];
+    int length;
+
+    if ((H2Task_GetInfo(&task) != BSP_OK) ||
+        (HRoute_GetH2Info(&route) != PROJECT_OK)) {
+        return;
+    }
+
+    length = snprintf(
+        buf,
+        sizeof(buf),
+        "H2 task=%u route=%u elapsed=%lu mask=0x%02X "
+        "black=%u span=%u err=%d turn=%d curve_ms=%lu "
+        "armed=%u cand=%u speed=%ld/%ld enc_mm=%ld "
+        "stop_delay=%lu stop_offset=%ld enc_ok=%u fault=%u/%u\r\n",
+        (unsigned int)task.state,
+        (unsigned int)route.state,
+        (unsigned long)task.elapsed_ms,
+        (unsigned int)route.gray_mask,
+        (unsigned int)route.black_count,
+        (unsigned int)route.black_span,
+        (int)route.line_error,
+        (int)route.turn_output,
+        (unsigned long)route.curve_confirm_ms,
+        (unsigned int)route.finish_armed,
+        (unsigned int)route.finish_candidate,
+        (long)task.left_speed_cps,
+        (long)task.right_speed_cps,
+        (long)task.encoder_distance_mm,
+        (unsigned long)H2_STOP_DELAY_MS,
+        (long)task.stop_offset_mm,
+        (unsigned int)task.encoder_reliable,
+        (unsigned int)task.fault,
+        (unsigned int)route.fault);
+    if ((length > 0) && (length < (int)sizeof(buf))) {
+        Test_Key_Send(buf, (uint16_t)length);
+    }
+#else
     LcdUi_RouteTestBegin();
     OledUi_RouteTestBegin();
+#endif
 }
 
 void Test_RouteCmd_Update(void)

@@ -124,6 +124,21 @@ void LineFollow_Stop(void)
     LineFollow_ClearOutput();
 }
 
+void LineFollow_StopPreserveRoute(void)
+{
+    LineFollow_Abort();
+}
+
+BSP_Status_t LineFollow_SetSpeedProfile(int16_t base_speed_cps,
+                                        int16_t cross_speed_cps,
+                                        int16_t min_track_speed_cps)
+{
+    return (LineTrack_SetSpeedProfile(base_speed_cps,
+                                      cross_speed_cps,
+                                      min_track_speed_cps) == PROJECT_OK) ?
+           BSP_OK : BSP_PARAM;
+}
+
 void LineFollow_Update(void)
 {
     const LineDetect_Result_t *res;

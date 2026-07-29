@@ -1263,6 +1263,16 @@
               <FilePath>.\APP\task_profile_b_basic.h</FilePath>
             </File>
             <File>
+              <FileName>task_profile_h2_round_stop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\task_profile_h2_round_stop.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_profile_h2_round_stop.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\task_profile_h2_round_stop.h</FilePath>
+            </File>
+            <File>
               <FileName>task_profile_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\task_profile_config.h</FilePath>
@@ -1346,6 +1356,16 @@
               <FileName>route_profile_b_basic.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Route\route_profile_b_basic.h</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_h_oval.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Route\route_profile_h_oval.c</FilePath>
+            </File>
+            <File>
+              <FileName>route_profile_h_oval.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Route\route_profile_h_oval.h</FilePath>
             </File>
           </Files>
         </Group>
