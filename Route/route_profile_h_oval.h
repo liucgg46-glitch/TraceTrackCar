@@ -13,17 +13,9 @@ extern "C" {
  */
 #define H2_LEAVE_A_MIN_MS                         300U
 #define H2_LEAVE_CLEAR_CONFIRM_COUNT              5U
-#define H2_STRAIGHT_CONFIRM_MS                    300U
-#define H2_CURVE_CONFIRM_MS                       300U
-#define H2_CURVE_MIN_TURN_OUTPUT                  120
-#define H2_CURVE_MIN_ERROR_X1000                  400
-#define H2_START_LINE_MIN_BLACK_COUNT             4U
-#define H2_START_LINE_MIN_SPAN                    5U
-#define H2_START_LINE_CONFIRM_COUNT               3U
+#define H2_START_LINE_MIN_BLACK_COUNT             3U
+#define H2_START_LINE_MIN_SPAN                    3U
 #define H2_MIN_FINISH_TIME_MS                     10000U
-#define H2_ROUTE_PHASE_TIMEOUT_MS                 7500U
-#define H2_ROUTE_LINE_LOST_TIMEOUT_MS             1500U
-#define H2_ROUTE_MAX_RUN_TIME_MS                  19500U
 
 typedef enum {
     H_OVAL_ROUTE_IDLE = 0,

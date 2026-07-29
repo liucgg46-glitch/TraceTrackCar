@@ -12,10 +12,23 @@ extern "C" {
 #define DRV_GRAY_YAHBOOM_INPUT_MAX               4096U
 #define DRV_GRAY_YAHBOOM_OUTPUT_MAX              4095U
 
+/* 串口数据模式：数字量模式直接使用模块内部标定后的 0/1 判定。 */
+#define YAHBOOM_GRAY_DATA_MODE_ANALOG             0U
+#define YAHBOOM_GRAY_DATA_MODE_DIGITAL            1U
+#ifndef YAHBOOM_GRAY_DATA_MODE
+#define YAHBOOM_GRAY_DATA_MODE                    YAHBOOM_GRAY_DATA_MODE_DIGITAL
+#endif
+
 /* 模块正面左到右为 X8 到 X1；工程统一约定 index 0 为最左侧。 */
 #define YAHBOOM_GRAY_REVERSE_ORDER               1U
 /* Yahboom 串口原始模拟量实测为白底低、黑线高；驱动反相后保持工程约定：黑线数值低。 */
 #define YAHBOOM_GRAY_BLACK_IS_HIGH               1U
+/* 官方数字量示例中探头压黑线、指示灯亮时对应值为 0。 */
+#define YAHBOOM_GRAY_DIGITAL_BLACK_LEVEL          0U
+#if ((YAHBOOM_GRAY_DIGITAL_BLACK_LEVEL != 0U) && \
+     (YAHBOOM_GRAY_DIGITAL_BLACK_LEVEL != 1U))
+#error "YAHBOOM_GRAY_DIGITAL_BLACK_LEVEL must be 0 or 1"
+#endif
 /* 资料建议上电后等待更久；实车调试默认3秒，若冷启动漂移再调大。 */
 #define YAHBOOM_GRAY_WARMUP_MS                   3000UL
 #define YAHBOOM_GRAY_FRAME_TIMEOUT_MS            100UL
@@ -34,6 +47,8 @@ typedef struct {
     uint8_t initialized;
     uint8_t command_pending;
     uint8_t command_sent;
+    uint8_t data_mode;
+    uint8_t digital_black_mask;
 
     uint32_t valid_frame_count;
     uint32_t invalid_frame_count;
@@ -62,6 +77,9 @@ uint8_t Drv_GrayYahboom_IsOnline(void);
 BSP_Status_t Drv_GrayYahboom_ParseAnalogFrame(const uint8_t *frame,
                                               uint16_t length,
                                               uint16_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM]);
+BSP_Status_t Drv_GrayYahboom_ParseDigitalFrame(const uint8_t *frame,
+                                               uint16_t length,
+                                               uint8_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM]);
 
 #ifdef __cplusplus
 }

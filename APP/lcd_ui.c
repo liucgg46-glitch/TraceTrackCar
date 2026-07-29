@@ -632,6 +632,8 @@ void LcdUi_ShowDashboard(void)
 void LcdUi_ChassisTestBegin(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_chassis_test_active = 1U;
     s_lcd_route_test_active = 0U;
     s_lcd_line_cal_active = 0U;
@@ -642,6 +644,8 @@ void LcdUi_ChassisTestBegin(void)
 void LcdUi_RouteTestBegin(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     if (s_lcd_route_test_active == 0U) {
         s_lcd_chassis_test_active = 0U;
         s_lcd_route_test_active = 1U;
@@ -654,6 +658,8 @@ void LcdUi_RouteTestBegin(void)
 void LcdUi_LineCalibrationBegin(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_chassis_test_active = 0U;
     s_lcd_route_test_active = 0U;
     s_lcd_line_cal_active = 1U;
@@ -665,6 +671,8 @@ void LcdUi_LineCalibrationBegin(void)
 void LcdUi_LineCalibrationWhiteCaptured(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_chassis_test_active = 0U;
     s_lcd_route_test_active = 0U;
     s_lcd_line_cal_active = 1U;
@@ -676,6 +684,8 @@ void LcdUi_LineCalibrationWhiteCaptured(void)
 void LcdUi_LineCalibrationBlackCaptured(void)
 {
 #if LCD_UI_ENABLE
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_chassis_test_active = 0U;
     s_lcd_route_test_active = 0U;
     s_lcd_line_cal_active = 1U;
@@ -697,6 +707,8 @@ void LcdUi_LineCalibrationShowResult(const uint16_t *threshold,
     for (i = 0U; i < LINE_DETECT_SENSOR_NUM; i++) {
         s_lcd_line_cal_threshold[i] = threshold[i];
     }
+    s_lcd_status_active = 0U;
+    s_lcd_status_base_drawn = 0U;
     s_lcd_chassis_test_active = 0U;
     s_lcd_route_test_active = 0U;
     s_lcd_line_cal_active = 1U;

@@ -109,7 +109,7 @@
 #define CONTROL_LINE_TURN_MAX_CPS                 800     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
 #define CONTROL_LINE_KP                           0.35f    /* 比例增大：转弯更积极；过大易摆动 */
-#define CONTROL_LINE_KD                           0.04f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
+#define CONTROL_LINE_KD                           0.20f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
 #define CONTROL_LINE_ERROR_DEADBAND               80      /* 误差死区：±80 内按 0 处理 */
 #define CONTROL_LINE_SPEED_FULL_ERROR             200     /* |误差|≤200 保持全速 */
 #define CONTROL_LINE_SPEED_MIN_ERROR              1500    /* |误差|≥1500 降到最低速度 */

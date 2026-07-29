@@ -1976,8 +1976,10 @@ static void Test_Line_Print(void)
         buf,
         sizeof(buf),
         &used,
-        "GRAY src=YB on=%u valid=%u init=%u cmd=%u/%u "
+        "GRAY src=YB mode=%u mask=0x%02X on=%u valid=%u init=%u cmd=%u/%u "
         "age=%lu vf=%lu bad=%lu parse=%lu ovf=%lu uart=%lu\r\n",
+        (unsigned int)yahboom.data_mode,
+        (unsigned int)yahboom.digital_black_mask,
         (unsigned int)yahboom.online,
         (unsigned int)yahboom.valid,
         (unsigned int)yahboom.initialized,

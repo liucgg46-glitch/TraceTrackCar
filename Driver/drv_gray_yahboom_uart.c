@@ -3,7 +3,13 @@
 #include "bsp_uart.h"
 #include <string.h>
 
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+static const uint8_t s_start_command[] = "$0,0,1#";
+#elif (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_ANALOG)
 static const uint8_t s_start_command[] = "$0,1,0#";
+#else
+#error "Unsupported YAHBOOM_GRAY_DATA_MODE"
+#endif
 
 static Drv_GrayYahboom_Info_t s_gray;
 static uint8_t s_frame[YAHBOOM_GRAY_FRAME_BUFFER_SIZE];
@@ -29,6 +35,7 @@ static uint16_t GrayYahboom_MapIndex(uint8_t index)
 #endif
 }
 
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_ANALOG)
 static uint16_t GrayYahboom_Normalize(uint16_t value)
 {
     uint16_t normalized;
@@ -57,6 +64,7 @@ static uint16_t GrayYahboom_Filter(uint16_t old_value, uint16_t new_value)
                       (diff >> YAHBOOM_GRAY_FILTER_SHIFT));
 #endif
 }
+#endif
 
 static uint16_t GrayYahboom_CounterDelta(uint16_t current, uint16_t previous)
 {
@@ -128,6 +136,90 @@ BSP_Status_t Drv_GrayYahboom_ParseAnalogFrame(
     return (position == length) ? BSP_OK : BSP_ERROR;
 }
 
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+BSP_Status_t Drv_GrayYahboom_ParseDigitalFrame(
+    const uint8_t *frame,
+    uint16_t length,
+    uint8_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM])
+{
+    uint16_t position = 0U;
+    uint8_t channel;
+
+    if ((frame == 0) || (values == 0) || (length < 8U)) {
+        return BSP_PARAM;
+    }
+    if ((frame[position++] != '$') ||
+        (frame[position++] != 'D') ||
+        (frame[position++] != ',')) {
+        return BSP_ERROR;
+    }
+
+    for (channel = 0U; channel < DRV_GRAY_YAHBOOM_CHANNEL_NUM; channel++) {
+        if ((position + 3U) >= length ||
+            (frame[position++] != 'x') ||
+            (frame[position++] != (uint8_t)('1' + channel)) ||
+            (frame[position++] != ':') ||
+            (position >= length) ||
+            ((frame[position] != '0') && (frame[position] != '1'))) {
+            return BSP_ERROR;
+        }
+
+        values[channel] = (uint8_t)(frame[position++] - '0');
+        if (channel < (DRV_GRAY_YAHBOOM_CHANNEL_NUM - 1U)) {
+            if ((position >= length) || (frame[position++] != ',')) {
+                return BSP_ERROR;
+            }
+        } else {
+            if ((position >= length) || (frame[position++] != '#')) {
+                return BSP_ERROR;
+            }
+        }
+    }
+
+    return (position == length) ? BSP_OK : BSP_ERROR;
+}
+
+static void GrayYahboom_AcceptDigitalFrame(
+    const uint8_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM],
+    uint32_t now)
+{
+    uint8_t source;
+    uint16_t destination;
+    uint8_t digital_value;
+    uint8_t black_mask = 0U;
+
+    for (source = 0U; source < DRV_GRAY_YAHBOOM_CHANNEL_NUM; source++) {
+        destination = GrayYahboom_MapIndex(source);
+        digital_value = values[source];
+
+        /* raw 保留模块真实 0/1；filt 维持上层原有的黑低白高量程。 */
+        s_gray.raw[destination] = digital_value;
+        if (digital_value == YAHBOOM_GRAY_DIGITAL_BLACK_LEVEL) {
+            s_gray.filt[destination] = 0U;
+            black_mask |= (uint8_t)(1U << destination);
+        } else {
+            s_gray.filt[destination] = DRV_GRAY_YAHBOOM_OUTPUT_MAX;
+        }
+    }
+
+    s_gray.digital_black_mask = black_mask;
+    s_gray.valid_frame_count++;
+    s_gray.last_frame_tick = now;
+    s_gray.frame_age_ms = 0U;
+    s_gray.valid = 1U;
+}
+#else
+BSP_Status_t Drv_GrayYahboom_ParseDigitalFrame(
+    const uint8_t *frame,
+    uint16_t length,
+    uint8_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM])
+{
+    (void)frame;
+    (void)length;
+    (void)values;
+    return BSP_PARAM;
+}
+
 static void GrayYahboom_AcceptFrame(const uint16_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM],
                                     uint32_t now)
 {
@@ -153,6 +245,7 @@ static void GrayYahboom_AcceptFrame(const uint16_t values[DRV_GRAY_YAHBOOM_CHANN
     s_gray.frame_age_ms = 0U;
     s_gray.valid = 1U;
 }
+#endif
 
 static void GrayYahboom_RejectFrame(void)
 {
@@ -162,7 +255,11 @@ static void GrayYahboom_RejectFrame(void)
 
 static void GrayYahboom_ProcessByte(uint8_t data, uint32_t now)
 {
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+    uint8_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM];
+#else
     uint16_t values[DRV_GRAY_YAHBOOM_CHANNEL_NUM];
+#endif
 
     if (data == '$') {
         if ((s_in_frame != 0U) && (s_frame_length > 0U)) {
@@ -190,10 +287,22 @@ static void GrayYahboom_ProcessByte(uint8_t data, uint32_t now)
         return;
     }
 
-    if (Drv_GrayYahboom_ParseAnalogFrame(s_frame,
+    if (
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+        Drv_GrayYahboom_ParseDigitalFrame(s_frame,
+                                          s_frame_length,
+                                          values) == BSP_OK
+#else
+        Drv_GrayYahboom_ParseAnalogFrame(s_frame,
                                          s_frame_length,
-                                         values) == BSP_OK) {
+                                         values) == BSP_OK
+#endif
+    ) {
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+        GrayYahboom_AcceptDigitalFrame(values, now);
+#else
         GrayYahboom_AcceptFrame(values, now);
+#endif
     } else {
         GrayYahboom_RejectFrame();
     }
@@ -258,9 +367,15 @@ void Drv_GrayYahboom_Init(void)
     s_boot_tick = BSP_GET_TICK();
     s_last_command_tick = s_boot_tick - YAHBOOM_GRAY_COMMAND_RETRY_MS;
     s_next_update_tick = s_boot_tick;
+    s_gray.data_mode = YAHBOOM_GRAY_DATA_MODE;
+    s_gray.digital_black_mask = 0U;
 
     for (channel = 0U; channel < DRV_GRAY_YAHBOOM_CHANNEL_NUM; channel++) {
+#if (YAHBOOM_GRAY_DATA_MODE == YAHBOOM_GRAY_DATA_MODE_DIGITAL)
+        s_gray.raw[channel] = 1U;
+#else
         s_gray.raw[channel] = DRV_GRAY_YAHBOOM_OUTPUT_MAX;
+#endif
         s_gray.filt[channel] = DRV_GRAY_YAHBOOM_OUTPUT_MAX;
     }
 

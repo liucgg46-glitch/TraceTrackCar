@@ -37,10 +37,10 @@ static const char *H2Task_PhaseName(uint8_t route_state)
 {
     switch ((HOvalRoute_State_t)route_state) {
     case H_OVAL_ROUTE_LEAVING_A:       return "LEAVE A";
-    case H_OVAL_ROUTE_FIRST_STRAIGHT:  return "STRAIGHT1";
-    case H_OVAL_ROUTE_FIRST_CURVE:     return "CURVE1";
-    case H_OVAL_ROUTE_SECOND_STRAIGHT: return "STRAIGHT2";
-    case H_OVAL_ROUTE_SECOND_CURVE:    return "CURVE2";
+    case H_OVAL_ROUTE_FIRST_STRAIGHT:
+    case H_OVAL_ROUTE_FIRST_CURVE:
+    case H_OVAL_ROUTE_SECOND_STRAIGHT:
+    case H_OVAL_ROUTE_SECOND_CURVE:    return "RUNNING";
     case H_OVAL_ROUTE_FINISH_ARMED:    return "ARMED";
     case H_OVAL_ROUTE_FINISH_CONFIRM:  return "FINISH";
     case H_OVAL_ROUTE_FINISHED:        return "MARK";
@@ -221,13 +221,6 @@ static void H2Task_UpdateDisplay(uint32_t now_ms, uint8_t force)
                        "PHASE %s",
                        H2Task_PhaseName(s_task.route_state));
         break;
-    case H2_FINAL_APPROACH:
-        (void)snprintf(line1, sizeof(line1), "H2 APPROACH");
-        (void)snprintf(line3,
-                       sizeof(line3),
-                       "DELAY %lums",
-                       (unsigned long)H2_STOP_DELAY_MS);
-        break;
     case H2_BRAKING:
         (void)snprintf(line1, sizeof(line1), "H2 BRAKING");
         (void)snprintf(line3, sizeof(line3), "WAIT STABLE");
@@ -348,7 +341,11 @@ void H2Task_Init(void)
     (void)LineFollow_SetSpeedProfile(H2_RUN_SPEED_CPS,
                                      H2_CURVE_SPEED_CPS,
                                      H2_CURVE_SPEED_CPS);
-    H2Task_UpdateDisplay(now_ms, 1U);
+    /*
+     * 初始化只建立安全状态，不主动占用 LCD。
+     * 只有任务表实际注册并运行 TaskProfile_Update() 时才刷新 H2 页面，
+     * 避免底盘、校准等专项任务仍被未运行的 H2 状态页覆盖。
+     */
 }
 
 void H2Task_Reset(void)
@@ -391,13 +388,6 @@ void H2Task_Update(void)
         return;
     }
 
-    if ((s_task.timer_running != 0U) &&
-        (s_task.elapsed_ms >= H2_MAX_RUN_TIME_MS)) {
-        H2Task_EnterFault(H2_FAULT_RUN_TIMEOUT, now_ms);
-        H2Task_UpdateDisplay(now_ms, 1U);
-        return;
-    }
-
     switch (s_task.state) {
     case H2_IDLE:
         H2Task_EnterState(H2_WAIT_START, now_ms);
@@ -436,17 +426,10 @@ void H2Task_Update(void)
             H2Task_EnterFault(H2_FAULT_CHASSIS, now_ms);
         } else if (route.finish_armed != 0U) {
             /*
-             * 第二段右弯确认后先降到终点搜索速度，降低横线识别到制动之间
-             * 的机械惯性；识别横线后还会再切到更低的补偿速度。
+             * 10秒后只打开终点横线识别，不提前改变循迹速度。
+             * 真正确认横线的第一帧由Route立即停止底盘。
              */
-            if (LineFollow_SetSpeedProfile(
-                    H2_FINISH_SEARCH_SPEED_CPS,
-                    H2_FINISH_SEARCH_SPEED_CPS,
-                    H2_FINISH_SEARCH_SPEED_CPS) != BSP_OK) {
-                H2Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
-            } else {
-                H2Task_EnterState(H2_FINISH_ARMED, now_ms);
-            }
+            H2Task_EnterState(H2_FINISH_ARMED, now_ms);
         } else if (s_task.line_follow_running == 0U) {
             H2Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
         }
@@ -464,29 +447,7 @@ void H2Task_Update(void)
         } else if (route.arrived != 0U) {
             s_task.marker_distance_mm =
                 s_task.encoder_distance_mm;
-            if (LineFollow_SetSpeedProfile(
-                    H2_APPROACH_SPEED_CPS,
-                    H2_APPROACH_SPEED_CPS,
-                    H2_APPROACH_SPEED_CPS) != BSP_OK) {
-                H2Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
-            } else {
-                H2Task_EnterState(H2_FINAL_APPROACH, now_ms);
-            }
-        } else if (s_task.line_follow_running == 0U) {
-            H2Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
-        }
-        break;
-
-    case H2_FINAL_APPROACH:
-        s_task.stop_offset_mm =
-            s_task.encoder_distance_mm -
-            s_task.marker_distance_mm;
-        if (Drv_GraySensor_IsOnline() == 0U) {
-            H2Task_EnterFault(H2_FAULT_GRAY_OFFLINE, now_ms);
-        } else if (s_task.chassis_fault !=
-                   (uint8_t)CHASSIS_FAULT_NONE) {
-            H2Task_EnterFault(H2_FAULT_CHASSIS, now_ms);
-        } else if (s_task.state_elapsed_ms >= H2_STOP_DELAY_MS) {
+            s_task.stop_offset_mm = 0;
             H2Task_StopVehicle(1U);
             s_stop_settle_active = 0U;
             H2Task_EnterState(H2_BRAKING, now_ms);
