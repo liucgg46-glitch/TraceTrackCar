@@ -30,6 +30,8 @@ typedef struct {
     Drv_Servo_Position_t target;
     uint16_t horizontal_pulse_us;
     uint16_t pitch_pulse_us;
+    uint16_t horizontal_angle_x10;
+    uint16_t horizontal_target_angle_x10;
     /* 仅表示软件输出命令已到达目标，不代表舵机具有位置反馈。 */
     uint8_t command_reached;
 } Drv_Servo_Info_t;
@@ -60,6 +62,8 @@ BSP_Status_t Drv_Servo_SetHorizontalPulseUs(uint16_t pulse_us);
 uint16_t Drv_Servo_GetHorizontalPulseUs(void);
 BSP_Status_t Drv_Servo_SetHorizontalAngleDeg(uint16_t angle_deg);
 uint16_t Drv_Servo_GetHorizontalAngleDeg(void);
+BSP_Status_t Drv_Servo_SetHorizontalAngleX10(uint16_t angle_x10);
+uint16_t Drv_Servo_GetHorizontalAngleX10(void);
 
 void Drv_Servo_Center(void);
 BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info);

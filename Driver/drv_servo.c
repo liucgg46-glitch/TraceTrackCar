@@ -11,6 +11,8 @@
 #define SERVO_HORIZONTAL_LEFT_LIMIT_US     2500U
 #define SERVO_HORIZONTAL_MIN_ANGLE_DEG     0U
 #define SERVO_HORIZONTAL_MAX_ANGLE_DEG     180U
+#define SERVO_HORIZONTAL_MIN_ANGLE_X10     0U
+#define SERVO_HORIZONTAL_MAX_ANGLE_X10     1800U
 
 #define SERVO_PITCH_UP_LIMIT_US            1200U
 #define SERVO_PITCH_CENTER_US              1450U
@@ -58,34 +60,42 @@ static uint16_t Drv_Servo_LimitHorizontalAngle(uint16_t angle_deg)
     return angle_deg;
 }
 
-static uint16_t Drv_Servo_HorizontalAngleToPulse(uint16_t angle_deg)
+static uint16_t Drv_Servo_LimitHorizontalAngleX10(uint16_t angle_x10)
+{
+    if (angle_x10 > SERVO_HORIZONTAL_MAX_ANGLE_X10) {
+        return SERVO_HORIZONTAL_MAX_ANGLE_X10;
+    }
+    return angle_x10;
+}
+
+static uint16_t Drv_Servo_HorizontalAngleX10ToPulse(uint16_t angle_x10)
 {
     uint32_t span_us;
     uint32_t pulse_us;
 
-    angle_deg = Drv_Servo_LimitHorizontalAngle(angle_deg);
+    angle_x10 = Drv_Servo_LimitHorizontalAngleX10(angle_x10);
     span_us = (uint32_t)(SERVO_HORIZONTAL_LEFT_LIMIT_US -
                          SERVO_HORIZONTAL_RIGHT_LIMIT_US);
     pulse_us = (uint32_t)SERVO_HORIZONTAL_RIGHT_LIMIT_US +
-               (((uint32_t)angle_deg * span_us) +
-                (SERVO_HORIZONTAL_MAX_ANGLE_DEG / 2U)) /
-                   SERVO_HORIZONTAL_MAX_ANGLE_DEG;
+               (((uint32_t)angle_x10 * span_us) +
+                (SERVO_HORIZONTAL_MAX_ANGLE_X10 / 2U)) /
+                   SERVO_HORIZONTAL_MAX_ANGLE_X10;
     return (uint16_t)pulse_us;
 }
 
-static uint16_t Drv_Servo_HorizontalPulseToAngle(uint16_t pulse_us)
+static uint16_t Drv_Servo_HorizontalPulseToAngleX10(uint16_t pulse_us)
 {
     uint32_t span_us;
-    uint32_t angle_deg;
+    uint32_t angle_x10;
 
     pulse_us = Drv_Servo_LimitHorizontalPulse(pulse_us);
     span_us = (uint32_t)(SERVO_HORIZONTAL_LEFT_LIMIT_US -
                          SERVO_HORIZONTAL_RIGHT_LIMIT_US);
-    angle_deg = (((uint32_t)(pulse_us - SERVO_HORIZONTAL_RIGHT_LIMIT_US) *
-                  SERVO_HORIZONTAL_MAX_ANGLE_DEG) +
+    angle_x10 = (((uint32_t)(pulse_us - SERVO_HORIZONTAL_RIGHT_LIMIT_US) *
+                  SERVO_HORIZONTAL_MAX_ANGLE_X10) +
                  (span_us / 2U)) /
                 span_us;
-    return (uint16_t)angle_deg;
+    return (uint16_t)angle_x10;
 }
 
 static uint16_t Drv_Servo_PositionToPulse(int16_t position,
@@ -346,14 +356,25 @@ uint16_t Drv_Servo_GetHorizontalPulseUs(void)
 
 BSP_Status_t Drv_Servo_SetHorizontalAngleDeg(uint16_t angle_deg)
 {
-    return Drv_Servo_SetHorizontalPulseUs(
-        Drv_Servo_HorizontalAngleToPulse(angle_deg)
-    );
+    angle_deg = Drv_Servo_LimitHorizontalAngle(angle_deg);
+    return Drv_Servo_SetHorizontalAngleX10((uint16_t)(angle_deg * 10U));
 }
 
 uint16_t Drv_Servo_GetHorizontalAngleDeg(void)
 {
-    return Drv_Servo_HorizontalPulseToAngle(s_horizontal_pulse_us);
+    return (uint16_t)((Drv_Servo_GetHorizontalAngleX10() + 5U) / 10U);
+}
+
+BSP_Status_t Drv_Servo_SetHorizontalAngleX10(uint16_t angle_x10)
+{
+    return Drv_Servo_SetHorizontalPulseUs(
+        Drv_Servo_HorizontalAngleX10ToPulse(angle_x10)
+    );
+}
+
+uint16_t Drv_Servo_GetHorizontalAngleX10(void)
+{
+    return Drv_Servo_HorizontalPulseToAngleX10(s_horizontal_pulse_us);
 }
 
 void Drv_Servo_Center(void)
@@ -372,6 +393,12 @@ BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info)
     info->target = s_target_position;
     info->horizontal_pulse_us = s_horizontal_pulse_us;
     info->pitch_pulse_us = s_pitch_pulse_us;
+    info->horizontal_angle_x10 = Drv_Servo_HorizontalPulseToAngleX10(
+        s_horizontal_pulse_us
+    );
+    info->horizontal_target_angle_x10 = Drv_Servo_HorizontalPulseToAngleX10(
+        s_horizontal_target_us
+    );
     info->command_reached = Drv_Servo_IsCommandReached();
     return BSP_OK;
 }

@@ -100,6 +100,7 @@ SRCS := \
   Algorithm/attitude_estimator.c \
   Algorithm/heading_estimator.c \
   Algorithm/odometer.c \
+  Algorithm/ball_balance_control.c \
   Test/test.c \
   Driver/drv_encoder.c \
   Driver/drv_motor.c \
@@ -131,6 +132,7 @@ SRCS := \
   APP/odometer_adapter.c \
   APP/k210_comm.c \
   APP/gimbal_app.c \
+  APP/ball_balance_app.c \
   APP/task_fsm.c \
   APP/task_profile_b_basic.c \
   APP/task_profile_h2_round_stop.c \
