@@ -20,7 +20,8 @@
 
 /* 每 20 ms 最多改变 1 us，保持原实现的缓动速度。 */
 #define SERVO_TASK_PERIOD_MS               20U
-#define SERVO_MOVE_STEP_US                 1U
+#define SERVO_HORIZONTAL_MOVE_STEP_US      10U
+#define SERVO_PITCH_MOVE_STEP_US           1U
 
 static uint16_t s_horizontal_pulse_us = SERVO_HORIZONTAL_CENTER_US;
 static uint16_t s_pitch_pulse_us = SERVO_PITCH_CENTER_US;
@@ -135,20 +136,22 @@ static int16_t Drv_Servo_PulseToPosition(uint16_t pulse_us,
     return (int16_t)position;
 }
 
-static uint16_t Drv_Servo_MoveOneStep(uint16_t current, uint16_t target)
+static uint16_t Drv_Servo_MoveOneStep(uint16_t current,
+                                      uint16_t target,
+                                      uint16_t step_us)
 {
     if (current < target) {
-        if ((uint16_t)(target - current) <= SERVO_MOVE_STEP_US) {
+        if ((uint16_t)(target - current) <= step_us) {
             return target;
         }
-        return (uint16_t)(current + SERVO_MOVE_STEP_US);
+        return (uint16_t)(current + step_us);
     }
 
     if (current > target) {
-        if ((uint16_t)(current - target) <= SERVO_MOVE_STEP_US) {
+        if ((uint16_t)(current - target) <= step_us) {
             return target;
         }
-        return (uint16_t)(current - SERVO_MOVE_STEP_US);
+        return (uint16_t)(current - step_us);
     }
 
     return current;
@@ -214,11 +217,13 @@ void Drv_Servo_Task(void)
 
     horizontal_next = Drv_Servo_MoveOneStep(
         s_horizontal_pulse_us,
-        s_horizontal_target_us
+        s_horizontal_target_us,
+        SERVO_HORIZONTAL_MOVE_STEP_US
     );
     pitch_next = Drv_Servo_MoveOneStep(
         s_pitch_pulse_us,
-        s_pitch_target_us
+        s_pitch_target_us,
+        SERVO_PITCH_MOVE_STEP_US
     );
 
     if (horizontal_next != s_horizontal_pulse_us) {
@@ -370,6 +375,23 @@ BSP_Status_t Drv_Servo_SetHorizontalAngleX10(uint16_t angle_x10)
     return Drv_Servo_SetHorizontalPulseUs(
         Drv_Servo_HorizontalAngleX10ToPulse(angle_x10)
     );
+}
+
+BSP_Status_t Drv_Servo_SetHorizontalTargetAngleX10(uint16_t angle_x10)
+{
+    uint16_t pulse_us;
+
+    angle_x10 = Drv_Servo_LimitHorizontalAngleX10(angle_x10);
+    pulse_us = Drv_Servo_HorizontalAngleX10ToPulse(angle_x10);
+
+    s_horizontal_target_us = pulse_us;
+    s_target_position.horizontal_permille = Drv_Servo_PulseToPosition(
+        pulse_us,
+        SERVO_HORIZONTAL_RIGHT_LIMIT_US,
+        SERVO_HORIZONTAL_CENTER_US,
+        SERVO_HORIZONTAL_LEFT_LIMIT_US
+    );
+    return BSP_OK;
 }
 
 uint16_t Drv_Servo_GetHorizontalAngleX10(void)

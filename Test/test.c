@@ -3521,9 +3521,16 @@ static void Test_BallPid_PrintStatus(const char *reason)
     K210_Comm_Info_t k210_info;
     BallBalance_AppInfo_t app_info;
     BallBalance_K210AdapterInfo_t adapter_info;
+    Drv_Servo_Info_t servo_info;
+    uint8_t servo_info_ok;
     char line[256];
     int used;
     int n;
+
+    servo_info_ok = 0U;
+    if (Drv_Servo_GetInfo(&servo_info) == BSP_OK) {
+        servo_info_ok = 1U;
+    }
 
     if ((K210_Comm_GetInfo(&k210_info) != BSP_OK) ||
         (BallBalance_App_GetInfo(&app_info) != BSP_OK) ||
@@ -3636,9 +3643,17 @@ static void Test_BallPid_PrintStatus(const char *reason)
     n = snprintf(
         line,
         sizeof(line),
-        "[BallPID] servo=%u.%udeg enabled=%u valid=%u timeout=%u low_conf=%u out_range=%u fault=%u\r\n",
+        "[BallPID] servo_cmd=%u.%udeg servo_now=%u.%udeg servo_tgt=%u.%udeg enabled=%u valid=%u timeout=%u low_conf=%u out_range=%u fault=%u\r\n",
         (unsigned int)(app_info.control.command_angle_x10 / 10U),
         (unsigned int)(app_info.control.command_angle_x10 % 10U),
+        (servo_info_ok != 0U) ?
+            (unsigned int)(servo_info.horizontal_angle_x10 / 10U) : 0U,
+        (servo_info_ok != 0U) ?
+            (unsigned int)(servo_info.horizontal_angle_x10 % 10U) : 0U,
+        (servo_info_ok != 0U) ?
+            (unsigned int)(servo_info.horizontal_target_angle_x10 / 10U) : 0U,
+        (servo_info_ok != 0U) ?
+            (unsigned int)(servo_info.horizontal_target_angle_x10 % 10U) : 0U,
         (unsigned int)app_info.enabled,
         (unsigned int)app_info.control.measurement_valid,
         (unsigned int)app_info.control.data_timeout,

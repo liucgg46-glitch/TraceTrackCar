@@ -12,9 +12,9 @@ extern "C" {
  * 车载平衡滚球控制器。
  * 本模块只处理位置、速度和PID/PD计算，不读取K210、不访问舵机、不输出日志。
  */
-#define BALL_BALANCE_KP                         0.20f
-#define BALL_BALANCE_KI                         0.00f
-#define BALL_BALANCE_KD                         0.020f
+#define BALL_BALANCE_KP                         0.16f
+#define BALL_BALANCE_KI                         0.015f
+#define BALL_BALANCE_KD                         0.060f
 
 #define BALL_BALANCE_NEUTRAL_ANGLE_X10          900U
 #define BALL_BALANCE_OUTPUT_MIN_X10             700U
@@ -29,9 +29,12 @@ extern "C" {
  */
 #define BALL_BALANCE_DATA_TIMEOUT_MS            500U
 #define BALL_BALANCE_MIN_CONFIDENCE             60U
-#define BALL_BALANCE_POSITION_DEADBAND_MM       1.0f
-#define BALL_BALANCE_INTEGRAL_ACTIVE_MM         30.0f
-#define BALL_BALANCE_SLEW_X10_PER_UPDATE        20U
+#define BALL_BALANCE_POSITION_DEADBAND_MM       3.0f
+#define BALL_BALANCE_INTEGRAL_ACTIVE_MM         100.0f
+#define BALL_BALANCE_MIN_ACTIVE_ERROR_MM        6.0f
+#define BALL_BALANCE_MIN_OUTPUT_DEG             4.0f
+#define BALL_BALANCE_PREDICT_MAX_MS             120U
+#define BALL_BALANCE_SLEW_X10_PER_UPDATE        120U
 
 typedef struct {
     uint8_t enabled;

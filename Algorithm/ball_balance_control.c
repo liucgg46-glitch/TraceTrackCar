@@ -1,8 +1,8 @@
 #include "ball_balance_control.h"
 
-#define BALL_BALANCE_POSITION_FILTER_ALPHA       0.35f
-#define BALL_BALANCE_VELOCITY_FILTER_ALPHA       0.30f
-#define BALL_BALANCE_INTEGRAL_LIMIT_MM_S         120.0f
+#define BALL_BALANCE_POSITION_FILTER_ALPHA       0.55f
+#define BALL_BALANCE_VELOCITY_FILTER_ALPHA       0.45f
+#define BALL_BALANCE_INTEGRAL_LIMIT_MM_S         300.0f
 
 static uint8_t s_enabled;
 static uint8_t s_measurement_valid;
@@ -14,6 +14,7 @@ static uint8_t s_last_sequence;
 static int16_t s_target_mm_x10;
 static int16_t s_raw_position_mm_x10;
 static float s_filtered_position_mm;
+static float s_control_position_mm;
 static float s_velocity_mm_s;
 static float s_integral;
 static float s_kp;
@@ -115,6 +116,7 @@ static void BallBalance_ClearRuntime(void)
     s_last_sequence = 0U;
     s_raw_position_mm_x10 = 0;
     s_filtered_position_mm = 0.0f;
+    s_control_position_mm = 0.0f;
     s_velocity_mm_s = 0.0f;
     s_integral = 0.0f;
     s_p_term = 0.0f;
@@ -180,6 +182,49 @@ static uint16_t BallBalance_ApplySlew(uint16_t target_x10)
     }
 
     return target_x10;
+}
+
+static float BallBalance_GetPredictedPositionMm(uint32_t now_ms)
+{
+    uint32_t predict_ms;
+
+    if ((s_measurement_valid == 0U) || (s_last_sample_ms == 0U)) {
+        return s_filtered_position_mm;
+    }
+
+    predict_ms = now_ms - s_last_sample_ms;
+    if (predict_ms > BALL_BALANCE_PREDICT_MAX_MS) {
+        predict_ms = BALL_BALANCE_PREDICT_MAX_MS;
+    }
+
+    return s_filtered_position_mm +
+           (s_velocity_mm_s * ((float)predict_ms / 1000.0f));
+}
+
+static float BallBalance_ApplyMinimumOutput(float output_deg,
+                                            float control_error_mm)
+{
+    float abs_error;
+    float abs_output;
+
+    abs_error = BallBalance_AbsFloat(control_error_mm);
+    abs_output = BallBalance_AbsFloat(output_deg);
+
+    if ((abs_error < BALL_BALANCE_MIN_ACTIVE_ERROR_MM) ||
+        (abs_output >= BALL_BALANCE_MIN_OUTPUT_DEG)) {
+        return output_deg;
+    }
+
+    if (output_deg > 0.0f) {
+        return BALL_BALANCE_MIN_OUTPUT_DEG;
+    }
+    if (output_deg < 0.0f) {
+        return -BALL_BALANCE_MIN_OUTPUT_DEG;
+    }
+
+    return (control_error_mm >= 0.0f) ?
+           BALL_BALANCE_MIN_OUTPUT_DEG :
+           -BALL_BALANCE_MIN_OUTPUT_DEG;
 }
 
 void BallBalance_Control_Init(void)
@@ -298,6 +343,7 @@ void BallBalance_Control_PushMeasurement(int16_t position_mm_x10,
     }
 
     s_raw_position_mm_x10 = position_mm_x10;
+    s_control_position_mm = s_filtered_position_mm;
     s_last_sequence = sequence;
     s_has_sequence = 1U;
     s_last_sample_ms = timestamp_ms;
@@ -364,7 +410,8 @@ void BallBalance_Control_Update(uint32_t now_ms)
     }
 
     target_mm = (float)s_target_mm_x10 / 10.0f;
-    error_mm = s_filtered_position_mm - target_mm;
+    s_control_position_mm = BallBalance_GetPredictedPositionMm(now_ms);
+    error_mm = s_control_position_mm - target_mm;
     control_error_mm = error_mm;
     if (BallBalance_AbsFloat(control_error_mm) <
         BALL_BALANCE_POSITION_DEADBAND_MM) {
@@ -387,6 +434,10 @@ void BallBalance_Control_Update(uint32_t now_ms)
     s_i_term = s_ki * candidate_integral;
     s_d_term = s_kd * s_velocity_mm_s;
     output_deg = s_p_term + s_i_term + s_d_term;
+    output_deg = BallBalance_ApplyMinimumOutput(
+        output_deg,
+        control_error_mm
+    );
     limited_output_deg = BallBalance_LimitFloat(
         output_deg,
         -BALL_BALANCE_PID_OUTPUT_LIMIT_DEG,
@@ -441,7 +492,7 @@ Project_Status_t BallBalance_Control_GetInfo(
     }
 
     target_mm = (float)s_target_mm_x10 / 10.0f;
-    error_mm = s_filtered_position_mm - target_mm;
+    error_mm = s_control_position_mm - target_mm;
 
     info->enabled = s_enabled;
     info->measurement_valid = s_measurement_valid;

@@ -57,7 +57,7 @@ static uint8_t BallBalance_App_IsPositionInRange(int16_t position_mm_x10)
 
 static BSP_Status_t BallBalance_App_OutputNeutral(void)
 {
-    return Drv_Servo_SetHorizontalAngleX10(
+    return Drv_Servo_SetHorizontalTargetAngleX10(
         BALL_BALANCE_NEUTRAL_ANGLE_X10
     );
 }
@@ -204,7 +204,8 @@ void BallBalance_App_Update(void)
         command_angle_x10 = control_info.command_angle_x10;
     }
 
-    s_last_servo_status = Drv_Servo_SetHorizontalAngleX10(command_angle_x10);
+    s_last_servo_status =
+        Drv_Servo_SetHorizontalTargetAngleX10(command_angle_x10);
     if (s_last_servo_status != BSP_OK) {
         s_servo_fault = 1U;
         s_enabled = 0U;

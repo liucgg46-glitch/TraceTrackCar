@@ -63,6 +63,7 @@ uint16_t Drv_Servo_GetHorizontalPulseUs(void);
 BSP_Status_t Drv_Servo_SetHorizontalAngleDeg(uint16_t angle_deg);
 uint16_t Drv_Servo_GetHorizontalAngleDeg(void);
 BSP_Status_t Drv_Servo_SetHorizontalAngleX10(uint16_t angle_x10);
+BSP_Status_t Drv_Servo_SetHorizontalTargetAngleX10(uint16_t angle_x10);
 uint16_t Drv_Servo_GetHorizontalAngleX10(void);
 
 void Drv_Servo_Center(void);
