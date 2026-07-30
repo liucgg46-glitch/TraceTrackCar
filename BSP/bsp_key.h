@@ -61,6 +61,30 @@ extern "C" {
 #define BSP_KEY5_PUPD                    GPIO_PuPd_UP
 #define BSP_KEY5_ACTIVE_LEVEL            0U
 
+#define BSP_KEY6_ENABLE                  1
+#define BSP_KEY6_PORT                    GPIOF
+#define BSP_KEY6_PIN                     GPIO_Pin_0
+#define BSP_KEY6_PUPD                    GPIO_PuPd_UP
+#define BSP_KEY6_ACTIVE_LEVEL            0U
+
+#define BSP_KEY7_ENABLE                  1
+#define BSP_KEY7_PORT                    GPIOF
+#define BSP_KEY7_PIN                     GPIO_Pin_1
+#define BSP_KEY7_PUPD                    GPIO_PuPd_UP
+#define BSP_KEY7_ACTIVE_LEVEL            0U
+
+#define BSP_KEY8_ENABLE                  1
+#define BSP_KEY8_PORT                    GPIOF
+#define BSP_KEY8_PIN                     GPIO_Pin_2
+#define BSP_KEY8_PUPD                    GPIO_PuPd_UP
+#define BSP_KEY8_ACTIVE_LEVEL            0U
+
+#define BSP_KEY9_ENABLE                  1
+#define BSP_KEY9_PORT                    GPIOF
+#define BSP_KEY9_PIN                     GPIO_Pin_3
+#define BSP_KEY9_PUPD                    GPIO_PuPd_UP
+#define BSP_KEY9_ACTIVE_LEVEL            0U
+
 typedef enum {
 #if BSP_KEY1_ENABLE
     BSP_KEY1,
@@ -76,6 +100,18 @@ typedef enum {
 #endif
 #if BSP_KEY5_ENABLE
     BSP_KEY5,
+#endif
+#if BSP_KEY6_ENABLE
+    BSP_KEY6,
+#endif
+#if BSP_KEY7_ENABLE
+    BSP_KEY7,
+#endif
+#if BSP_KEY8_ENABLE
+    BSP_KEY8,
+#endif
+#if BSP_KEY9_ENABLE
+    BSP_KEY9,
 #endif
     BSP_KEY_COUNT
 } BSP_Key_Id_t;
