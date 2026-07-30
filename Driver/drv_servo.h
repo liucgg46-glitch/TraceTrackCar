@@ -53,11 +53,13 @@ BSP_Status_t Drv_Servo_SetImmediatePosition(
 );
 
 /*
- * PF8水平舵机微秒标定接口。
- * Driver内部执行齿轮齿条摆杆首次标定的临时安全限位，并同步归一化状态。
+ * PF8水平舵机直接输出接口。
+ * 微秒接口用于底层标定，角度接口用于现场测试和上层业务表达。
  */
 BSP_Status_t Drv_Servo_SetHorizontalPulseUs(uint16_t pulse_us);
 uint16_t Drv_Servo_GetHorizontalPulseUs(void);
+BSP_Status_t Drv_Servo_SetHorizontalAngleDeg(uint16_t angle_deg);
+uint16_t Drv_Servo_GetHorizontalAngleDeg(void);
 
 void Drv_Servo_Center(void);
 BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info);

@@ -3,12 +3,14 @@
 #include "bsp_systick.h"
 
 /*
- * 齿轮齿条摆杆首次标定的临时安全范围，不代表S20F舵机或机构的最终机械极限。
- * 只有Driver层可以接触PWM脉宽，APP仍使用原有归一化位置接口。
+ * S20F 180°舵机水平通道的标称全行程范围。
+ * Driver层统一保存PWM脉宽、角度和归一化位置之间的映射。
  */
-#define SERVO_HORIZONTAL_RIGHT_LIMIT_US    1450U
+#define SERVO_HORIZONTAL_RIGHT_LIMIT_US    500U
 #define SERVO_HORIZONTAL_CENTER_US         1500U
-#define SERVO_HORIZONTAL_LEFT_LIMIT_US     1550U
+#define SERVO_HORIZONTAL_LEFT_LIMIT_US     2500U
+#define SERVO_HORIZONTAL_MIN_ANGLE_DEG     0U
+#define SERVO_HORIZONTAL_MAX_ANGLE_DEG     180U
 
 #define SERVO_PITCH_UP_LIMIT_US            1200U
 #define SERVO_PITCH_CENTER_US              1450U
@@ -46,6 +48,44 @@ static uint16_t Drv_Servo_LimitHorizontalPulse(uint16_t pulse_us)
         return SERVO_HORIZONTAL_LEFT_LIMIT_US;
     }
     return pulse_us;
+}
+
+static uint16_t Drv_Servo_LimitHorizontalAngle(uint16_t angle_deg)
+{
+    if (angle_deg > SERVO_HORIZONTAL_MAX_ANGLE_DEG) {
+        return SERVO_HORIZONTAL_MAX_ANGLE_DEG;
+    }
+    return angle_deg;
+}
+
+static uint16_t Drv_Servo_HorizontalAngleToPulse(uint16_t angle_deg)
+{
+    uint32_t span_us;
+    uint32_t pulse_us;
+
+    angle_deg = Drv_Servo_LimitHorizontalAngle(angle_deg);
+    span_us = (uint32_t)(SERVO_HORIZONTAL_LEFT_LIMIT_US -
+                         SERVO_HORIZONTAL_RIGHT_LIMIT_US);
+    pulse_us = (uint32_t)SERVO_HORIZONTAL_RIGHT_LIMIT_US +
+               (((uint32_t)angle_deg * span_us) +
+                (SERVO_HORIZONTAL_MAX_ANGLE_DEG / 2U)) /
+                   SERVO_HORIZONTAL_MAX_ANGLE_DEG;
+    return (uint16_t)pulse_us;
+}
+
+static uint16_t Drv_Servo_HorizontalPulseToAngle(uint16_t pulse_us)
+{
+    uint32_t span_us;
+    uint32_t angle_deg;
+
+    pulse_us = Drv_Servo_LimitHorizontalPulse(pulse_us);
+    span_us = (uint32_t)(SERVO_HORIZONTAL_LEFT_LIMIT_US -
+                         SERVO_HORIZONTAL_RIGHT_LIMIT_US);
+    angle_deg = (((uint32_t)(pulse_us - SERVO_HORIZONTAL_RIGHT_LIMIT_US) *
+                  SERVO_HORIZONTAL_MAX_ANGLE_DEG) +
+                 (span_us / 2U)) /
+                span_us;
+    return (uint16_t)angle_deg;
 }
 
 static uint16_t Drv_Servo_PositionToPulse(int16_t position,
@@ -302,6 +342,18 @@ BSP_Status_t Drv_Servo_SetHorizontalPulseUs(uint16_t pulse_us)
 uint16_t Drv_Servo_GetHorizontalPulseUs(void)
 {
     return s_horizontal_pulse_us;
+}
+
+BSP_Status_t Drv_Servo_SetHorizontalAngleDeg(uint16_t angle_deg)
+{
+    return Drv_Servo_SetHorizontalPulseUs(
+        Drv_Servo_HorizontalAngleToPulse(angle_deg)
+    );
+}
+
+uint16_t Drv_Servo_GetHorizontalAngleDeg(void)
+{
+    return Drv_Servo_HorizontalPulseToAngle(s_horizontal_pulse_us);
 }
 
 void Drv_Servo_Center(void)

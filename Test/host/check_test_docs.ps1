@@ -12,8 +12,7 @@ $taskConfigPath = Join-Path $projectRoot "APP\app_task_config.h"
 $docRoot = Join-Path $projectRoot "Doc"
 $testDocName = (-join @(
     [char]0x6D4B, [char]0x8BD5, [char]0x4EFB, [char]0x52A1,
-    [char]0x6CE8, [char]0x518C, [char]0x51FD, [char]0x6570,
-    [char]0x4F7F, [char]0x7528, [char]0x65B9, [char]0x6CD5,
+    [char]0x5B8C, [char]0x6574, [char]0x624B, [char]0x518C,
     ".md"
 ))
 $testDocPath = Join-Path $docRoot $testDocName
