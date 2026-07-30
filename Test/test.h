@@ -61,6 +61,7 @@ void Test_K210_SingleDigitCommUpdate(void);
 void Test_K210_LabTuneUpdate(void);
 void Test_K210_TargetCommUpdate(void);
 void Test_K210_BallCommUpdate(void);
+void Test_BallBalanceControl_Update(void);
 #endif /* PROJECT_TEST_TASKS_ENABLE */
 
 #endif /* __TEST_H */

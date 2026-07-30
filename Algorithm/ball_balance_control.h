@@ -16,12 +16,13 @@ extern "C" {
 #define BALL_BALANCE_KI                         0.00f
 #define BALL_BALANCE_KD                         0.015f
 
-#define BALL_BALANCE_NEUTRAL_ANGLE_X10          1300U
-#define BALL_BALANCE_OUTPUT_MIN_X10             1250U
-#define BALL_BALANCE_OUTPUT_MAX_X10             1350U
-#define BALL_BALANCE_ABS_SAFE_MIN_X10           800U
+#define BALL_BALANCE_NEUTRAL_ANGLE_X10          900U
+#define BALL_BALANCE_OUTPUT_MIN_X10             850U
+#define BALL_BALANCE_OUTPUT_MAX_X10             950U
+#define BALL_BALANCE_ABS_SAFE_MIN_X10           0U
 #define BALL_BALANCE_ABS_SAFE_MAX_X10           1800U
 #define BALL_BALANCE_UPDATE_PERIOD_MS           10U
+/* K210实际帧周期受YOLO推理速度影响，后续应按实测周期调整该超时值。 */
 #define BALL_BALANCE_DATA_TIMEOUT_MS            150U
 #define BALL_BALANCE_MIN_CONFIDENCE             60U
 #define BALL_BALANCE_POSITION_DEADBAND_MM       1.0f

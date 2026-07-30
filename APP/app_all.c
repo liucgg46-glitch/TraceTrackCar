@@ -11,6 +11,8 @@
 #include "oled_ui.h"
 #include "k210_comm.h"
 #include "gimbal_app.h"
+#include "ball_balance_app.h"
+#include "ball_balance_k210_adapter.h"
 #include "task_profile_select.h"
 
 void App_Init(void)
@@ -34,6 +36,8 @@ void App_Init(void)
      * 这里只初始化协议状态机。
      */
     K210_Comm_Init();
+    BallBalance_App_Init();
+    BallBalance_K210Adapter_Init();
 
     /* 选中的总任务状态机在全部输入和控制模块初始化完成后进入安全等待。 */
     TaskProfile_Init();

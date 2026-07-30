@@ -50,9 +50,11 @@ static float BallBalance_LimitFloat(float value, float min_value, float max_valu
 
 static uint16_t BallBalance_LimitAngleX10(uint16_t angle_x10)
 {
+#if (BALL_BALANCE_ABS_SAFE_MIN_X10 > 0U)
     if (angle_x10 < BALL_BALANCE_ABS_SAFE_MIN_X10) {
         return BALL_BALANCE_ABS_SAFE_MIN_X10;
     }
+#endif
     if (angle_x10 > BALL_BALANCE_ABS_SAFE_MAX_X10) {
         return BALL_BALANCE_ABS_SAFE_MAX_X10;
     }
@@ -407,7 +409,8 @@ void BallBalance_Control_Update(uint32_t now_ms)
 
     s_pid_output_deg = limited_output_deg;
     desired_angle_x10 = BallBalance_FloatDegToX10(
-        130.0f + s_pid_output_deg
+        ((float)BALL_BALANCE_NEUTRAL_ANGLE_X10 / 10.0f) +
+        s_pid_output_deg
     );
     if (desired_angle_x10 < BALL_BALANCE_OUTPUT_MIN_X10) {
         desired_angle_x10 = BALL_BALANCE_OUTPUT_MIN_X10;

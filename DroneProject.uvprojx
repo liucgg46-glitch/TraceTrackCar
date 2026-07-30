@@ -1263,6 +1263,16 @@
               <FilePath>.\APP\ball_balance_app.h</FilePath>
             </File>
             <File>
+              <FileName>ball_balance_k210_adapter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\ball_balance_k210_adapter.c</FilePath>
+            </File>
+            <File>
+              <FileName>ball_balance_k210_adapter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\ball_balance_k210_adapter.h</FilePath>
+            </File>
+            <File>
               <FileName>task_fsm.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\APP\task_fsm.c</FilePath>

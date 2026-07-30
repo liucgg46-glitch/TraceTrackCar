@@ -40,6 +40,8 @@
 #include "drv_buzzer.h"
 #include "task_fsm.h"
 #include "k210_comm.h"
+#include "ball_balance_app.h"
+#include "ball_balance_k210_adapter.h"
 #include "bsp_systick.h"
 
 #include <stdio.h>
@@ -3338,6 +3340,351 @@ length = snprintf(
             (const uint8_t *)buf,
             (uint16_t)length
         );
+    }
+}
+
+static const char *Test_BallPid_StateText(uint8_t state)
+{
+    switch (state) {
+        case BALL_BALANCE_VISION_VALID:
+            return "VALID";
+
+        case BALL_BALANCE_VISION_HOLD:
+            return "HOLD";
+
+        default:
+            return "LOST";
+    }
+}
+
+static int32_t Test_BallPid_FloatToX10(float value)
+{
+    float scaled;
+
+    scaled = value * 10.0f;
+    if (scaled >= 0.0f) {
+        scaled += 0.5f;
+    } else {
+        scaled -= 0.5f;
+    }
+    return (int32_t)scaled;
+}
+
+static int32_t Test_BallPid_FloatToX100(float value)
+{
+    float scaled;
+
+    scaled = value * 100.0f;
+    if (scaled >= 0.0f) {
+        scaled += 0.5f;
+    } else {
+        scaled -= 0.5f;
+    }
+    return (int32_t)scaled;
+}
+
+static void Test_BallPid_PrintSignedX10(char *buf,
+                                        uint16_t buf_size,
+                                        int *used,
+                                        int32_t value_x10,
+                                        const char *unit)
+{
+    uint32_t abs_value;
+    int n;
+
+    if ((buf == 0) || (used == 0) || (*used >= (int)buf_size)) {
+        return;
+    }
+
+    if (value_x10 < 0) {
+        abs_value = (uint32_t)(-value_x10);
+    } else {
+        abs_value = (uint32_t)value_x10;
+    }
+
+    n = snprintf(
+        &buf[*used],
+        (size_t)((int)buf_size - *used),
+        "%c%lu.%lu%s",
+        (value_x10 < 0) ? '-' : '+',
+        (unsigned long)(abs_value / 10UL),
+        (unsigned long)(abs_value % 10UL),
+        unit
+    );
+    if ((n > 0) && (n < ((int)buf_size - *used))) {
+        *used += n;
+    } else {
+        *used = (int)buf_size;
+    }
+}
+
+static void Test_BallPid_PrintSignedX100(char *buf,
+                                         uint16_t buf_size,
+                                         int *used,
+                                         int32_t value_x100,
+                                         const char *unit)
+{
+    uint32_t abs_value;
+    int n;
+
+    if ((buf == 0) || (used == 0) || (*used >= (int)buf_size)) {
+        return;
+    }
+
+    if (value_x100 < 0) {
+        abs_value = (uint32_t)(-value_x100);
+    } else {
+        abs_value = (uint32_t)value_x100;
+    }
+
+    n = snprintf(
+        &buf[*used],
+        (size_t)((int)buf_size - *used),
+        "%c%lu.%02lu%s",
+        (value_x100 < 0) ? '-' : '+',
+        (unsigned long)(abs_value / 100UL),
+        (unsigned long)(abs_value % 100UL),
+        unit
+    );
+    if ((n > 0) && (n < ((int)buf_size - *used))) {
+        *used += n;
+    } else {
+        *used = (int)buf_size;
+    }
+}
+
+static void Test_BallPid_SendLine(const char *line)
+{
+    uint16_t length;
+
+    if (line == 0) {
+        return;
+    }
+
+    length = 0U;
+    while ((line[length] != '\0') && (length < 500U)) {
+        length++;
+    }
+    if (length > 0U) {
+        (void)BSP_UART_WriteFrame(
+            DEBUG_UART_PORT,
+            (const uint8_t *)line,
+            length
+        );
+    }
+}
+
+static void Test_BallPid_PrintStatus(const char *reason)
+{
+    K210_Comm_Info_t k210_info;
+    BallBalance_AppInfo_t app_info;
+    BallBalance_K210AdapterInfo_t adapter_info;
+    char line[256];
+    int used;
+    int n;
+
+    if ((K210_Comm_GetInfo(&k210_info) != BSP_OK) ||
+        (BallBalance_App_GetInfo(&app_info) != BSP_OK) ||
+        (BallBalance_K210Adapter_GetInfo(&adapter_info) != BSP_OK)) {
+        return;
+    }
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "[BallPID] %s k210_online=%u frames=%lu checksum_err=%lu format_err=%lu\r\n",
+        (reason == 0) ? "STATUS" : reason,
+        (unsigned int)k210_info.online,
+        (unsigned long)k210_info.valid_frame_count,
+        (unsigned long)k210_info.checksum_error_count,
+        (unsigned long)k210_info.format_error_count
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallPid_SendLine(line);
+    }
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "[BallPID] state=%s conf=%u seq=%u hold=%u hold_exp=%u pushed=%lu\r\n",
+        Test_BallPid_StateText(app_info.last_sample_state),
+        (unsigned int)app_info.last_sample.confidence,
+        (unsigned int)adapter_info.sequence,
+        (unsigned int)app_info.hold_active,
+        (unsigned int)app_info.hold_expired,
+        (unsigned long)adapter_info.pushed_count
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallPid_SendLine(line);
+    }
+
+    used = snprintf(line, sizeof(line), "[BallPID] target=");
+    Test_BallPid_PrintSignedX10(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        app_info.control.target_mm_x10,
+        "mm raw="
+    );
+    Test_BallPid_PrintSignedX10(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        app_info.control.raw_position_mm_x10,
+        "mm filt="
+    );
+    Test_BallPid_PrintSignedX10(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        app_info.control.filtered_position_mm_x10,
+        "mm err="
+    );
+    Test_BallPid_PrintSignedX10(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        app_info.control.error_mm_x10,
+        "mm\r\n"
+    );
+    if ((used > 0) && (used < (int)sizeof(line))) {
+        Test_BallPid_SendLine(line);
+    }
+
+    used = snprintf(line, sizeof(line), "[BallPID] vel=");
+    Test_BallPid_PrintSignedX10(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        Test_BallPid_FloatToX10(app_info.control.velocity_mm_s),
+        "mm/s P="
+    );
+    Test_BallPid_PrintSignedX100(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        Test_BallPid_FloatToX100(app_info.control.p_term),
+        "deg I="
+    );
+    Test_BallPid_PrintSignedX100(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        Test_BallPid_FloatToX100(app_info.control.i_term),
+        "deg D="
+    );
+    Test_BallPid_PrintSignedX100(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        Test_BallPid_FloatToX100(app_info.control.d_term),
+        "deg out="
+    );
+    Test_BallPid_PrintSignedX100(
+        line,
+        (uint16_t)sizeof(line),
+        &used,
+        Test_BallPid_FloatToX100(app_info.control.pid_output_deg),
+        "deg\r\n"
+    );
+    if ((used > 0) && (used < (int)sizeof(line))) {
+        Test_BallPid_SendLine(line);
+    }
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "[BallPID] servo=%u.%udeg enabled=%u valid=%u timeout=%u low_conf=%u out_range=%u fault=%u\r\n",
+        (unsigned int)(app_info.control.command_angle_x10 / 10U),
+        (unsigned int)(app_info.control.command_angle_x10 % 10U),
+        (unsigned int)app_info.enabled,
+        (unsigned int)app_info.control.measurement_valid,
+        (unsigned int)app_info.control.data_timeout,
+        (unsigned int)app_info.low_confidence,
+        (unsigned int)app_info.position_out_of_range,
+        (unsigned int)app_info.servo_fault
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallPid_SendLine(line);
+    }
+}
+
+void Test_BallBalanceControl_Update(void)
+{
+    static uint8_t banner_sent = 0U;
+    static uint8_t last_servo_fault = 0U;
+    static uint8_t last_timeout = 0U;
+    static const char *pending_status_reason = 0;
+    BallBalance_AppInfo_t app_info;
+
+    if (banner_sent == 0U) {
+        Test_BallPid_SendLine(
+        "[BallPID] READY neutral=90.0deg KEY1=O KEY2=+50.0mm KEY3=-50.0mm KEY4=STOP KEY5=STATUS\r\n"
+        );
+        banner_sent = 1U;
+    }
+
+    /*
+     * 本任务运行在BallBalance_App_Update之前。按键修改目标后延后一拍打印，
+     * 让串口状态反映APP已经计算并输出过一次舵机命令后的结果。
+     */
+    if (pending_status_reason != 0) {
+        Test_BallPid_PrintStatus(pending_status_reason);
+        pending_status_reason = 0;
+        return;
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        BallBalance_App_SetTargetMmX10(0);
+        BallBalance_App_Enable();
+        pending_status_reason = "KEY1_O";
+        return;
+    }
+#endif
+
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        BallBalance_App_SetTargetMmX10(500);
+        BallBalance_App_Enable();
+        pending_status_reason = "KEY2_PLUS_50MM";
+        return;
+    }
+#endif
+
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        BallBalance_App_SetTargetMmX10(-500);
+        BallBalance_App_Enable();
+        pending_status_reason = "KEY3_MINUS_50MM";
+        return;
+    }
+#endif
+
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        BallBalance_App_Disable();
+        Test_BallPid_PrintStatus("KEY4_STOP");
+        return;
+    }
+#endif
+
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        Test_BallPid_PrintStatus("KEY5_STATUS");
+        return;
+    }
+#endif
+
+    if (BallBalance_App_GetInfo(&app_info) != BSP_OK) {
+        return;
+    }
+    if (app_info.servo_fault != last_servo_fault) {
+        last_servo_fault = app_info.servo_fault;
+        Test_BallPid_PrintStatus("SERVO_FAULT_CHANGE");
+    } else if (app_info.control.data_timeout != last_timeout) {
+        last_timeout = app_info.control.data_timeout;
+        Test_BallPid_PrintStatus("TIMEOUT_CHANGE");
     }
 }
 

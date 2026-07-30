@@ -133,6 +133,7 @@ SRCS := \
   APP/k210_comm.c \
   APP/gimbal_app.c \
   APP/ball_balance_app.c \
+  APP/ball_balance_k210_adapter.c \
   APP/task_fsm.c \
   APP/task_profile_b_basic.c \
   APP/task_profile_h2_round_stop.c \

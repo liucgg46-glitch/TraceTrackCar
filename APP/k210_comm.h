@@ -957,12 +957,6 @@ BSP_Status_t K210_Comm_GetNewBallPosition(
     uint8_t *state,
     uint8_t *confidence
 );
-
-BSP_Status_t K210_Comm_GetNewBallPosition(
-    int16_t *position_tenth_mm,
-    uint8_t *state,
-    uint8_t *confidence
-);
 /*
  * 获取新的激光点中心坐标。
  */

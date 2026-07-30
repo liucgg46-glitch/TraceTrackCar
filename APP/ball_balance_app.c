@@ -4,21 +4,31 @@
 #include "drv_servo.h"
 #include "project_critical.h"
 
-#define BALL_BALANCE_APP_POSITION_ABS_MAX_MM_X10     1000
+#define BALL_BALANCE_APP_POSITION_ABS_MAX_MM_X10     1200
+#define BALL_BALANCE_HOLD_MAX_MS                     150U
 
 static uint8_t s_initialized;
 static uint8_t s_enabled;
 static uint8_t s_pending_sample;
 static uint8_t s_has_sequence;
 static uint8_t s_last_sequence;
+static uint8_t s_last_sample_state;
 static uint8_t s_last_sample_valid;
 static uint8_t s_low_confidence;
 static uint8_t s_position_out_of_range;
 static uint8_t s_duplicate_sequence;
+static uint8_t s_hold_active;
+static uint8_t s_hold_expired;
+static uint8_t s_has_valid_measurement;
 static uint8_t s_servo_fault;
+static uint32_t s_last_valid_sample_ms;
+static uint32_t s_last_hold_sample_ms;
 static uint32_t s_pushed_sample_count;
 static uint32_t s_consumed_sample_count;
 static uint32_t s_rejected_sample_count;
+static uint32_t s_valid_sample_count;
+static uint32_t s_hold_sample_count;
+static uint32_t s_lost_sample_count;
 static BallBalance_VisionSample_t s_pending_vision_sample;
 static BallBalance_VisionSample_t s_last_vision_sample;
 static BSP_Status_t s_last_servo_status = BSP_OK;
@@ -60,17 +70,103 @@ static void BallBalance_App_ClearVisionState(void)
     s_pending_sample = 0U;
     s_has_sequence = 0U;
     s_last_sequence = 0U;
+    s_last_sample_state = BALL_BALANCE_VISION_LOST;
     s_last_sample_valid = 0U;
     s_low_confidence = 0U;
     s_position_out_of_range = 0U;
     s_duplicate_sequence = 0U;
+    s_hold_active = 0U;
+    s_hold_expired = 0U;
+    s_has_valid_measurement = 0U;
+    s_last_valid_sample_ms = 0U;
+    s_last_hold_sample_ms = 0U;
     s_pending_vision_sample.position_mm_x10 = 0;
+    s_pending_vision_sample.state = BALL_BALANCE_VISION_LOST;
     s_pending_vision_sample.valid = 0U;
     s_pending_vision_sample.confidence = 0U;
     s_pending_vision_sample.sequence = 0U;
     s_pending_vision_sample.timestamp_ms = 0U;
     s_last_vision_sample = s_pending_vision_sample;
     Project_ExitCritical(primask);
+}
+
+static uint8_t BallBalance_App_NormalizeSample(
+    const BallBalance_VisionSample_t *sample,
+    BallBalance_VisionSample_t *checked_sample,
+    uint8_t *low_confidence,
+    uint8_t *position_out_of_range,
+    uint8_t *hold_expired
+)
+{
+    uint8_t sample_valid;
+    uint32_t hold_age_ms;
+
+    *checked_sample = *sample;
+    *low_confidence = 0U;
+    *position_out_of_range = 0U;
+    *hold_expired = 0U;
+    sample_valid = 0U;
+
+    if (checked_sample->timestamp_ms == 0U) {
+        checked_sample->timestamp_ms = BSP_GetTickMs();
+    }
+
+    switch (sample->state) {
+        case BALL_BALANCE_VISION_VALID:
+            checked_sample->valid = 1U;
+            if (sample->confidence < BALL_BALANCE_MIN_CONFIDENCE) {
+                checked_sample->state = BALL_BALANCE_VISION_LOST;
+                checked_sample->valid = 0U;
+                *low_confidence = 1U;
+                break;
+            }
+            if (BallBalance_App_IsPositionInRange(
+                    sample->position_mm_x10
+                ) == 0U) {
+                checked_sample->state = BALL_BALANCE_VISION_LOST;
+                checked_sample->valid = 0U;
+                *position_out_of_range = 1U;
+                break;
+            }
+            sample_valid = 1U;
+            break;
+
+        case BALL_BALANCE_VISION_HOLD:
+            checked_sample->valid = 1U;
+            if (s_has_valid_measurement == 0U) {
+                checked_sample->state = BALL_BALANCE_VISION_LOST;
+                checked_sample->valid = 0U;
+                break;
+            }
+            if (BallBalance_App_IsPositionInRange(
+                    sample->position_mm_x10
+                ) == 0U) {
+                checked_sample->state = BALL_BALANCE_VISION_LOST;
+                checked_sample->valid = 0U;
+                *position_out_of_range = 1U;
+                break;
+            }
+
+            hold_age_ms =
+                checked_sample->timestamp_ms - s_last_valid_sample_ms;
+            if (hold_age_ms > BALL_BALANCE_HOLD_MAX_MS) {
+                checked_sample->state = BALL_BALANCE_VISION_LOST;
+                checked_sample->valid = 0U;
+                *hold_expired = 1U;
+                break;
+            }
+
+            sample_valid = 1U;
+            break;
+
+        case BALL_BALANCE_VISION_LOST:
+        default:
+            checked_sample->state = BALL_BALANCE_VISION_LOST;
+            checked_sample->valid = 0U;
+            break;
+    }
+
+    return sample_valid;
 }
 
 void BallBalance_App_Init(void)
@@ -82,6 +178,9 @@ void BallBalance_App_Init(void)
     s_pushed_sample_count = 0U;
     s_consumed_sample_count = 0U;
     s_rejected_sample_count = 0U;
+    s_valid_sample_count = 0U;
+    s_hold_sample_count = 0U;
+    s_lost_sample_count = 0U;
     s_last_servo_status = BallBalance_App_OutputNeutral();
     s_initialized = 1U;
 }
@@ -113,7 +212,9 @@ void BallBalance_App_Update(void)
         s_consumed_sample_count = BallBalance_App_IncrementU32(
             s_consumed_sample_count
         );
-        if (sample.valid != 0U) {
+        if (((sample.state == BALL_BALANCE_VISION_VALID) ||
+             (sample.state == BALL_BALANCE_VISION_HOLD)) &&
+            (sample.valid != 0U)) {
             BallBalance_Control_PushMeasurement(
                 sample.position_mm_x10,
                 sample.sequence,
@@ -192,33 +293,20 @@ void BallBalance_App_PushVisionSample(
     uint8_t sample_valid;
     uint8_t low_confidence;
     uint8_t position_out_of_range;
+    uint8_t hold_expired;
     uint32_t primask;
 
     if (sample == 0) {
         return;
     }
 
-    sample_valid = (sample->valid != 0U) ? 1U : 0U;
-    low_confidence = 0U;
-    position_out_of_range = 0U;
-
-    if ((sample_valid != 0U) &&
-        (sample->confidence < BALL_BALANCE_MIN_CONFIDENCE)) {
-        sample_valid = 0U;
-        low_confidence = 1U;
-    }
-
-    if ((sample_valid != 0U) &&
-        (BallBalance_App_IsPositionInRange(sample->position_mm_x10) == 0U)) {
-        sample_valid = 0U;
-        position_out_of_range = 1U;
-    }
-
-    checked_sample = *sample;
-    checked_sample.valid = sample_valid;
-    if (checked_sample.timestamp_ms == 0U) {
-        checked_sample.timestamp_ms = BSP_GetTickMs();
-    }
+    sample_valid = BallBalance_App_NormalizeSample(
+        sample,
+        &checked_sample,
+        &low_confidence,
+        &position_out_of_range,
+        &hold_expired
+    );
 
     primask = Project_EnterCritical();
     if ((s_has_sequence != 0U) &&
@@ -233,13 +321,38 @@ void BallBalance_App_PushVisionSample(
     s_pending_sample = 1U;
     s_last_sequence = checked_sample.sequence;
     s_has_sequence = 1U;
+    s_last_sample_state = checked_sample.state;
     s_last_sample_valid = sample_valid;
     s_low_confidence = low_confidence;
     s_position_out_of_range = position_out_of_range;
     s_duplicate_sequence = 0U;
+    s_hold_expired = hold_expired;
     s_pushed_sample_count = BallBalance_App_IncrementU32(
         s_pushed_sample_count
     );
+
+    if ((checked_sample.state == BALL_BALANCE_VISION_VALID) &&
+        (sample_valid != 0U)) {
+        s_has_valid_measurement = 1U;
+        s_hold_active = 0U;
+        s_last_valid_sample_ms = checked_sample.timestamp_ms;
+        s_valid_sample_count = BallBalance_App_IncrementU32(
+            s_valid_sample_count
+        );
+    } else if ((checked_sample.state == BALL_BALANCE_VISION_HOLD) &&
+               (sample_valid != 0U)) {
+        s_hold_active = 1U;
+        s_last_hold_sample_ms = checked_sample.timestamp_ms;
+        s_hold_sample_count = BallBalance_App_IncrementU32(
+            s_hold_sample_count
+        );
+    } else {
+        s_hold_active = 0U;
+        s_lost_sample_count = BallBalance_App_IncrementU32(
+            s_lost_sample_count
+        );
+    }
+
     if (sample_valid == 0U) {
         s_rejected_sample_count = BallBalance_App_IncrementU32(
             s_rejected_sample_count
@@ -259,17 +372,25 @@ BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)
     info->initialized = s_initialized;
     info->enabled = s_enabled;
     info->servo_fault = s_servo_fault;
-    info->pushed_sample_count = s_pushed_sample_count;
-    info->consumed_sample_count = s_consumed_sample_count;
-    info->rejected_sample_count = s_rejected_sample_count;
     info->last_servo_status = s_last_servo_status;
 
     primask = Project_EnterCritical();
     info->pending_sample = s_pending_sample;
+    info->last_sample_state = s_last_sample_state;
     info->last_sample_valid = s_last_sample_valid;
     info->low_confidence = s_low_confidence;
     info->position_out_of_range = s_position_out_of_range;
     info->duplicate_sequence = s_duplicate_sequence;
+    info->hold_active = s_hold_active;
+    info->hold_expired = s_hold_expired;
+    info->last_valid_sample_ms = s_last_valid_sample_ms;
+    info->last_hold_sample_ms = s_last_hold_sample_ms;
+    info->pushed_sample_count = s_pushed_sample_count;
+    info->consumed_sample_count = s_consumed_sample_count;
+    info->rejected_sample_count = s_rejected_sample_count;
+    info->valid_sample_count = s_valid_sample_count;
+    info->hold_sample_count = s_hold_sample_count;
+    info->lost_sample_count = s_lost_sample_count;
     info->last_sample = s_last_vision_sample;
     Project_ExitCritical(primask);
 
