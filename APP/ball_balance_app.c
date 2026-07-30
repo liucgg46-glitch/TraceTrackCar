@@ -5,7 +5,7 @@
 #include "project_critical.h"
 
 #define BALL_BALANCE_APP_POSITION_ABS_MAX_MM_X10     1200
-#define BALL_BALANCE_HOLD_MAX_MS                     150U
+#define BALL_BALANCE_HOLD_MAX_MS                     BALL_BALANCE_DATA_TIMEOUT_MS
 
 static uint8_t s_initialized;
 static uint8_t s_enabled;
@@ -99,7 +99,6 @@ static uint8_t BallBalance_App_NormalizeSample(
 )
 {
     uint8_t sample_valid;
-    uint32_t hold_age_ms;
 
     *checked_sample = *sample;
     *low_confidence = 0U;
@@ -111,59 +110,20 @@ static uint8_t BallBalance_App_NormalizeSample(
         checked_sample->timestamp_ms = BSP_GetTickMs();
     }
 
-    switch (sample->state) {
-        case BALL_BALANCE_VISION_VALID:
-            checked_sample->valid = 1U;
-            if (sample->confidence < BALL_BALANCE_MIN_CONFIDENCE) {
-                checked_sample->state = BALL_BALANCE_VISION_LOST;
-                checked_sample->valid = 0U;
-                *low_confidence = 1U;
-                break;
-            }
-            if (BallBalance_App_IsPositionInRange(
-                    sample->position_mm_x10
-                ) == 0U) {
-                checked_sample->state = BALL_BALANCE_VISION_LOST;
-                checked_sample->valid = 0U;
-                *position_out_of_range = 1U;
-                break;
-            }
-            sample_valid = 1U;
-            break;
+    /*
+     * 当前联调阶段先相信K210传回的距离字段。state/confidence只保留为
+     * 状态显示，不再因为LOST、HOLD或低置信度直接丢弃位置。
+     */
+    if (sample->confidence < BALL_BALANCE_MIN_CONFIDENCE) {
+        *low_confidence = 1U;
+    }
 
-        case BALL_BALANCE_VISION_HOLD:
-            checked_sample->valid = 1U;
-            if (s_has_valid_measurement == 0U) {
-                checked_sample->state = BALL_BALANCE_VISION_LOST;
-                checked_sample->valid = 0U;
-                break;
-            }
-            if (BallBalance_App_IsPositionInRange(
-                    sample->position_mm_x10
-                ) == 0U) {
-                checked_sample->state = BALL_BALANCE_VISION_LOST;
-                checked_sample->valid = 0U;
-                *position_out_of_range = 1U;
-                break;
-            }
-
-            hold_age_ms =
-                checked_sample->timestamp_ms - s_last_valid_sample_ms;
-            if (hold_age_ms > BALL_BALANCE_HOLD_MAX_MS) {
-                checked_sample->state = BALL_BALANCE_VISION_LOST;
-                checked_sample->valid = 0U;
-                *hold_expired = 1U;
-                break;
-            }
-
-            sample_valid = 1U;
-            break;
-
-        case BALL_BALANCE_VISION_LOST:
-        default:
-            checked_sample->state = BALL_BALANCE_VISION_LOST;
-            checked_sample->valid = 0U;
-            break;
+    if (BallBalance_App_IsPositionInRange(sample->position_mm_x10) != 0U) {
+        checked_sample->valid = 1U;
+        sample_valid = 1U;
+    } else {
+        checked_sample->valid = 0U;
+        *position_out_of_range = 1U;
     }
 
     return sample_valid;
@@ -212,16 +172,21 @@ void BallBalance_App_Update(void)
         s_consumed_sample_count = BallBalance_App_IncrementU32(
             s_consumed_sample_count
         );
-        if (((sample.state == BALL_BALANCE_VISION_VALID) ||
-             (sample.state == BALL_BALANCE_VISION_HOLD)) &&
-            (sample.valid != 0U)) {
+        if (sample.valid != 0U) {
             BallBalance_Control_PushMeasurement(
                 sample.position_mm_x10,
                 sample.sequence,
                 sample.timestamp_ms
             );
-        } else {
+        } else if ((s_has_valid_measurement == 0U) ||
+                   ((uint32_t)(now_ms - s_last_valid_sample_ms) >=
+                    BALL_BALANCE_DATA_TIMEOUT_MS)) {
             BallBalance_Control_InvalidateMeasurement(sample.timestamp_ms);
+        } else {
+            /*
+             * 视觉会出现单帧或短时间LOST。这里不立刻清空控制测量，
+             * 由控制器按最近一次有效样本的时间统一做超时保护。
+             */
         }
     }
 
@@ -331,21 +296,21 @@ void BallBalance_App_PushVisionSample(
         s_pushed_sample_count
     );
 
-    if ((checked_sample.state == BALL_BALANCE_VISION_VALID) &&
-        (sample_valid != 0U)) {
+    if (sample_valid != 0U) {
         s_has_valid_measurement = 1U;
-        s_hold_active = 0U;
         s_last_valid_sample_ms = checked_sample.timestamp_ms;
-        s_valid_sample_count = BallBalance_App_IncrementU32(
-            s_valid_sample_count
-        );
-    } else if ((checked_sample.state == BALL_BALANCE_VISION_HOLD) &&
-               (sample_valid != 0U)) {
-        s_hold_active = 1U;
-        s_last_hold_sample_ms = checked_sample.timestamp_ms;
-        s_hold_sample_count = BallBalance_App_IncrementU32(
-            s_hold_sample_count
-        );
+        if (checked_sample.state == BALL_BALANCE_VISION_HOLD) {
+            s_hold_active = 1U;
+            s_last_hold_sample_ms = checked_sample.timestamp_ms;
+            s_hold_sample_count = BallBalance_App_IncrementU32(
+                s_hold_sample_count
+            );
+        } else {
+            s_hold_active = 0U;
+            s_valid_sample_count = BallBalance_App_IncrementU32(
+                s_valid_sample_count
+            );
+        }
     } else {
         s_hold_active = 0U;
         s_lost_sample_count = BallBalance_App_IncrementU32(

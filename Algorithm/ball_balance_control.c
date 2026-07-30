@@ -387,7 +387,11 @@ void BallBalance_Control_Update(uint32_t now_ms)
     s_i_term = s_ki * candidate_integral;
     s_d_term = s_kd * s_velocity_mm_s;
     output_deg = s_p_term + s_i_term + s_d_term;
-    limited_output_deg = BallBalance_LimitFloat(output_deg, -5.0f, 5.0f);
+    limited_output_deg = BallBalance_LimitFloat(
+        output_deg,
+        -BALL_BALANCE_PID_OUTPUT_LIMIT_DEG,
+        BALL_BALANCE_PID_OUTPUT_LIMIT_DEG
+    );
 
     if (limited_output_deg != output_deg) {
         s_output_limit_count = BallBalance_IncrementU32(s_output_limit_count);
@@ -397,8 +401,8 @@ void BallBalance_Control_Update(uint32_t now_ms)
             output_deg = s_p_term + s_i_term + s_d_term;
             limited_output_deg = BallBalance_LimitFloat(
                 output_deg,
-                -5.0f,
-                5.0f
+                -BALL_BALANCE_PID_OUTPUT_LIMIT_DEG,
+                BALL_BALANCE_PID_OUTPUT_LIMIT_DEG
             );
         } else {
             s_integral = candidate_integral;

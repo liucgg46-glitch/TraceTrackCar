@@ -12,22 +12,26 @@ extern "C" {
  * 车载平衡滚球控制器。
  * 本模块只处理位置、速度和PID/PD计算，不读取K210、不访问舵机、不输出日志。
  */
-#define BALL_BALANCE_KP                         0.06f
+#define BALL_BALANCE_KP                         0.20f
 #define BALL_BALANCE_KI                         0.00f
-#define BALL_BALANCE_KD                         0.015f
+#define BALL_BALANCE_KD                         0.020f
 
 #define BALL_BALANCE_NEUTRAL_ANGLE_X10          900U
-#define BALL_BALANCE_OUTPUT_MIN_X10             850U
-#define BALL_BALANCE_OUTPUT_MAX_X10             950U
+#define BALL_BALANCE_OUTPUT_MIN_X10             700U
+#define BALL_BALANCE_OUTPUT_MAX_X10             1100U
 #define BALL_BALANCE_ABS_SAFE_MIN_X10           0U
 #define BALL_BALANCE_ABS_SAFE_MAX_X10           1800U
+#define BALL_BALANCE_PID_OUTPUT_LIMIT_DEG       20.0f
 #define BALL_BALANCE_UPDATE_PERIOD_MS           10U
-/* K210实际帧周期受YOLO推理速度影响，后续应按实测周期调整该超时值。 */
-#define BALL_BALANCE_DATA_TIMEOUT_MS            150U
+/*
+ * K210 YOLO输出约50ms一帧，视觉会偶发LOST。超时不能按单帧丢失处理，
+ * 否则舵机会在PID角度和90度之间来回跳。
+ */
+#define BALL_BALANCE_DATA_TIMEOUT_MS            500U
 #define BALL_BALANCE_MIN_CONFIDENCE             60U
 #define BALL_BALANCE_POSITION_DEADBAND_MM       1.0f
 #define BALL_BALANCE_INTEGRAL_ACTIVE_MM         30.0f
-#define BALL_BALANCE_SLEW_X10_PER_UPDATE        5U
+#define BALL_BALANCE_SLEW_X10_PER_UPDATE        20U
 
 typedef struct {
     uint8_t enabled;
