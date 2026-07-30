@@ -164,14 +164,14 @@ extern "C" {
 
 #define K210_CMD_ROAD_LINE_STATE          0x30U
 #define K210_CMD_ROAD_EVENT_STATE         0x31U
+
 /*
- * 钢球位置帧：
- * DATA1/DATA2：int16大端，单位0.1mm
- * DATA3 bit7..6：状态
- * DATA3 bit5..0：压缩置信度
+ * 钢球位置：
+ *   DATA1/DATA2：有符号int16大端位置，单位0.1mm；
+ *   DATA3 bit7..6：0=LOST，1=HOLD，2=VALID；
+ *   DATA3 bit5..0：0～63压缩置信度。
  */
 #define K210_CMD_BALL_POSITION            0x32U
-
 #define K210_BALL_STATE_LOST              0U
 #define K210_BALL_STATE_HOLD              1U
 #define K210_BALL_STATE_VALID             2U
@@ -376,6 +376,21 @@ typedef enum {
     K210_LAB_PARAM_B_MIN = 4U,
     K210_LAB_PARAM_B_MAX = 5U
 } K210_LabParam_t;
+
+/*
+ * 灰度钢球程序复用0x41/0x42/0x43调参帧。
+ * 模式只使用OFF/ON，参数编号改为钢球和水管的灰度上下限。
+ */
+#define K210_GRAY_TUNE_OFF               0U
+#define K210_GRAY_TUNE_ON                1U
+
+typedef enum {
+    K210_GRAY_PARAM_BALL_MIN = 0U,
+    K210_GRAY_PARAM_BALL_MAX = 1U,
+    K210_GRAY_PARAM_PIPE_MIN = 2U,
+    K210_GRAY_PARAM_PIPE_MAX = 3U,
+    K210_GRAY_PARAM_COUNT
+} K210_GrayParam_t;
 /*
  * ============================================================================
  * 通用视觉目标类别
@@ -724,11 +739,18 @@ typedef struct {
     uint16_t target_y;
     uint8_t target_valid;
     uint8_t new_target;
-		int16_t ball_position_tenth_mm;
-		uint8_t ball_state;
-		uint8_t ball_confidence;
-		uint8_t new_ball_position;
-		uint8_t ball_reserved;
+
+    /*
+     * ------------------------------------------------------------------------
+     * 钢球位置协议
+     * ------------------------------------------------------------------------
+     */
+
+    int16_t ball_position_tenth_mm;
+    uint8_t ball_state;
+    uint8_t ball_confidence;
+    uint8_t new_ball_position;
+    uint8_t ball_reserved;
 
     /*
      * ------------------------------------------------------------------------
@@ -951,12 +973,17 @@ BSP_Status_t K210_Comm_GetNewTarget(uint16_t *x,
                                     uint16_t *y,
                                     uint8_t *valid);
 
-
+/*
+ * 获取新的钢球位置。
+ * position_tenth_mm单位为0.1mm，state使用K210_BALL_STATE_*，
+ * confidence范围为0～100。
+ */
 BSP_Status_t K210_Comm_GetNewBallPosition(
     int16_t *position_tenth_mm,
     uint8_t *state,
     uint8_t *confidence
 );
+
 /*
  * 获取新的激光点中心坐标。
  */

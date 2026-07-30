@@ -38,7 +38,6 @@ void Test_CountPerRev_Update(void);
 void Test_MotionCmd_Update(void);
 void Test_MotionCmd_Log(void);
 void Test_DriveProfile_Update(void);
-void Test_ServoBeamCalibration_Update(void);
 
 /* 传感器和显示测试。 */
 void Test_VL53L1X_Update(void);
@@ -53,15 +52,15 @@ void Test_AsyncDisplay_Update(void);
 /* 应用和通信测试。 */
 void Test_TaskFSM_Log(void);
 void Test_K210_CommUpdate(void);
+void Test_K210_BallCommUpdate(void);
 void Test_K210_DigitCommUpdate(void);
 void Test_K210_RoadCommUpdate(void);
 void Test_K210_VisionCommUpdate(void);
 void Test_K210_RoadProfileUpdate(void);
 void Test_K210_SingleDigitCommUpdate(void);
 void Test_K210_LabTuneUpdate(void);
-void Test_K210_TargetCommUpdate(void);
-void Test_K210_BallCommUpdate(void);
-void Test_BallBalanceControl_Update(void);
+void Test_K210_GrayTuneUpdate(void);
+
 #endif /* PROJECT_TEST_TASKS_ENABLE */
 
 #endif /* __TEST_H */
