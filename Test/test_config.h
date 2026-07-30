@@ -4,12 +4,11 @@
 /*
  * 专项测试代码编译开关。
  *
- * 正式固件保持为 0U，此时 Test/test.c 不生成任何测试任务代码，正式任务表
- * 也不依赖 Test/test.h。需要执行分项测试时改为 1U，并按测试任务文档切换
- * APP/app_task_config.h 中的任务表；测试完成后应恢复为 0U。
+ * 本次交付暂设为1U，烧录后直接进入PF8摆杆舵机安全标定。
+ * 标定完成后恢复为0U，即重新使用H题第2项正式任务表。
  */
 #ifndef PROJECT_TEST_TASKS_ENABLE
-#define PROJECT_TEST_TASKS_ENABLE 0U
+#define PROJECT_TEST_TASKS_ENABLE 1U
 #endif
 
 #if ((PROJECT_TEST_TASKS_ENABLE != 0U) && \

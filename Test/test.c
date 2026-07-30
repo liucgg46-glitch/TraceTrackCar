@@ -13,6 +13,7 @@
 #include "bsp_spi.h"
 #include "drv_motor.h"
 #include "drv_encoder.h"
+#include "drv_servo.h"
 #include "chassis.h"
 #include "lcd_ui.h"
 #include "oled_ui.h"
@@ -835,6 +836,187 @@ void Test_Gray4051_Log(void)
 static void Test_Key_Send(const char *message, uint16_t length)
 {
     (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)message, length);
+}
+
+#define TEST_SERVO_CAL_MIN_US       1450U
+#define TEST_SERVO_CAL_CENTER_US    1500U
+#define TEST_SERVO_CAL_MAX_US       1550U
+#define TEST_SERVO_CAL_STEP_US      5U
+
+static void Test_ServoCal_PrintState(uint8_t locked,
+                                     const char *command,
+                                     BSP_Status_t status)
+{
+    char message[128];
+    int length;
+
+    length = snprintf(
+        message,
+        sizeof(message),
+        "[ServoCal] pulse=%uus locked=%u command=%s status=%s\r\n",
+        (unsigned int)Drv_Servo_GetHorizontalPulseUs(),
+        (unsigned int)locked,
+        command,
+        (status == BSP_OK) ? "OK" : "ERROR"
+    );
+    if ((length > 0) && (length < (int)sizeof(message))) {
+        Test_Key_Send(message, (uint16_t)length);
+    }
+}
+
+static void Test_ServoCal_PrintLocked(void)
+{
+    char message[96];
+    int length;
+
+    length = snprintf(
+        message,
+        sizeof(message),
+        "[ServoCal] pulse=%uus locked=1 command=IGNORED_LOCKED\r\n",
+        (unsigned int)Drv_Servo_GetHorizontalPulseUs()
+    );
+    if ((length > 0) && (length < (int)sizeof(message))) {
+        Test_Key_Send(message, (uint16_t)length);
+    }
+}
+
+static void Test_ServoCal_PrintHelp(uint8_t locked)
+{
+    char message[384];
+    int length;
+
+    length = snprintf(
+        message,
+        sizeof(message),
+        "[ServoCal] pulse=%uus locked=%u range=1450..1550us step=5us\r\n"
+        "[ServoCal] KEY1=center/unlock KEY2=+5us KEY3=-5us\r\n"
+        "[ServoCal] KEY4=center/lock KEY5=status\r\n"
+        "[ServoCal] record center, safe low, safe high and rack direction\r\n",
+        (unsigned int)Drv_Servo_GetHorizontalPulseUs(),
+        (unsigned int)locked
+    );
+    if ((length > 0) && (length < (int)sizeof(message))) {
+        Test_Key_Send(message, (uint16_t)length);
+    }
+}
+
+/*
+ * WHEELTEC S20F齿轮齿条摆杆首次开环安全标定。
+ * 本任务只消费按键按下沿，每次调整5us，不自动扫描、不启动底盘。
+ */
+void Test_ServoBeamCalibration_Update(void)
+{
+    static uint8_t initialized = 0U;
+    static uint8_t locked = 1U;
+    uint16_t current_pulse_us;
+    uint16_t requested_pulse_us;
+    BSP_Status_t status;
+
+    if (initialized == 0U) {
+        static const char banner[] =
+            "[ServoCal] WHEELTEC S20F 180deg\r\n"
+            "[ServoCal] pin=PF8 timer=TIM13_CH1 freq=50Hz\r\n"
+            "[ServoCal] safe=1450..1550us center=1500us step=5us\r\n"
+            "[ServoCal] KEY1=center/unlock KEY2=+5us KEY3=-5us\r\n"
+            "[ServoCal] KEY4=center/lock KEY5=status\r\n"
+            "[ServoCal] remove ball and confirm rack is near mechanical center\r\n";
+
+        Motor_StopAll();
+        locked = 1U;
+        status = Drv_Servo_SetHorizontalPulseUs(TEST_SERVO_CAL_CENTER_US);
+        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
+        Test_ServoCal_PrintState(locked, "INIT_CENTER_LOCKED", status);
+        initialized = 1U;
+        return;
+    }
+
+    /* KEY4为最高优先级；同周期有其他按键时只执行紧急回中并锁定。 */
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        locked = 1U;
+        status = Drv_Servo_SetHorizontalPulseUs(TEST_SERVO_CAL_CENTER_US);
+        Test_ServoCal_PrintState(locked, "EMERGENCY_CENTER_LOCK", status);
+        return;
+    }
+#endif
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        status = Drv_Servo_SetHorizontalPulseUs(TEST_SERVO_CAL_CENTER_US);
+        if (status == BSP_OK) {
+            locked = 0U;
+        } else {
+            locked = 1U;
+        }
+        Test_ServoCal_PrintState(locked, "CENTER_UNLOCK", status);
+        return;
+    }
+#endif
+
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        Test_ServoCal_PrintHelp(locked);
+        return;
+    }
+#endif
+
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        if (locked != 0U) {
+            Test_ServoCal_PrintLocked();
+            return;
+        }
+
+        current_pulse_us = Drv_Servo_GetHorizontalPulseUs();
+        if (current_pulse_us >= TEST_SERVO_CAL_MAX_US) {
+            requested_pulse_us = TEST_SERVO_CAL_MAX_US;
+        } else {
+            requested_pulse_us =
+                (uint16_t)(current_pulse_us + TEST_SERVO_CAL_STEP_US);
+            if (requested_pulse_us > TEST_SERVO_CAL_MAX_US) {
+                requested_pulse_us = TEST_SERVO_CAL_MAX_US;
+            }
+        }
+
+        status = Drv_Servo_SetHorizontalPulseUs(requested_pulse_us);
+        Test_ServoCal_PrintState(
+            locked,
+            (requested_pulse_us >= TEST_SERVO_CAL_MAX_US) ?
+                "LIMIT_MAX" : "INCREASE",
+            status
+        );
+        return;
+    }
+#endif
+
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        if (locked != 0U) {
+            Test_ServoCal_PrintLocked();
+            return;
+        }
+
+        current_pulse_us = Drv_Servo_GetHorizontalPulseUs();
+        if (current_pulse_us <= TEST_SERVO_CAL_MIN_US) {
+            requested_pulse_us = TEST_SERVO_CAL_MIN_US;
+        } else if (current_pulse_us <
+                   (uint16_t)(TEST_SERVO_CAL_MIN_US +
+                              TEST_SERVO_CAL_STEP_US)) {
+            requested_pulse_us = TEST_SERVO_CAL_MIN_US;
+        } else {
+            requested_pulse_us =
+                (uint16_t)(current_pulse_us - TEST_SERVO_CAL_STEP_US);
+        }
+
+        status = Drv_Servo_SetHorizontalPulseUs(requested_pulse_us);
+        Test_ServoCal_PrintState(
+            locked,
+            (requested_pulse_us <= TEST_SERVO_CAL_MIN_US) ?
+                "LIMIT_MIN" : "DECREASE",
+            status
+        );
+    }
+#endif
 }
 
 /*

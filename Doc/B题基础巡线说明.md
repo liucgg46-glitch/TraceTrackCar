@@ -1,5 +1,8 @@
 # B题基础巡线正式程序说明
 
+> 当前工程编译选择已经切换为H题第2项；本文件保留B题Route设计，同时同步
+> 两个方案共用的数字量基础循迹、丢线恢复和任务注册接口。
+
 ## 1. 分层边界
 
 本版本严格区分整车任务、赛道巡线和通用算法：
@@ -15,27 +18,23 @@
 
 `Route`中的枚举只表示当前处于哪个赛道路段，不负责整车开始、完成、鸣笛和故障流程。整车生命周期全部放在`APP/task_profile_b_basic.c`。
 
-## 2. 当前编译选择
+## 2. 方案选择
 
-### 整车任务状态机
-
-`APP/task_profile_config.h`：
+当前源码选择H题第2项：
 
 ```c
-#define TASK_PROFILE_B_BASIC  2U
-#define TASK_PROFILE_SELECT   TASK_PROFILE_B_BASIC
+#define TASK_PROFILE_SELECT  TASK_PROFILE_H2_ROUND_STOP
+#define ROUTE_PROFILE_SELECT ROUTE_PROFILE_H_OVAL
 ```
 
-### 赛道方案
-
-`Route/route_config.h`：
+需要重新启用本文件描述的B题方案时，两个选择必须同时修改为：
 
 ```c
-#define ROUTE_PROFILE_B_BASIC  2U
-#define ROUTE_PROFILE_SELECT   ROUTE_PROFILE_B_BASIC
+#define TASK_PROFILE_SELECT  TASK_PROFILE_B_BASIC
+#define ROUTE_PROFILE_SELECT ROUTE_PROFILE_B_BASIC
 ```
 
-选择层会进行编译期配对检查。B题整车任务状态机只能与B题基础巡线赛道同时使用。
+选择层会进行编译期配对检查，不允许整车状态机与Route方案错配。
 
 ## 3. 正式整车任务状态
 
@@ -68,18 +67,26 @@ COMPLETE
 
 ## 4. 正式任务表
 
-`APP/app_task_config.h`只注册基础要求第（1）项需要的任务：
+`PROJECT_TEST_TASKS_ENABLE == 0U`时，`APP/app_task_config.h`使用完整基础循迹
+任务链。任务顺序必须保持为传感器和编码器先更新，状态机与循迹随后计算，
+底盘最后执行：
 
 ```c
-{ AppDiagnostics_HeartbeatUpdate, 10U, 0U },
-{ AppTask_BSP_Background, 1U, 0U },
-{ Key_Update, 10U, 0U },
-{ Sensor_Update, 1U, 0U },
-{ Encoder_Update, 10U, 0U },
-{ TaskProfile_Update, 10U, 0U },
-{ LineTrack_Update, 10U, 0U },
-{ Motion_Update, 10U, 0U },
-{ Chassis_Update, 10U, 0U },
+#define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
+Task_t task_list[] = {                                                              \
+    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 运行心跳 */                    \
+    { AppTask_BSP_Background, 1U, 0U }, /* UART、总线和异步Driver后台 */          \
+    { Key_Update, 10U, 0U }, /* 按键扫描 */                                        \
+    { Sensor_Update, 1U, 0U }, /* 灰度、IMU和测距 */                               \
+    { Encoder_Update, 10U, 0U }, /* 速度反馈 */                                    \
+    { TaskProfile_Update, 10U, 0U }, /* 当前整车任务状态机 */                     \
+    { LineTrack_Update, 10U, 0U }, /* 灰度、Route和循迹 */                         \
+    { Motion_Update, 10U, 0U }, /* Route动作 */                                    \
+    { Chassis_Update, 10U, 0U }, /* 底盘速度闭环 */                                \
+    { LCD_Update, 20U, 0U }, /* 异步状态页面 */                                    \
+};                                                                                  \
+const uint8_t TASK_NUM =                                                             \
+    (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 ```
 
 没有注册：
@@ -95,15 +102,24 @@ COMPLETE
 
 ## 5. 赛道巡线逻辑
 
-当前灰度输入默认来自Yahboom 8路串口灰度模块。驱动输出给上层的数值已按实测极性归一化：白底为高模拟量，黑线为低模拟量，循迹算法继续按`raw < threshold`判断压线。
+当前灰度输入默认来自Yahboom 8路串口灰度模块的数字量模式。模块黑线返回0、
+白底返回1；Driver的`filt`向上层保持黑线0、白底4095，因此LineDetect仍按
+`filt < threshold`判断压线。
 
-普通路段继续使用原参数：
+通用基础参数为：
 
 ```c
-#define CONTROL_LINE_BASE_SPEED_CPS       2500
-#define CONTROL_LINE_CROSS_SPEED_CPS      2000
-#define CONTROL_LINE_MIN_TRACK_SPEED_CPS  2000
+#define CONTROL_LINE_BASE_SPEED_CPS       2000
+#define CONTROL_LINE_CROSS_SPEED_CPS      1500
+#define CONTROL_LINE_MIN_TRACK_SPEED_CPS  1500
+#define CONTROL_LINE_TURN_MAX_CPS         1200
+#define CONTROL_LINE_KP                   0.30f
+#define CONTROL_LINE_KD                   0.04f
 ```
+
+数字量误差使用`1/2`一阶滤波。连续两帧丢线后进入保持前进的SEARCH，搜索
+内轮目标最低800 cps；重获线路首帧立即恢复修正，连续三帧确认后回到TRACK。
+H题第2项运行时会把基础、弯道和最小速度统一覆盖为2500 cps，不降低正式速度。
 
 ### 5.1 直角
 

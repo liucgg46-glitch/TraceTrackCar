@@ -38,6 +38,7 @@ void Test_CountPerRev_Update(void);
 void Test_MotionCmd_Update(void);
 void Test_MotionCmd_Log(void);
 void Test_DriveProfile_Update(void);
+void Test_ServoBeamCalibration_Update(void);
 
 /* 传感器和显示测试。 */
 void Test_VL53L1X_Update(void);

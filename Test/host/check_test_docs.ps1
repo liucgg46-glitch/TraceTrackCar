@@ -5,7 +5,8 @@ Set-StrictMode -Version Latest
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $testHeaderPath = Join-Path $projectRoot "Test\test.h"
-$testSourcePath = Join-Path $projectRoot "Test\test.c"
+$testSourcePaths = Get-ChildItem -LiteralPath (Join-Path $projectRoot "Test") `
+    -Filter "test*.c" -File
 $testConfigPath = Join-Path $projectRoot "Test\test_config.h"
 $taskConfigPath = Join-Path $projectRoot "APP\app_task_config.h"
 $docRoot = Join-Path $projectRoot "Doc"
@@ -18,7 +19,12 @@ $testDocName = (-join @(
 $testDocPath = Join-Path $docRoot $testDocName
 
 $testHeader = Get-Content -LiteralPath $testHeaderPath -Raw -Encoding UTF8
-$testSource = Get-Content -LiteralPath $testSourcePath -Raw -Encoding UTF8
+$testSource = @(
+    $testSourcePaths |
+        ForEach-Object {
+            Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+        }
+) -join "`n"
 $testConfig = Get-Content -LiteralPath $testConfigPath -Raw -Encoding UTF8
 $taskConfig = Get-Content -LiteralPath $taskConfigPath -Raw -Encoding UTF8
 $testDoc = Get-Content -LiteralPath $testDocPath -Raw -Encoding UTF8

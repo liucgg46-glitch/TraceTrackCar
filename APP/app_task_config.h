@@ -4,21 +4,40 @@
 #include "scheduler.h"
 #include "app_task_port.h"
 #include "app_diagnostics.h"
+#include "test_config.h"
+
+#if (PROJECT_TEST_TASKS_ENABLE != 0U)
+#include "test.h"
+#else
 #include "task_profile_select.h"
 #include "line_calibration.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if (PROJECT_TEST_TASKS_ENABLE != 0U)
+
 /*
- * ============================================================================
- * 2026年电赛H题第2项正式任务表
- * ============================================================================
- *
- * KEY1启动、KEY4急停；灰度和编码器后台先更新，APP任务状态机随后处理
- * 计时与停车，Route/LineTrack和底盘闭环均保持10ms非阻塞周期。
- * LCD异步状态机以20ms推进，显示文本由H2任务每100ms更新。
+ * PF8摆杆舵机安全标定任务表。
+ * 只推进异步后台、按键消抖和标定任务，不启动底盘、传感器、循迹或显示任务。
+ */
+#define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
+Task_t task_list[] = {                                                              \
+    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 运行心跳 */                    \
+    { AppTask_BSP_Background, 1U, 0U }, /* UART和舵机Driver后台 */                 \
+    { Key_Update, 10U, 0U }, /* 按键扫描和消抖 */                                  \
+    { Test_ServoBeamCalibration_Update, 10U, 0U }, /* PF8舵机安全标定 */          \
+};                                                                                  \
+const uint8_t TASK_NUM =                                                             \
+    (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
+
+#else
+
+/*
+ * 2026年电赛H题第2项正式任务表。
+ * 将PROJECT_TEST_TASKS_ENABLE恢复为0U后，保持原周期、顺序和功能。
  */
 #define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
 Task_t task_list[] = {                                                              \
@@ -35,6 +54,8 @@ Task_t task_list[] = {                                                          
 };                                                                                  \
 const uint8_t TASK_NUM =                                                             \
     (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
+
+#endif
 
 #ifdef __cplusplus
 }

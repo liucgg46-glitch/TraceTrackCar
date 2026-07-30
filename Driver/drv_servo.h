@@ -28,6 +28,8 @@ typedef struct {
 typedef struct {
     Drv_Servo_Position_t current;
     Drv_Servo_Position_t target;
+    uint16_t horizontal_pulse_us;
+    uint16_t pitch_pulse_us;
     /* 仅表示软件输出命令已到达目标，不代表舵机具有位置反馈。 */
     uint8_t command_reached;
 } Drv_Servo_Info_t;
@@ -49,6 +51,13 @@ BSP_Status_t Drv_Servo_SetTargetPosition(
 BSP_Status_t Drv_Servo_SetImmediatePosition(
     const Drv_Servo_Position_t *position
 );
+
+/*
+ * PF8水平舵机微秒标定接口。
+ * Driver内部执行齿轮齿条摆杆首次标定的临时安全限位，并同步归一化状态。
+ */
+BSP_Status_t Drv_Servo_SetHorizontalPulseUs(uint16_t pulse_us);
+uint16_t Drv_Servo_GetHorizontalPulseUs(void);
 
 void Drv_Servo_Center(void);
 BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info);

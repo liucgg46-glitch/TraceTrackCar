@@ -3,12 +3,12 @@
 #include "bsp_systick.h"
 
 /*
- * 当前实测标定值。只有 Driver 层可以接触 PWM 脉宽，APP 使用归一化位置。
- * 实机机械限位尚未最终验收前，不应扩大以下范围。
+ * 齿轮齿条摆杆首次标定的临时安全范围，不代表S20F舵机或机构的最终机械极限。
+ * 只有Driver层可以接触PWM脉宽，APP仍使用原有归一化位置接口。
  */
-#define SERVO_HORIZONTAL_RIGHT_LIMIT_US    1000U
-#define SERVO_HORIZONTAL_CENTER_US         1248U
-#define SERVO_HORIZONTAL_LEFT_LIMIT_US     1500U
+#define SERVO_HORIZONTAL_RIGHT_LIMIT_US    1450U
+#define SERVO_HORIZONTAL_CENTER_US         1500U
+#define SERVO_HORIZONTAL_LEFT_LIMIT_US     1550U
 
 #define SERVO_PITCH_UP_LIMIT_US            1200U
 #define SERVO_PITCH_CENTER_US              1450U
@@ -35,6 +35,17 @@ static int16_t Drv_Servo_LimitPosition(int16_t value)
         return DRV_SERVO_POSITION_MAX_PERMILLE;
     }
     return value;
+}
+
+static uint16_t Drv_Servo_LimitHorizontalPulse(uint16_t pulse_us)
+{
+    if (pulse_us < SERVO_HORIZONTAL_RIGHT_LIMIT_US) {
+        return SERVO_HORIZONTAL_RIGHT_LIMIT_US;
+    }
+    if (pulse_us > SERVO_HORIZONTAL_LEFT_LIMIT_US) {
+        return SERVO_HORIZONTAL_LEFT_LIMIT_US;
+    }
+    return pulse_us;
 }
 
 static uint16_t Drv_Servo_PositionToPulse(int16_t position,
@@ -259,6 +270,40 @@ BSP_Status_t Drv_Servo_SetImmediatePosition(
     return BSP_OK;
 }
 
+BSP_Status_t Drv_Servo_SetHorizontalPulseUs(uint16_t pulse_us)
+{
+    int16_t horizontal_position;
+    BSP_Status_t status;
+
+    pulse_us = Drv_Servo_LimitHorizontalPulse(pulse_us);
+    status = BSP_PWM_SetCompare(BSP_PWM_SERVO_HORIZONTAL, pulse_us);
+    if (status != BSP_OK) {
+        return status;
+    }
+
+    horizontal_position = Drv_Servo_PulseToPosition(
+        pulse_us,
+        SERVO_HORIZONTAL_RIGHT_LIMIT_US,
+        SERVO_HORIZONTAL_CENTER_US,
+        SERVO_HORIZONTAL_LEFT_LIMIT_US
+    );
+
+    /*
+     * 微秒标定命令是立即输出；当前值和缓动目标必须同步，
+     * 防止Drv_Servo_Task()在下一周期把PF8拉回旧目标。
+     */
+    s_horizontal_pulse_us = pulse_us;
+    s_horizontal_target_us = pulse_us;
+    s_current_position.horizontal_permille = horizontal_position;
+    s_target_position.horizontal_permille = horizontal_position;
+    return BSP_OK;
+}
+
+uint16_t Drv_Servo_GetHorizontalPulseUs(void)
+{
+    return s_horizontal_pulse_us;
+}
+
 void Drv_Servo_Center(void)
 {
     const Drv_Servo_Position_t center = {0, 0};
@@ -273,6 +318,8 @@ BSP_Status_t Drv_Servo_GetInfo(Drv_Servo_Info_t *info)
 
     info->current = s_current_position;
     info->target = s_target_position;
+    info->horizontal_pulse_us = s_horizontal_pulse_us;
+    info->pitch_pulse_us = s_pitch_pulse_us;
     info->command_reached = Drv_Servo_IsCommandReached();
     return BSP_OK;
 }
