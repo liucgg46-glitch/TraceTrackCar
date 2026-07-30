@@ -3152,4 +3152,193 @@ void Test_AsyncDisplay_Update(void)
     }
 }
 
+/*
+ * K210目标坐标串口通信测试。
+ *
+ * USART2接收K210数据；
+ * USART1将解析结果发送到USB-TTL串口助手。
+ */
+void Test_K210_TargetCommUpdate(void)
+{
+    static uint32_t last_status_ms = 0U;
+
+    uint16_t x;
+    uint16_t y;
+    uint8_t valid;
+
+    K210_Comm_Info_t info;
+
+    char buf[192];
+    int length;
+    uint32_t now_ms;
+
+    /*
+     * 读取K210发送的0x02目标坐标帧。
+     */
+    if (K210_Comm_GetNewTarget(
+            &x,
+            &y,
+            &valid
+        ) == BSP_OK) {
+
+        length = snprintf(
+            buf,
+            sizeof(buf),
+            "K210 TARGET x=%u y=%u valid=%u\r\n",
+            (unsigned int)x,
+            (unsigned int)y,
+            (unsigned int)valid
+        );
+
+        if ((length > 0) &&
+            (length < (int)sizeof(buf))) {
+            (void)BSP_UART_WriteFrame(
+                UART_PORT_DEBUG,
+                (const uint8_t *)buf,
+                (uint16_t)length
+            );
+        }
+    }
+
+    /*
+     * 每500ms输出一次通信统计。
+     */
+    now_ms = BSP_GetTickMs();
+
+    if ((uint32_t)(
+            now_ms -
+            last_status_ms
+        ) < 500U) {
+        return;
+    }
+
+    last_status_ms = now_ms;
+
+    if (K210_Comm_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    length = snprintf(
+        buf,
+        sizeof(buf),
+        "K210 STATUS online=%u frames=%lu "
+        "check_err=%lu format_err=%lu "
+        "timeout=%lu last_rx=%lu\r\n",
+        (unsigned int)info.online,
+        (unsigned long)info.valid_frame_count,
+        (unsigned long)info.checksum_error_count,
+        (unsigned long)info.format_error_count,
+        (unsigned long)info.timeout_count,
+        (unsigned long)info.last_rx_ms
+    );
+
+    if ((length > 0) &&
+        (length < (int)sizeof(buf))) {
+        (void)BSP_UART_WriteFrame(
+            UART_PORT_DEBUG,
+            (const uint8_t *)buf,
+            (uint16_t)length
+        );
+    }
+}
+
+void Test_K210_BallCommUpdate(void)
+{
+    static uint32_t last_status_ms = 0U;
+
+    int16_t position_tenth_mm;
+    uint8_t state;
+    uint8_t confidence;
+int32_t position_value;
+uint32_t position_abs;
+const char *state_text;
+    K210_Comm_Info_t info;
+
+    char buf[192];
+    int length;
+    uint32_t now_ms;
+
+    if (K210_Comm_GetNewBallPosition(
+            &position_tenth_mm,
+            &state,
+            &confidence
+        ) == BSP_OK) {
+
+        position_value = position_tenth_mm;
+
+if (position_value < 0) {
+    position_abs = (uint32_t)(-position_value);
+} else {
+    position_abs = (uint32_t)position_value;
+}
+
+if (state == K210_BALL_STATE_VALID) {
+    state_text = "VALID";
+} else if (state == K210_BALL_STATE_HOLD) {
+    state_text = "HOLD";
+} else {
+    state_text = "LOST";
+}
+
+length = snprintf(
+    buf,
+    sizeof(buf),
+    "BALL position=%c%lu.%02lucm "
+    "state=%s confidence=%u\r\n",
+    (position_value < 0) ? '-' : '+',
+    (unsigned long)(position_abs / 100U),
+    (unsigned long)(position_abs % 100U),
+    state_text,
+    (unsigned int)confidence
+);
+
+        if ((length > 0) &&
+            (length < (int)sizeof(buf))) {
+            (void)BSP_UART_WriteFrame(
+                UART_PORT_DEBUG,
+                (const uint8_t *)buf,
+                (uint16_t)length
+            );
+        }
+    }
+
+    now_ms = BSP_GetTickMs();
+
+    if ((uint32_t)(
+            now_ms -
+            last_status_ms
+        ) < 500U) {
+        return;
+    }
+
+    last_status_ms = now_ms;
+
+    if (K210_Comm_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+
+    length = snprintf(
+        buf,
+        sizeof(buf),
+        "K210 STATUS online=%u frames=%lu "
+        "check_err=%lu format_err=%lu "
+        "timeout=%lu last_rx=%lu\r\n",
+        (unsigned int)info.online,
+        (unsigned long)info.valid_frame_count,
+        (unsigned long)info.checksum_error_count,
+        (unsigned long)info.format_error_count,
+        (unsigned long)info.timeout_count,
+        (unsigned long)info.last_rx_ms
+    );
+
+    if ((length > 0) &&
+        (length < (int)sizeof(buf))) {
+        (void)BSP_UART_WriteFrame(
+            UART_PORT_DEBUG,
+            (const uint8_t *)buf,
+            (uint16_t)length
+        );
+    }
+}
+
 #endif /* PROJECT_TEST_TASKS_ENABLE */

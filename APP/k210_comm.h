@@ -164,6 +164,17 @@ extern "C" {
 
 #define K210_CMD_ROAD_LINE_STATE          0x30U
 #define K210_CMD_ROAD_EVENT_STATE         0x31U
+/*
+ * 钢球位置帧：
+ * DATA1/DATA2：int16大端，单位0.1mm
+ * DATA3 bit7..6：状态
+ * DATA3 bit5..0：压缩置信度
+ */
+#define K210_CMD_BALL_POSITION            0x32U
+
+#define K210_BALL_STATE_LOST              0U
+#define K210_BALL_STATE_HOLD              1U
+#define K210_BALL_STATE_VALID             2U
 
 #define K210_CMD_SET_ROAD_PROFILE         0x40U
 /*
@@ -713,6 +724,11 @@ typedef struct {
     uint16_t target_y;
     uint8_t target_valid;
     uint8_t new_target;
+		int16_t ball_position_tenth_mm;
+		uint8_t ball_state;
+		uint8_t ball_confidence;
+		uint8_t new_ball_position;
+		uint8_t ball_reserved;
 
     /*
      * ------------------------------------------------------------------------
@@ -935,6 +951,18 @@ BSP_Status_t K210_Comm_GetNewTarget(uint16_t *x,
                                     uint16_t *y,
                                     uint8_t *valid);
 
+
+BSP_Status_t K210_Comm_GetNewBallPosition(
+    int16_t *position_tenth_mm,
+    uint8_t *state,
+    uint8_t *confidence
+);
+
+BSP_Status_t K210_Comm_GetNewBallPosition(
+    int16_t *position_tenth_mm,
+    uint8_t *state,
+    uint8_t *confidence
+);
 /*
  * 获取新的激光点中心坐标。
  */

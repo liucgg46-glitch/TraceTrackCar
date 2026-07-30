@@ -548,6 +548,45 @@ static void K210_Comm_ParseFrame(const uint8_t *frame)
             }
             break;
 
+						
+						case K210_CMD_BALL_POSITION:
+{
+    uint16_t encoded_position;
+    uint8_t state;
+    uint8_t confidence_6bit;
+
+    state = (uint8_t)((data3 >> 6U) & 0x03U);
+    confidence_6bit = (uint8_t)(data3 & 0x3FU);
+
+    if (state > K210_BALL_STATE_VALID) {
+        s_k210_info.format_error_count++;
+        break;
+    }
+
+    encoded_position =
+        K210_Comm_MakeU16(data1, data2);
+
+    /*
+     * 把uint16位模式复制为int16，
+     * 从而正确还原负数位置。
+     */
+    memcpy(
+        &s_k210_info.ball_position_tenth_mm,
+        &encoded_position,
+        sizeof(s_k210_info.ball_position_tenth_mm)
+    );
+
+    s_k210_info.ball_state = state;
+
+    s_k210_info.ball_confidence =
+        (uint8_t)(
+            ((uint16_t)confidence_6bit * 100U + 31U) /
+            63U
+        );
+
+    s_k210_info.new_ball_position = 1U;
+    break;
+}
         default:
             s_k210_info.format_error_count++;
             break;
@@ -689,6 +728,8 @@ void K210_Comm_Update(void)
             s_k210_info.digit_valid = 0U;
             s_k210_info.target_valid = 0U;
             s_k210_info.laser_valid = 0U;
+							s_k210_info.ball_state =
+            K210_BALL_STATE_LOST;
 
             s_k210_info.road.line_valid = 0U;
             s_k210_info.road.line_source =
@@ -947,6 +988,37 @@ BSP_Status_t K210_Comm_GetNewRoadEvent(
     s_k210_info.road.new_road_event = 0U;
     s_k210_info.road.road_event =
         K210_ROAD_EVENT_NONE;
+
+    return BSP_OK;
+}
+
+
+BSP_Status_t K210_Comm_GetNewBallPosition(
+    int16_t *position_tenth_mm,
+    uint8_t *state,
+    uint8_t *confidence
+)
+{
+    if ((position_tenth_mm == 0) ||
+        (state == 0) ||
+        (confidence == 0)) {
+        return BSP_PARAM;
+    }
+
+    if (s_k210_info.new_ball_position == 0U) {
+        return BSP_BUSY;
+    }
+
+    *position_tenth_mm =
+        s_k210_info.ball_position_tenth_mm;
+
+    *state =
+        s_k210_info.ball_state;
+
+    *confidence =
+        s_k210_info.ball_confidence;
+
+    s_k210_info.new_ball_position = 0U;
 
     return BSP_OK;
 }
