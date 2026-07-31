@@ -141,6 +141,21 @@ static void TestCascadeControl(void)
     CheckTrue("data invalid freezes integral",
               fabsf(output.velocity_integral_angle_deg -
                     previous_integral) < 0.001f);
+
+    input.control_enabled = 0U;
+    input.estimated_velocity_mm_s = 12.3f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("control disabled clears target velocity",
+              output.target_velocity_mm_s == 0.0f);
+    CheckTrue("control disabled seeds filtered velocity",
+              fabsf(output.filtered_velocity_mm_s -
+                    input.estimated_velocity_mm_s) < 0.001f);
+    CheckTrue("control disabled clears integral",
+              output.velocity_integral_angle_deg == 0.0f);
+    CheckTrue("control disabled clears hold",
+              output.hold_active == 0U);
+    input.control_enabled = 1U;
     input.data_valid = 1U;
     input.equilibrium_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
 
@@ -190,7 +205,7 @@ static void TestCascadeControl(void)
                BALL_BALANCE_CONTROL_PERIOD_S *
                BALL_BALANCE_CONTROL_PERIOD_S) + 0.001f);
 
-    for (index = 0U; index < 30U; index++) {
+    for (index = 0U; index < 60U; index++) {
         input.estimated_position_mm = 1.0f;
         input.estimated_velocity_mm_s = 0.0f;
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;

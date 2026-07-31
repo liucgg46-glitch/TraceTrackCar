@@ -21,14 +21,21 @@ extern "C" {
 
 /* 当前唯一任务表：H题MODE2～MODE6正式总任务。 */
 Task_t task_list[] = {
-    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 运行心跳 */  \
-    { AppTask_BSP_Background, 1U, 0U }, /* UART和舵机Driver后台 */\
-    { K210_Comm_Update, 5U, 0U }, /* 解析K210钢球帧 */\
-    { BallBalance_K210Adapter_Update, 5U, 0U }, /* 新帧唯一消费者 */\
-    { BallBalance_VehicleImuAdapter_Update, 10U, 0U }, /* 默认无效前馈 */\
-    { Key_Update, 10U, 0U }, /* O点和正负50mm选择 */\
-    { Test_BallBalanceControl_Update, 10U, 0U }, /* 按键和诊断 */\
-    { BallBalance_App_Update, 10U, 0U }, /* 状态估计、反馈和舵机输出 */\
+    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 系统心跳 */
+    { AppTask_BSP_Background, 1U, 0U }, /* BSP/UART/Driver后台 */
+    { Sensor_Update, 1U, 0U }, /* 灰度、IMU、ToF、称重 */
+    { Key_Update, 10U, 0U }, /* KEY1至KEY9扫描 */
+    { Encoder_Update, 10U, 0U }, /* 编码器速度和里程 */
+    { K210_Comm_Update, 5U, 0U }, /* K210协议解析 */
+    { BallBalance_K210Adapter_Update, 5U, 0U }, /* 钢球帧唯一消费者 */
+    { BallBalance_VehicleImuAdapter_Update, 10U, 0U }, /* 移动加速度适配 */
+    { TaskFSM_Update, 10U, 0U }, /* 正式总任务状态机 */
+    { AppDiagnostics_TaskFSMLogUpdate, 200U, 0U }, /* 串口任务状态日志 */
+    { LineTrack_Update, 10U, 0U }, /* 循迹和Route */
+    { Motion_Update, 10U, 0U }, /* 非阻塞动作 */
+    { BallBalance_App_Update, 10U, 0U }, /* 滚球控制 */
+    { Chassis_Update, 10U, 0U }, /* 底盘输出 */
+    { LCD_Update, 100U, 0U }, /* 模式和结果显示 */
 };
 
 const uint8_t TASK_NUM =

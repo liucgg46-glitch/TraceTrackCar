@@ -116,17 +116,18 @@ static uint8_t BallBalance_App_TakeSample(
 
 static void BallBalance_App_AcquireTracking(float position_mm)
 {
-    uint8_t resume_existing_control;
-
-    resume_existing_control = s_ever_active;
     BallStateEstimator_Reset(position_mm);
     BallReference_Init(position_mm);
     BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
     BallReference_Pause();
-    if (resume_existing_control == 0U) {
-        BallBalance_Control_Reset();
-        s_last_applied_dynamic_angle_deg = 0.0f;
-    }
+
+    /*
+     * 每次重新获得视觉跟踪都清除闭环内部记忆，避免超时前的目标速度、
+     * 速度滤波或积分角在恢复后重新生效。
+     */
+    BallBalance_Control_Reset();
+    s_last_applied_dynamic_angle_deg = 0.0f;
+
     s_tracking_ready = 1U;
     s_data_timeout = 0U;
     s_ever_active = 1U;

@@ -18,14 +18,19 @@
 #define MISSION_TARGET_PLUS_50_MM_X10          500
 #define MISSION_TARGET_MINUS_50_MM_X10         (-500)
 #define MISSION_ARM_TIMEOUT_MS                 5000U
-#define MISSION_TARGET_MIN_SETTLE_MS           300U
 #define MISSION_BALL_ERROR_LIMIT_MM_X10        100
 #define MISSION_ROUTE_START_ROOM               0U
+#define MISSION_M3_PLUS_REACH_POSITION_MM      45.0f
+#define MISSION_M3_PLUS_MIN_VELOCITY_MM_S      (-5.0f)
+#define MISSION_M3_PLUS_CONFIRM_FRAME_COUNT    2U
 
 static Mission_Info_t s_mission;
 static uint32_t s_state_enter_ms;
 static uint32_t s_substate_enter_ms;
 static uint8_t s_last_key_ready;
+static uint8_t s_m3_plus_confirm_count;
+static uint32_t s_m3_last_processed_sample_ms;
+static uint8_t s_m3_sample_tracking_valid;
 
 static int16_t Mission_Abs16(int16_t value)
 {
@@ -57,6 +62,15 @@ static void Mission_SetSubstate(Mission_SubState_t substate)
     }
     s_mission.substate = (uint8_t)substate;
     s_substate_enter_ms = BSP_GetTickMs();
+}
+
+static void Mission_ClearMode3PlusConfirm(void)
+{
+    s_m3_plus_confirm_count = 0U;
+    s_m3_last_processed_sample_ms = 0U;
+    s_m3_sample_tracking_valid = 0U;
+    s_mission.m3_plus_confirm_count = 0U;
+    s_mission.m3_last_processed_sample_ms = 0U;
 }
 
 static void Mission_EnterState(Mission_State_t state,
@@ -130,10 +144,13 @@ static void Mission_ResetRuntime(void)
     s_mission.current_ball_position_mm_x10 = 0;
     s_mission.current_ball_error_mm_x10 = 0;
     s_mission.max_ball_error_mm_x10 = 0;
+    s_mission.ball_filtered_velocity_mm_s_x10 = 0;
+    s_mission.ball_settled = 0U;
     s_mission.start_ms = 0U;
     s_mission.elapsed_ms = 0U;
     s_mission.route_events = 0U;
     s_mission.fault_code = MISSION_FAULT_NONE;
+    Mission_ClearMode3PlusConfirm();
     Mission_UpdateLimits();
 }
 
@@ -147,6 +164,7 @@ static void Mission_EnterFault(Mission_Result_t result,
                                Mission_FaultCode_t fault)
 {
     Mission_StopVehicleSafely();
+    Mission_ClearMode3PlusConfirm();
     if ((fault == MISSION_FAULT_BALL) ||
         (fault == MISSION_FAULT_K210_TIMEOUT) ||
         (fault == MISSION_FAULT_SERVO)) {
@@ -222,7 +240,67 @@ static void Mission_UpdateBallSnapshot(void)
 
     s_mission.vehicle_feedforward_enabled =
         ball.vehicle_feedforward_enabled;
+    s_mission.ball_filtered_velocity_mm_s_x10 =
+        (int16_t)(ball.control.output.filtered_velocity_mm_s * 10.0f);
+    s_mission.ball_settled = ball.settled;
     s_mission.ball_ready = Mission_IsBallReady(&ball);
+}
+
+static uint8_t Mission_CheckMode3PlusReach(void)
+{
+    BallBalance_AppInfo_t ball;
+    uint8_t reached;
+
+    if (BallBalance_App_GetInfo(&ball) != BSP_OK) {
+        Mission_ClearMode3PlusConfirm();
+        return 0U;
+    }
+
+    s_mission.current_ball_position_mm_x10 =
+        (int16_t)(ball.estimator.position_mm * 10.0f);
+    s_mission.ball_filtered_velocity_mm_s_x10 =
+        (int16_t)(ball.control.output.filtered_velocity_mm_s * 10.0f);
+    s_mission.ball_settled = ball.settled;
+
+    if ((Mission_IsBallUsable(&ball) == 0U) ||
+        (ball.last_sample_valid == 0U) ||
+        (ball.last_valid_sample_ms == 0U)) {
+        Mission_ClearMode3PlusConfirm();
+        return 0U;
+    }
+
+    if ((s_m3_sample_tracking_valid != 0U) &&
+        (ball.last_valid_sample_ms ==
+         s_m3_last_processed_sample_ms)) {
+        return 0U;
+    }
+
+    s_m3_sample_tracking_valid = 1U;
+    s_m3_last_processed_sample_ms =
+        ball.last_valid_sample_ms;
+    s_mission.m3_last_processed_sample_ms =
+        s_m3_last_processed_sample_ms;
+
+    reached =
+        ((ball.estimator.position_mm >=
+          MISSION_M3_PLUS_REACH_POSITION_MM) &&
+         (ball.control.output.filtered_velocity_mm_s >=
+          MISSION_M3_PLUS_MIN_VELOCITY_MM_S)) ? 1U : 0U;
+
+    if (reached != 0U) {
+        if (s_m3_plus_confirm_count <
+            MISSION_M3_PLUS_CONFIRM_FRAME_COUNT) {
+            s_m3_plus_confirm_count++;
+        }
+    } else {
+        s_m3_plus_confirm_count = 0U;
+    }
+
+    s_mission.m3_plus_confirm_count =
+        s_m3_plus_confirm_count;
+
+    return (s_m3_plus_confirm_count >=
+            MISSION_M3_PLUS_CONFIRM_FRAME_COUNT) ? 1U : 0U;
 }
 
 static uint8_t Mission_IsRouteReady(void)
@@ -489,21 +567,17 @@ static void Mission_HandleMode2(void)
 
 static void Mission_HandleMode3(void)
 {
-    uint32_t now_ms;
-
-    now_ms = BSP_GetTickMs();
     switch ((Mission_SubState_t)s_mission.substate) {
     case MISSION_SUB_M3_SET_PLUS_50:
         Mission_StopVehicleSafely();
+        Mission_ClearMode3PlusConfirm();
         Mission_SetBallTarget(MISSION_TARGET_PLUS_50_MM_X10, 1U);
         Mission_SetSubstate(MISSION_SUB_M3_WAIT_PLUS_50);
         break;
     case MISSION_SUB_M3_WAIT_PLUS_50:
-        if (((uint32_t)(now_ms - s_substate_enter_ms) >=
-             MISSION_TARGET_MIN_SETTLE_MS) &&
-            (s_mission.active_ball_target_mm_x10 ==
+        if ((s_mission.active_ball_target_mm_x10 ==
              MISSION_TARGET_PLUS_50_MM_X10) &&
-            (BallBalance_App_IsSettled() != 0U)) {
+            (Mission_CheckMode3PlusReach() != 0U)) {
             Mission_SetSubstate(MISSION_SUB_M3_SET_MINUS_50);
         }
         break;
@@ -512,9 +586,7 @@ static void Mission_HandleMode3(void)
         Mission_SetSubstate(MISSION_SUB_M3_WAIT_MINUS_50);
         break;
     case MISSION_SUB_M3_WAIT_MINUS_50:
-        if (((uint32_t)(now_ms - s_substate_enter_ms) >=
-             MISSION_TARGET_MIN_SETTLE_MS) &&
-            (s_mission.active_ball_target_mm_x10 ==
+        if ((s_mission.active_ball_target_mm_x10 ==
              MISSION_TARGET_MINUS_50_MM_X10) &&
             (BallBalance_App_IsSettled() != 0U)) {
             Mission_SetSubstate(MISSION_SUB_M3_DONE);
@@ -620,6 +692,7 @@ static void Mission_HandleRunning(void)
 #if BSP_KEY5_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY5) != 0U) {
         Mission_StopVehicleSafely();
+        Mission_ClearMode3PlusConfirm();
         Mission_EnterState(MISSION_STATE_ABORT,
                            MISSION_RESULT_USER_ABORT,
                            MISSION_FAULT_NONE);

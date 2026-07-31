@@ -149,6 +149,16 @@ static void BallBalance_Control_ClearHoldTracking(void)
     s_lock_start_ms = 0U;
 }
 
+static void BallBalance_Control_ClearClosedLoopState(
+    float filtered_velocity_mm_s
+)
+{
+    s_target_velocity_mm_s = 0.0f;
+    s_filtered_velocity_mm_s = filtered_velocity_mm_s;
+    s_velocity_integral_angle_deg = 0.0f;
+    BallBalance_Control_ClearHoldTracking();
+}
+
 static void BallBalance_Control_EnterHold(void)
 {
     s_hold_active = 1U;
@@ -351,7 +361,13 @@ Project_Status_t BallBalance_Control_Update(
     target_changed = BallBalance_Control_TargetChanged(input);
 
     if (input->control_enabled == 0U) {
-        BallBalance_Control_ClearHoldTracking();
+        /*
+         * 控制关闭时清除闭环记忆，但不重置当前舵机命令角，
+         * 让舵机仍按速度、加速度限制平滑回到水平角。
+         */
+        BallBalance_Control_ClearClosedLoopState(
+            input->estimated_velocity_mm_s
+        );
         requested_angle = BALL_BALANCE_LEVEL_ANGLE_DEG;
     } else if (input->data_valid == 0U) {
         /*

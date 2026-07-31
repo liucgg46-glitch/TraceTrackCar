@@ -20,7 +20,7 @@ void AppDiagnostics_HeartbeatUpdate(void)
 void AppDiagnostics_TaskFSMLogUpdate(void)
 {
     Mission_Info_t info;
-    char line[360];
+    char line[440];
     int length;
 
     if (TaskFSM_GetInfo(&info) != BSP_OK) {
@@ -32,6 +32,7 @@ void AppDiagnostics_TaskFSMLogUpdate(void)
         sizeof(line),
         "MISSION mode=%u state=%u sub=%u result=%u ready=%u/%u/%u "
         "run=%u fin=%u tgt=%d custom=%d pos=%d err=%d max=%d "
+        "fvel=%d m3cnt=%u m3ts=%lu bset=%u "
         "time=%lu score=%lu safe=%lu events=%02lX fault=%u ff=%u\r\n",
         (unsigned int)info.mode,
         (unsigned int)info.state,
@@ -47,6 +48,10 @@ void AppDiagnostics_TaskFSMLogUpdate(void)
         (int)info.current_ball_position_mm_x10,
         (int)info.current_ball_error_mm_x10,
         (int)info.max_ball_error_mm_x10,
+        (int)info.ball_filtered_velocity_mm_s_x10,
+        (unsigned int)info.m3_plus_confirm_count,
+        (unsigned long)info.m3_last_processed_sample_ms,
+        (unsigned int)info.ball_settled,
         (unsigned long)info.elapsed_ms,
         (unsigned long)info.score_limit_ms,
         (unsigned long)info.safety_timeout_ms,

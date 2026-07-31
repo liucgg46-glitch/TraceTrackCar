@@ -100,6 +100,10 @@ typedef struct {
     int16_t current_ball_position_mm_x10;
     int16_t current_ball_error_mm_x10;
     int16_t max_ball_error_mm_x10;
+    int16_t ball_filtered_velocity_mm_s_x10;
+    uint8_t ball_settled;
+    uint8_t m3_plus_confirm_count;
+    uint32_t m3_last_processed_sample_ms;
 
     uint32_t start_ms;
     uint32_t elapsed_ms;

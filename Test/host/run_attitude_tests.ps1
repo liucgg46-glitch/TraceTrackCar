@@ -51,6 +51,11 @@ $ballEstimatorSource = Join-Path $repositoryRoot "Algorithm\ball_state_estimator
 $ballReferenceSource = Join-Path $repositoryRoot "Algorithm\ball_reference_generator.c"
 $ballMapSource = Join-Path $repositoryRoot "Algorithm\ball_equilibrium_map.c"
 $ballControlSource = Join-Path $repositoryRoot "Algorithm\ball_balance_control.c"
+$taskFsmTestExecutable = Join-Path $buildDirectory "task_fsm_tests.exe"
+$taskFsmTestObject = Join-Path $buildDirectory "test_task_fsm.obj"
+$taskFsmObject = Join-Path $buildDirectory "task_fsm.obj"
+$taskFsmTestSource = Join-Path $repositoryRoot "Test\host\test_task_fsm.c"
+$taskFsmSource = Join-Path $repositoryRoot "APP\task_fsm.c"
 
 [void](New-Item -ItemType Directory -Force -Path $buildDirectory)
 
@@ -68,6 +73,15 @@ call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude"
 "@
 
 & $env:ComSpec /d /s /c $compileAndRunBall
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+$compileAndRunTaskFsm = @"
+call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$commonInclude" /I"$algorithmInclude" /I"$repositoryRoot\APP" /c "$taskFsmTestSource" /Fo"$taskFsmTestObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /I"$commonInclude" /I"$algorithmInclude" /I"$repositoryRoot\APP" /c "$taskFsmSource" /Fo"$taskFsmObject" && cl /nologo "$taskFsmTestObject" "$taskFsmObject" /Fe"$taskFsmTestExecutable" && "$taskFsmTestExecutable"
+"@
+
+& $env:ComSpec /d /s /c $compileAndRunTaskFsm
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

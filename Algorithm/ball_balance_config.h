@@ -32,12 +32,12 @@
  * 3. 再调整POSITION_KP和TARGET_VELOCITY_MAX，决定整体运行速度。
  * 4. 最后调整HOLD阈值。
  */
-#define BALL_BALANCE_POSITION_KP                        1.5f     /* 位置误差到目标速度的比例系数 */
+#define BALL_BALANCE_POSITION_KP                        1.2f     /* 位置误差到目标速度的比例系数 */
 #define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           80.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             160.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
-#define BALL_BALANCE_VELOCITY_KP                        0.15f    /* 速度PI比例角增益 */
-#define BALL_BALANCE_VELOCITY_KI                        0.80f    /* 速度PI积分角增益 */
+#define BALL_BALANCE_VELOCITY_KP                        0.90f    /* 速度PI比例角增益 */
+#define BALL_BALANCE_VELOCITY_KI                        0.70f    /* 速度PI积分角增益 */
 #define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
 
 /*
@@ -51,8 +51,8 @@
 /*
  * 到点保持在满足条件后记录当前实际舵机命令角，并冻结该角度直到退出条件成立。
  */
-#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         3.0f     /* 进入到点状态允许的最大位置误差 */
-#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          6.0f     /* 超过该位置误差后退出到点状态 */
+#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         5.0f     /* 进入到点状态允许的最大位置误差 */
+#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          7.0f     /* 超过该位置误差后退出到点状态 */
 #define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             3.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
 #define BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S      1.0f     /* 进入到点状态允许的最大舵机命令速度 */
 #define BALL_BALANCE_TARGET_LOCK_TIME_MS                250U     /* 满足到点条件所需的连续保持时间 */
