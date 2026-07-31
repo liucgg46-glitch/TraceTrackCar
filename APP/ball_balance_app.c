@@ -405,11 +405,14 @@ void BallBalance_App_Update(void)
     }
 
     /*
-     * HOLD不提供新的位置测量，但在最近VALID仍未超时时允许继续判断静摩擦；
-     * LOST或VALID超时仍会禁止补偿，避免使用失效位置持续加大舵机角度。
+     * 只有新鲜VALID允许增长脱困补偿；HOLD没有新测量，只允许控制器逐步释放。
      */
     if ((s_tracking_ready != 0U) &&
-        (s_last_sample_state != BALL_BALANCE_VISION_LOST)) {
+        (s_last_sample_state == BALL_BALANCE_VISION_VALID) &&
+        (s_last_sample_valid != 0U) &&
+        (s_data_timeout == 0U) &&
+        ((uint32_t)(now_ms - s_last_valid_sample_ms) <=
+         BALL_BALANCE_BREAKAWAY_VALID_AGE_MS)) {
         allow_breakaway_growth = 1U;
     }
 
