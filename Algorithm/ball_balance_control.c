@@ -194,8 +194,6 @@ static void BallBalance_Control_UpdateHold(
          BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM) &&
         (BallBalance_Control_AbsF(result->filtered_velocity_mm_s) <=
          BALL_BALANCE_TARGET_LOCK_SPEED_MM_S) &&
-        (BallBalance_Control_AbsF(result->target_velocity_mm_s) <=
-         BALL_BALANCE_TARGET_LOCK_SPEED_MM_S) &&
         (BallBalance_Control_AbsF(s_command_speed_deg_s) <=
          BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S)) {
         if (s_lock_tracking == 0U) {
