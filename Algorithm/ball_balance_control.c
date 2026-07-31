@@ -12,6 +12,7 @@ static uint8_t s_target_locked;
 static uint8_t s_lock_tracking;
 static uint8_t s_breakaway_measurement_valid;
 static uint8_t s_breakaway_progress_count;
+static uint8_t s_breakaway_progress_confirmed;
 static int8_t s_breakaway_motion_sign;
 static uint32_t s_lock_start_ms;
 
@@ -82,6 +83,7 @@ static void BallBalance_Control_ClearBreakaway(void)
     s_breakaway_last_measured_position_mm = 0.0f;
     s_breakaway_measurement_valid = 0U;
     s_breakaway_progress_count = 0U;
+    s_breakaway_progress_confirmed = 0U;
     s_breakaway_motion_sign = 0;
     s_control.breakaway_elapsed_ms = 0U;
 }
@@ -111,7 +113,7 @@ static uint8_t BallBalance_Control_UpdateBreakawayProgress(
 
     if ((input->position_measurement_valid == 0U) ||
         (ball_motion_sign == 0)) {
-        return 0U;
+        return s_breakaway_progress_confirmed;
     }
 
     if (s_breakaway_measurement_valid == 0U) {
@@ -119,6 +121,7 @@ static uint8_t BallBalance_Control_UpdateBreakawayProgress(
             input->measured_position_mm;
         s_breakaway_measurement_valid = 1U;
         s_breakaway_progress_count = 0U;
+        s_breakaway_progress_confirmed = 0U;
         return 0U;
     }
 
@@ -134,13 +137,16 @@ static uint8_t BallBalance_Control_UpdateBreakawayProgress(
             BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT) {
             s_breakaway_progress_count++;
         }
-    } else if ((measured_delta_mm * (float)ball_motion_sign) <
-               0.0f) {
+        if (s_breakaway_progress_count >=
+            BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT) {
+            s_breakaway_progress_confirmed = 1U;
+        }
+    } else {
         s_breakaway_progress_count = 0U;
+        s_breakaway_progress_confirmed = 0U;
     }
 
-    return (s_breakaway_progress_count >=
-            BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT) ? 1U : 0U;
+    return s_breakaway_progress_confirmed;
 }
 
 static void BallBalance_Control_ResetTargetLock(void)
