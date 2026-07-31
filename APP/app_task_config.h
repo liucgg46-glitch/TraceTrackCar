@@ -36,6 +36,7 @@ Task_t task_list[] = {
     { BallBalance_App_Update, 10U, 0U }, /* 滚球控制 */
     { Chassis_Update, 10U, 0U }, /* 底盘输出 */
     { LCD_Update, 100U, 0U }, /* 模式和结果显示 */
+	{ Test_K210_GrayTuneUpdate, 20U, 0U }, /* 传统灰度参数调节 */ \
 };
 
 const uint8_t TASK_NUM =

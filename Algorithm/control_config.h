@@ -108,7 +108,7 @@
 #define CONTROL_LINE_MIN_TRACK_SPEED_CPS          1500    /* 大偏差时最低直行速度 */
 #define CONTROL_LINE_TURN_MAX_CPS                 1200     /* 最大转向量；实际还会限制到不让内侧轮反转 */
 
-#define CONTROL_LINE_KP                           0.30f    /* 比例增大：转弯更积极；过大易摆动 */
+#define CONTROL_LINE_KP                           0.28f    /* 比例增大：转弯更积极；过大易摆动 */
 #define CONTROL_LINE_KD                           0.04f    /* 微分增大：回正更快、抑制过冲；过大易抖动 */
 #define CONTROL_LINE_ERROR_DEADBAND               80      /* 误差死区：±80 内按 0 处理 */
 #define CONTROL_LINE_ERROR_FILTER_NUM             1U      /* 数字量误差一阶滤波分子 */

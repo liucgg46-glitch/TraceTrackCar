@@ -53,6 +53,16 @@ static void Mission_StopVehicleSafely(void)
     LineFollow_StopPreserveRoute();
     Motion_Stop();
     Chassis_EmergencyStop();
+}
+
+/*
+ * MODE2 normal-finish stop:
+ * stop line following, motion actions and chassis output in the same
+ * TaskFSM cycle that observes ROUTE_EVENT_LAP_COMPLETE.
+ */
+static void Mission_Mode2EmergencyStop(void)
+{
+    Mission_StopVehicleSafely();
 }
 
 static void Mission_SetSubstate(Mission_SubState_t substate)
@@ -175,7 +185,12 @@ static void Mission_EnterFault(Mission_Result_t result,
 
 static void Mission_Finish(Mission_Result_t result)
 {
-    Mission_StopVehicleSafely();
+    /*
+     * Do not apply a common emergency stop on normal completion.
+     * MODE2 has already stopped at the finish event.
+     * MODE3 is stationary.
+     * MODE4/5/6 keep their existing Route/BRAKE stop path.
+     */
     Mission_EnterState(MISSION_STATE_FINISH, result, MISSION_FAULT_NONE);
 
     if (s_mission.mode == MISSION_MODE_2_LINE_LAP) {
@@ -550,7 +565,13 @@ static void Mission_HandleMode2(void)
         break;
     case MISSION_SUB_M2_RUNNING_LAP:
         if ((s_mission.route_events & ROUTE_EVENT_LAP_COMPLETE) != 0U) {
-            Mission_SetSubstate(MISSION_SUB_M2_BRAKE);
+            /*
+             * MODE2 must stop immediately at the finish event.
+             * Clear chassis targets, controller outputs and motor PWM now,
+             * then enter DONE without waiting for another BRAKE cycle.
+             */
+            Mission_Mode2EmergencyStop();
+            Mission_SetSubstate(MISSION_SUB_M2_DONE);
         }
         break;
     case MISSION_SUB_M2_BRAKE:
