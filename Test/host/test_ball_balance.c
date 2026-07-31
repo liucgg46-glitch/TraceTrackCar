@@ -28,6 +28,7 @@ static void TestControlDirectionAndBreakaway(void)
     float previous_request;
     float held_angle_deg;
     float previous_speed;
+    float previous_servo_angle;
     uint32_t index;
 
     printf("[TEST] ball control direction and breakaway state machine\n");
@@ -233,6 +234,70 @@ static void TestControlDirectionAndBreakaway(void)
     (void)BallBalance_Control_Update(&input, &output);
     CheckTrue("resumed ramp continues increasing",
               fabsf(output.breakaway_angle_deg) > previous_angle);
+
+    previous_angle = output.breakaway_angle_deg;
+    input.estimated_position_mm = -26.0f;
+    input.estimated_velocity_mm_s = -20.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("error sign change enters capture",
+              output.breakaway_state == BREAKAWAY_CAPTURE);
+    CheckTrue("capture keeps current breakaway angle on entry",
+              fabsf(output.breakaway_angle_deg - previous_angle) <
+              0.001f);
+
+    previous_angle = fabsf(output.breakaway_angle_deg);
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("capture slowly decays while ball moves away",
+              fabsf(output.breakaway_angle_deg) < previous_angle);
+
+    for (index = 0U; index < 20U; index++) {
+        input.estimated_velocity_mm_s = 80.0f;
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    previous_angle = fabsf(output.breakaway_angle_deg);
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("capture holds angle once ball turns toward target",
+              fabsf(output.breakaway_angle_deg) >=
+              previous_angle - 0.001f);
+
+    input.estimated_position_mm = -27.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    for (index = 0U; index < 80U; index++) {
+        previous_servo_angle = output.servo_angle_deg;
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+        if (output.breakaway_state == BREAKAWAY_RAMP) {
+            break;
+        }
+    }
+    CheckTrue("capture restop resumes ramp outside hold range",
+              output.breakaway_state == BREAKAWAY_RAMP);
+    CheckTrue("capture restop keeps nonzero breakaway bias",
+              fabsf(output.breakaway_angle_deg) > 0.001f);
+    CheckTrue("capture restop resumes from current servo angle",
+              fabsf(output.servo_angle_deg - previous_servo_angle) <=
+              (BALL_BALANCE_SERVO_MAX_ACCEL_DEG_S2 *
+               BALL_BALANCE_CONTROL_PERIOD_S *
+               BALL_BALANCE_CONTROL_PERIOD_S) + 0.001f);
+
+    input.estimated_position_mm = -19.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    for (index = 0U; index < 80U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+        if (output.hold_active != 0U) {
+            break;
+        }
+    }
+    CheckTrue("capture can enter hold with retained tilt",
+              output.hold_active != 0U);
+    CheckTrue("hold records nonzero actual servo angle",
+              fabsf(output.hold_servo_angle_deg -
+                    BALL_BALANCE_LEVEL_ANGLE_DEG) > 0.1f);
 
     previous_angle = output.breakaway_angle_deg;
     input.target_position_mm = 20.0f;

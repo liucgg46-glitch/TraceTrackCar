@@ -13,6 +13,7 @@ typedef enum {
     BREAKAWAY_IDLE = 0U,
     BREAKAWAY_RAMP,
     BREAKAWAY_DECAY,
+    BREAKAWAY_CAPTURE,
     BREAKAWAY_COOLDOWN
 } BallBalance_BreakawayState_t;
 

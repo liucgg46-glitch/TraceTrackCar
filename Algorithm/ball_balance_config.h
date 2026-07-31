@@ -93,7 +93,9 @@
 #define BALL_BALANCE_BREAKAWAY_FORWARD_STEP_MIN_MM      0.1f     /* 单帧向目标运动的最小有效位移 */
 #define BALL_BALANCE_BREAKAWAY_FORWARD_FRAME_COUNT      2U       /* 确认启动所需的连续向目标运动帧数 */
 #define BALL_BALANCE_BREAKAWAY_DECAY_RATE_DEG_S         12.0f    /* DECAY正常撤销脱困角的最大速度 */
-#define BALL_BALANCE_BREAKAWAY_CLEAR_RATE_DEG_S         30.0f    /* 异常、越过目标或目标变化时的快速平滑清零速度 */
+#define BALL_BALANCE_BREAKAWAY_CAPTURE_DECAY_RATE_DEG_S 4.0f     /* CAPTURE中钢球远离目标时的慢撤角速度 */
+#define BALL_BALANCE_BREAKAWAY_CAPTURE_SPEED_SCALE_MM_S 20.0f    /* CAPTURE远离速度达到该值时撤角速度达到上限 */
+#define BALL_BALANCE_BREAKAWAY_CLEAR_RATE_DEG_S         30.0f    /* 目标变化、视觉失效或控制关闭时的快速平滑清零速度 */
 #define BALL_BALANCE_BREAKAWAY_DECAY_SPEED_SCALE_MM_S   20.0f    /* 速度越接近该值，DECAY目标角下降越快 */
 #define BALL_BALANCE_BREAKAWAY_DECAY_PROGRESS_WEIGHT    0.5f     /* DECAY目标角中运动进度相对剩余误差的权重 */
 #define BALL_BALANCE_BREAKAWAY_COOLDOWN_MS              250U     /* 脱困角清零后的冷却时间 */

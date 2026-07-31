@@ -229,6 +229,15 @@ static void BallBalance_Control_EnterBreakawayDecay(
     s_control.breakaway_elapsed_ms = 0U;
 }
 
+static void BallBalance_Control_EnterBreakawayCapture(uint32_t now_ms)
+{
+    s_breakaway_state = BREAKAWAY_CAPTURE;
+    s_breakaway_state_start_ms = now_ms;
+    s_breakaway_wait_tracking = 0U;
+    s_breakaway_forced_decay = 0U;
+    s_control.breakaway_elapsed_ms = 0U;
+}
+
 static uint8_t BallBalance_Control_UpdateRampProgress(
     const BallBalance_ControlInput_t *input
 )
@@ -308,6 +317,20 @@ static float BallBalance_Control_LimitBreakawayForSafety(
     );
 }
 
+static void BallBalance_Control_EnterBreakawayRampFromServo(
+    const BallBalance_ControlInput_t *input,
+    int8_t error_sign,
+    float base_servo_angle_deg
+)
+{
+    s_breakaway_angle_deg =
+        BallBalance_Control_LimitBreakawayForSafety(
+            s_command_angle_deg - base_servo_angle_deg,
+            base_servo_angle_deg
+        );
+    BallBalance_Control_EnterBreakawayRamp(input, error_sign);
+}
+
 static float BallBalance_Control_UpdateDecayTarget(
     float target_error_mm,
     float filtered_velocity_mm_s
@@ -380,6 +403,15 @@ static void BallBalance_Control_ResetTargetLock(void)
     s_lock_start_ms = 0U;
 }
 
+static void BallBalance_Control_EnterHoldFromCurrentServo(void)
+{
+    s_target_locked = 1U;
+    s_hold_active = 1U;
+    s_hold_servo_angle_deg = s_command_angle_deg;
+    s_command_speed_deg_s = 0.0f;
+    s_lock_tracking = 0U;
+}
+
 static uint8_t BallBalance_Control_UpdateTargetLock(
     const BallBalance_ControlInput_t *input,
     float target_error_mm,
@@ -390,7 +422,6 @@ static uint8_t BallBalance_Control_UpdateTargetLock(
     if (s_hold_active != 0U) {
         if ((input->control_enabled == 0U) ||
             (input->data_valid == 0U) ||
-            (input->allow_breakaway_growth == 0U) ||
             (target_changed != 0U) ||
             (BallBalance_Control_AbsF(target_error_mm) >
              BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM)) {
@@ -403,7 +434,6 @@ static uint8_t BallBalance_Control_UpdateTargetLock(
 
     if ((input->control_enabled == 0U) ||
         (input->data_valid == 0U) ||
-        (input->allow_breakaway_growth == 0U) ||
         (target_changed != 0U)) {
         BallBalance_Control_ResetTargetLock();
         return 0U;
@@ -418,11 +448,7 @@ static uint8_t BallBalance_Control_UpdateTargetLock(
             s_lock_start_ms = input->now_ms;
         } else if ((uint32_t)(input->now_ms - s_lock_start_ms) >=
                    BALL_BALANCE_TARGET_LOCK_TIME_MS) {
-            s_target_locked = 1U;
-            s_hold_active = 1U;
-            s_hold_servo_angle_deg = s_command_angle_deg;
-            s_command_speed_deg_s = 0.0f;
-            BallBalance_Control_EnterBreakawayCooldown(input->now_ms);
+            BallBalance_Control_EnterHoldFromCurrentServo();
             return 1U;
         }
     } else {
@@ -444,19 +470,30 @@ static float BallBalance_Control_UpdateBreakaway(
     float target_magnitude;
     float next_magnitude;
     float position_mm;
+    float toward_velocity_mm_s;
+    float away_velocity_mm_s;
+    float speed_factor;
     int8_t error_sign = BallBalance_Control_SignF(target_error_mm);
+    uint8_t direction_changed;
+    uint8_t capture_entered = 0U;
     uint32_t elapsed_ms;
 
     if ((input->control_enabled == 0U) ||
         (input->data_valid == 0U) ||
-        (input->allow_breakaway_growth == 0U) ||
-        (target_changed != 0U) ||
-        (BallBalance_Control_AbsF(target_error_mm) <=
-         BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM) ||
-        ((s_breakaway_error_sign != 0) &&
-         (error_sign != 0) &&
-         (error_sign != s_breakaway_error_sign))) {
+        (target_changed != 0U)) {
         BallBalance_Control_StartBreakawayClear(input->now_ms);
+    } else {
+        direction_changed =
+            (((s_breakaway_state == BREAKAWAY_RAMP) ||
+              (s_breakaway_state == BREAKAWAY_DECAY)) &&
+             (s_breakaway_forced_decay == 0U) &&
+             (s_breakaway_error_sign != 0) &&
+             (error_sign != 0) &&
+             (error_sign != s_breakaway_error_sign)) ? 1U : 0U;
+        if (direction_changed != 0U) {
+            BallBalance_Control_EnterBreakawayCapture(input->now_ms);
+            capture_entered = 1U;
+        }
     }
 
     switch (s_breakaway_state) {
@@ -491,26 +528,101 @@ static float BallBalance_Control_UpdateBreakaway(
             break;
 
         case BREAKAWAY_RAMP:
-            angle_sign = (float)BallBalance_Control_SignF(
-                BallBalance_Model_AccelToDynamicAngleDeg(
-                    (float)s_breakaway_error_sign
-                )
-            );
-            s_breakaway_angle_deg +=
-                angle_sign *
-                BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S *
-                input->dt_s;
-            s_breakaway_angle_deg =
-                BallBalance_Control_LimitBreakawayForSafety(
-                    s_breakaway_angle_deg,
-                    base_servo_angle_deg
+            if (input->allow_breakaway_growth != 0U) {
+                angle_sign = (float)BallBalance_Control_SignF(
+                    BallBalance_Model_AccelToDynamicAngleDeg(
+                        (float)s_breakaway_error_sign
+                    )
                 );
-            s_control.breakaway_update_count =
-                BallBalance_Control_IncrementU32(
-                    s_control.breakaway_update_count
+                s_breakaway_angle_deg +=
+                    angle_sign *
+                    BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S *
+                    input->dt_s;
+                s_breakaway_angle_deg =
+                    BallBalance_Control_LimitBreakawayForSafety(
+                        s_breakaway_angle_deg,
+                        base_servo_angle_deg
+                    );
+                s_control.breakaway_update_count =
+                    BallBalance_Control_IncrementU32(
+                        s_control.breakaway_update_count
+                    );
+                if (BallBalance_Control_UpdateRampProgress(input) !=
+                    0U) {
+                    BallBalance_Control_EnterBreakawayDecay(input);
+                }
+            } else {
+                s_breakaway_wait_tracking = 0U;
+                s_control.breakaway_elapsed_ms = 0U;
+            }
+            break;
+
+        case BREAKAWAY_CAPTURE:
+            if (s_breakaway_error_sign != 0) {
+                s_breakaway_progress_mm =
+                    (input->estimated_position_mm -
+                     s_breakaway_start_position_mm) *
+                    (float)s_breakaway_error_sign;
+                if (s_breakaway_progress_mm < 0.0f) {
+                    s_breakaway_progress_mm = 0.0f;
+                }
+            }
+            if ((BallBalance_Control_AbsF(target_error_mm) <=
+                 BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM) &&
+                (BallBalance_Control_AbsF(filtered_velocity_mm_s) <=
+                 BALL_BALANCE_TARGET_LOCK_SPEED_MM_S)) {
+                BallBalance_Control_EnterHoldFromCurrentServo();
+                s_breakaway_wait_tracking = 0U;
+                s_control.breakaway_elapsed_ms = 0U;
+                break;
+            }
+
+            if ((capture_entered == 0U) && (error_sign != 0)) {
+                toward_velocity_mm_s =
+                    filtered_velocity_mm_s * (float)error_sign;
+                if (toward_velocity_mm_s < 0.0f) {
+                    away_velocity_mm_s = -toward_velocity_mm_s;
+                    speed_factor = BallBalance_Control_LimitF(
+                        away_velocity_mm_s /
+                        BALL_BALANCE_BREAKAWAY_CAPTURE_SPEED_SCALE_MM_S,
+                        0.0f,
+                        1.0f
+                    );
+                    s_breakaway_angle_deg =
+                        BallBalance_Control_MoveTowardZero(
+                            s_breakaway_angle_deg,
+                            BALL_BALANCE_BREAKAWAY_CAPTURE_DECAY_RATE_DEG_S *
+                            speed_factor *
+                            input->dt_s
+                        );
+                }
+            }
+
+            if ((input->allow_breakaway_growth != 0U) &&
+                (error_sign != 0) &&
+                (BallBalance_Control_AbsF(target_error_mm) >
+                 BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM) &&
+                (BallBalance_Control_AbsF(filtered_velocity_mm_s) <
+                 BALL_BALANCE_BREAKAWAY_STUCK_SPEED_MM_S)) {
+                if (s_breakaway_wait_tracking == 0U) {
+                    s_breakaway_wait_tracking = 1U;
+                    s_breakaway_wait_start_ms = input->now_ms;
+                }
+                elapsed_ms = (uint32_t)(
+                    input->now_ms - s_breakaway_wait_start_ms
                 );
-            if (BallBalance_Control_UpdateRampProgress(input) != 0U) {
-                BallBalance_Control_EnterBreakawayDecay(input);
+                s_control.breakaway_elapsed_ms = elapsed_ms;
+                if (elapsed_ms >=
+                    BALL_BALANCE_BREAKAWAY_RESTART_DWELL_MS) {
+                    BallBalance_Control_EnterBreakawayRampFromServo(
+                        input,
+                        error_sign,
+                        base_servo_angle_deg
+                    );
+                }
+            } else {
+                s_breakaway_wait_tracking = 0U;
+                s_control.breakaway_elapsed_ms = 0U;
             }
             break;
 
@@ -878,9 +990,13 @@ Project_Status_t BallBalance_Control_Update(
                     base_servo_angle,
                     target_changed
                 );
-            requested_angle =
-                base_servo_angle +
-                result.breakaway_angle_deg;
+            if (s_hold_active != 0U) {
+                requested_angle = s_hold_servo_angle_deg;
+            } else {
+                requested_angle =
+                    base_servo_angle +
+                    result.breakaway_angle_deg;
+            }
         }
     }
 
