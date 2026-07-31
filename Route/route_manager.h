@@ -35,6 +35,16 @@ typedef struct {
     uint32_t line_lost_ms;
 } RouteManager_Info_t;
 
+typedef enum {
+    ROUTE_EVENT_NONE         = 0x00U,
+    ROUTE_EVENT_LEFT_A       = 0x01U,
+    ROUTE_EVENT_PASSED_B     = 0x02U,
+    ROUTE_EVENT_LAP_COMPLETE = 0x04U,
+    ROUTE_EVENT_LINE_LOST    = 0x08U,
+    ROUTE_EVENT_ACTION_ERROR = 0x10U,
+    ROUTE_EVENT_FAILED       = 0x20U
+} Route_Event_t;
+
 void RouteManager_Init(uint32_t now_ms);
 void RouteManager_Reset(uint32_t now_ms);
 Project_Status_t RouteManager_ConfigureMission(
@@ -49,6 +59,8 @@ Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                         Route_ActionRequest_t *request,
                                         uint32_t now_ms);
 Project_Status_t RouteManager_GetInfo(RouteManager_Info_t *info);
+uint32_t RouteManager_GetEvents(void);
+void RouteManager_ClearEvents(uint32_t events);
 
 #ifdef __cplusplus
 }

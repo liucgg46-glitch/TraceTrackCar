@@ -3,6 +3,7 @@
 static BallBalance_ControlInfo_t s_control;
 static float s_command_angle_deg;
 static float s_command_speed_deg_s;
+static float s_motion_target_angle_deg;
 static float s_filtered_velocity_mm_s;
 static float s_filtered_disturbance_mm_s2;
 static float s_filtered_dynamic_angle_deg;
@@ -10,11 +11,15 @@ static float s_breakaway_angle_deg;
 static float s_breakaway_last_measured_position_mm;
 static uint8_t s_target_locked;
 static uint8_t s_lock_tracking;
+static uint8_t s_velocity_deadband_active;
 static uint8_t s_breakaway_measurement_valid;
 static uint8_t s_breakaway_progress_count;
 static uint8_t s_breakaway_progress_confirmed;
+static uint8_t s_breakaway_releasing;
+static uint8_t s_breakaway_cooldown_active;
 static int8_t s_breakaway_motion_sign;
 static uint32_t s_lock_start_ms;
+static uint32_t s_breakaway_cooldown_start_ms;
 
 static float BallBalance_Control_AbsF(float value)
 {
@@ -84,13 +89,35 @@ static void BallBalance_Control_ClearBreakaway(void)
     s_breakaway_measurement_valid = 0U;
     s_breakaway_progress_count = 0U;
     s_breakaway_progress_confirmed = 0U;
+    s_breakaway_releasing = 0U;
+    s_breakaway_cooldown_active = 0U;
     s_breakaway_motion_sign = 0;
     s_control.breakaway_elapsed_ms = 0U;
+    s_breakaway_cooldown_start_ms = 0U;
 }
 
-static void BallBalance_Control_ReleaseBreakaway(float dt_s)
+static void BallBalance_Control_ResetBreakawayProgress(void)
+{
+    s_breakaway_last_measured_position_mm = 0.0f;
+    s_breakaway_measurement_valid = 0U;
+    s_breakaway_progress_count = 0U;
+    s_breakaway_progress_confirmed = 0U;
+}
+
+static void BallBalance_Control_StartBreakawayRelease(void)
+{
+    s_control.breakaway_elapsed_ms = 0U;
+    BallBalance_Control_ResetBreakawayProgress();
+    if (s_breakaway_angle_deg != 0.0f) {
+        s_breakaway_releasing = 1U;
+    }
+}
+
+static void BallBalance_Control_ReleaseBreakaway(float dt_s,
+                                                  uint32_t now_ms)
 {
     float release_step;
+    uint8_t reached_zero = 0U;
 
     s_control.breakaway_elapsed_ms = 0U;
     release_step = BALL_BALANCE_BREAKAWAY_RELEASE_DEG_S * dt_s;
@@ -101,6 +128,13 @@ static void BallBalance_Control_ReleaseBreakaway(float dt_s)
         s_breakaway_angle_deg += release_step;
     } else {
         s_breakaway_angle_deg = 0.0f;
+        reached_zero = 1U;
+    }
+
+    if ((reached_zero != 0U) && (s_breakaway_releasing != 0U)) {
+        s_breakaway_releasing = 0U;
+        s_breakaway_cooldown_active = 1U;
+        s_breakaway_cooldown_start_ms = now_ms;
     }
 }
 
@@ -219,15 +253,39 @@ static float BallBalance_Control_UpdateBreakaway(
     if ((ball_motion_sign != 0) &&
         (s_breakaway_motion_sign != 0) &&
         (ball_motion_sign != s_breakaway_motion_sign)) {
-        BallBalance_Control_ClearBreakaway();
+        BallBalance_Control_ResetBreakawayProgress();
+        BallBalance_Control_StartBreakawayRelease();
     }
     if (ball_motion_sign != 0) {
         s_breakaway_motion_sign = ball_motion_sign;
     }
 
+    if (s_breakaway_releasing != 0U) {
+        BallBalance_Control_ReleaseBreakaway(
+            input->dt_s,
+            input->now_ms
+        );
+        return s_breakaway_angle_deg;
+    }
+
+    if (s_breakaway_cooldown_active != 0U) {
+        if ((uint32_t)(input->now_ms -
+                       s_breakaway_cooldown_start_ms) <
+            BALL_BALANCE_BREAKAWAY_COOLDOWN_MS) {
+            s_control.breakaway_elapsed_ms = 0U;
+            return 0.0f;
+        }
+        s_breakaway_cooldown_active = 0U;
+        BallBalance_Control_ResetBreakawayProgress();
+    }
+
     if (BallBalance_Control_AbsF(reference_error_mm) <=
         BALL_BALANCE_BREAKAWAY_CLEAR_ERROR_MM) {
-        BallBalance_Control_ReleaseBreakaway(input->dt_s);
+        BallBalance_Control_StartBreakawayRelease();
+        BallBalance_Control_ReleaseBreakaway(
+            input->dt_s,
+            input->now_ms
+        );
         return s_breakaway_angle_deg;
     }
 
@@ -238,7 +296,11 @@ static float BallBalance_Control_UpdateBreakaway(
         );
 
     if (input->allow_breakaway_growth == 0U) {
-        BallBalance_Control_ReleaseBreakaway(input->dt_s);
+        BallBalance_Control_StartBreakawayRelease();
+        BallBalance_Control_ReleaseBreakaway(
+            input->dt_s,
+            input->now_ms
+        );
         return s_breakaway_angle_deg;
     }
 
@@ -249,14 +311,11 @@ static float BallBalance_Control_UpdateBreakaway(
     );
 
     if (progress_confirmed != 0U) {
-        BallBalance_Control_ReleaseBreakaway(input->dt_s);
-        return s_breakaway_angle_deg;
-    }
-
-    if ((reference_error_mm * filtered_velocity_mm_s > 0.0f) &&
-        (BallBalance_Control_AbsF(filtered_velocity_mm_s) >=
-         BALL_BALANCE_BREAKAWAY_RELEASE_SPEED_MM_S)) {
-        BallBalance_Control_ReleaseBreakaway(input->dt_s);
+        BallBalance_Control_StartBreakawayRelease();
+        BallBalance_Control_ReleaseBreakaway(
+            input->dt_s,
+            input->now_ms
+        );
         return s_breakaway_angle_deg;
     }
 
@@ -277,9 +336,11 @@ static float BallBalance_Control_UpdateBreakaway(
         if ((s_control.breakaway_elapsed_ms >=
              BALL_BALANCE_BREAKAWAY_DWELL_MS) &&
             (s_breakaway_angle_deg == 0.0f)) {
+            update_step =
+                BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S * input->dt_s;
             s_breakaway_angle_deg =
                 desired_angle_sign *
-                BALL_BALANCE_BREAKAWAY_START_DEG;
+                (BALL_BALANCE_BREAKAWAY_START_DEG + update_step);
             s_control.breakaway_update_count =
                 BallBalance_Control_IncrementU32(
                     s_control.breakaway_update_count
@@ -294,8 +355,8 @@ static float BallBalance_Control_UpdateBreakaway(
                     s_control.breakaway_update_count
                 );
         }
-    } else {
-        BallBalance_Control_ReleaseBreakaway(input->dt_s);
+    } else if (s_breakaway_angle_deg == 0.0f) {
+        s_control.breakaway_elapsed_ms = 0U;
     }
 
     s_breakaway_angle_deg = BallBalance_Control_LimitF(
@@ -318,6 +379,12 @@ static float BallBalance_Control_ApplyMotionProfile(
     float next_angle;
 
     *limited = 0U;
+    if (BallBalance_Control_AbsF(
+            requested_angle_deg - s_motion_target_angle_deg) >=
+        BALL_BALANCE_SERVO_COMMAND_DEADBAND_DEG) {
+        s_motion_target_angle_deg = requested_angle_deg;
+    }
+    requested_angle_deg = s_motion_target_angle_deg;
     angle_error = requested_angle_deg - s_command_angle_deg;
     desired_speed = BallBalance_Control_LimitF(
         angle_error / BALL_BALANCE_SERVO_TRACK_TIME_S,
@@ -367,9 +434,11 @@ void BallBalance_Control_Reset(void)
 
     s_command_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
     s_command_speed_deg_s = 0.0f;
+    s_motion_target_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
     s_filtered_velocity_mm_s = 0.0f;
     s_filtered_disturbance_mm_s2 = 0.0f;
     s_filtered_dynamic_angle_deg = 0.0f;
+    s_velocity_deadband_active = 1U;
     BallBalance_Control_ClearBreakaway();
     BallBalance_Control_ResetTargetLock();
     zero_output.requested_servo_angle_deg =
@@ -409,6 +478,8 @@ Project_Status_t BallBalance_Control_Update(
         s_filtered_velocity_mm_s = 0.0f;
         s_filtered_disturbance_mm_s2 = 0.0f;
         s_filtered_dynamic_angle_deg = 0.0f;
+        s_velocity_deadband_active = 1U;
+        s_motion_target_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
         requested_angle = BALL_BALANCE_LEVEL_ANGLE_DEG;
     } else if (input->data_valid == 0U) {
         BallBalance_Control_ClearBreakaway();
@@ -416,7 +487,9 @@ Project_Status_t BallBalance_Control_Update(
         s_filtered_velocity_mm_s = 0.0f;
         s_filtered_disturbance_mm_s2 = 0.0f;
         s_filtered_dynamic_angle_deg = 0.0f;
+        s_velocity_deadband_active = 1U;
         s_command_speed_deg_s = 0.0f;
+        s_motion_target_angle_deg = s_command_angle_deg;
         requested_angle = s_command_angle_deg;
     } else {
         filter_alpha = BallBalance_Control_FilterAlpha(
@@ -427,9 +500,18 @@ Project_Status_t BallBalance_Control_Update(
             filter_alpha *
             (input->estimated_velocity_mm_s -
              s_filtered_velocity_mm_s);
-        if (BallBalance_Control_AbsF(
-                s_filtered_velocity_mm_s) <=
-            BALL_BALANCE_VELOCITY_DEADBAND_MM_S) {
+        if (s_velocity_deadband_active != 0U) {
+            if (BallBalance_Control_AbsF(
+                    s_filtered_velocity_mm_s) >=
+                BALL_BALANCE_VELOCITY_DEADBAND_EXIT_MM_S) {
+                s_velocity_deadband_active = 0U;
+            }
+        } else if (BallBalance_Control_AbsF(
+                       s_filtered_velocity_mm_s) <=
+                   BALL_BALANCE_VELOCITY_DEADBAND_MM_S) {
+            s_velocity_deadband_active = 1U;
+        }
+        if (s_velocity_deadband_active != 0U) {
             result.filtered_velocity_mm_s = 0.0f;
         } else {
             result.filtered_velocity_mm_s =

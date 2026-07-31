@@ -58,7 +58,7 @@ BSP_WEAK void Gimbal_Update(void)
 
 BSP_WEAK void TaskFSM_Update(void)
 {
-    /* Medicine方案由task_fsm.c覆盖；正式任务通过TaskProfile_Update调用。 */
+    /* H题正式总任务由task_fsm.c覆盖。 */
 }
 
 BSP_WEAK void DebugMenu_Update(void)

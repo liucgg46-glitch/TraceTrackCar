@@ -167,7 +167,8 @@ $appRegisteredTests = @(
         ForEach-Object { $_.Groups[1].Value } |
         Sort-Object -Unique
 )
-if ($appTaskConfig -notmatch '#include\s+"test\.h"') {
+if (($appRegisteredTests.Count -ne 0) -and
+    ($appTaskConfig -notmatch '#include\s+"test\.h"')) {
     throw "APP task config registers tests but does not include test.h"
 }
 $invalidAppTests = @(

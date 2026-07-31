@@ -15,7 +15,7 @@
 #error "TASK_PROFILE_B_BASIC requires ROUTE_PROFILE_B_BASIC"
 #endif
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_H2_ROUND_STOP)
-#include "task_profile_h2_round_stop.h"
+#include "task_fsm.h"
 #if (ROUTE_PROFILE_SELECT != ROUTE_PROFILE_H_OVAL)
 #error "TASK_PROFILE_H2_ROUND_STOP requires ROUTE_PROFILE_H_OVAL"
 #endif
@@ -32,7 +32,7 @@ void TaskProfile_Init(void)
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_B_BASIC)
     BTask_Init();
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_H2_ROUND_STOP)
-    H2Task_Init();
+    TaskFSM_Init();
 #endif
 }
 
@@ -45,7 +45,7 @@ void TaskProfile_Reset(void)
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_B_BASIC)
     BTask_Reset();
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_H2_ROUND_STOP)
-    H2Task_Reset();
+    TaskFSM_Reset();
 #endif
 }
 
@@ -58,7 +58,7 @@ void TaskProfile_Update(void)
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_B_BASIC)
     BTask_Update();
 #elif (TASK_PROFILE_SELECT == TASK_PROFILE_H2_ROUND_STOP)
-    H2Task_Update();
+    TaskFSM_Update();
 #endif
 }
 

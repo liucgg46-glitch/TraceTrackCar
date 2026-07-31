@@ -1,9 +1,16 @@
 #include "route_manager.h"
 #include "route_config.h"
 #include "route_profile_select.h"
+#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_H_OVAL)
+#include "route_profile_h_oval.h"
+#endif
 
 static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
 static Route_ActionState_t s_action_state = ROUTE_ACTION_STATE_IDLE;
+static uint32_t s_route_events;
+static uint8_t s_last_left_a;
+static uint8_t s_last_arrived;
+static uint8_t s_last_error;
 
 void RouteManager_Init(uint32_t now_ms)
 {
@@ -11,6 +18,10 @@ void RouteManager_Init(uint32_t now_ms)
     RouteProfile_Init(now_ms);
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
+    s_route_events = ROUTE_EVENT_NONE;
+    s_last_left_a = 0U;
+    s_last_arrived = 0U;
+    s_last_error = 0U;
 }
 
 void RouteManager_Reset(uint32_t now_ms)
@@ -19,6 +30,57 @@ void RouteManager_Reset(uint32_t now_ms)
     RouteProfile_Reset(now_ms);
     s_control_mode = ROUTE_CONTROL_STOP;
     s_action_state = ROUTE_ACTION_STATE_IDLE;
+    s_route_events = ROUTE_EVENT_NONE;
+    s_last_left_a = 0U;
+    s_last_arrived = 0U;
+    s_last_error = 0U;
+}
+
+static void RouteManager_UpdateEvents(void)
+{
+    RouteProfile_Info_t profile_info;
+
+    if (RouteProfile_GetInfo(&profile_info) != PROJECT_OK) {
+        return;
+    }
+
+    if ((profile_info.configured != 0U) &&
+        (profile_info.error != 0U) &&
+        (s_last_error == 0U)) {
+        s_route_events |= ROUTE_EVENT_FAILED;
+    }
+
+    /*
+     * 当前H椭圆赛道profile已经能真实区分“离开A”和“一圈完成”。
+     * B点尚无独立现场识别条件，因此不在这里伪造PASSED_B事件。
+     */
+    if ((profile_info.state != 0U) &&
+        (profile_info.arrived != 0U) &&
+        (s_last_arrived == 0U)) {
+        s_route_events |= ROUTE_EVENT_LAP_COMPLETE;
+    }
+
+#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_H_OVAL)
+    {
+        HOvalRoute_Info_t h_info;
+
+        if (HRoute_GetH2Info(&h_info) == PROJECT_OK) {
+            if ((h_info.left_a != 0U) && (s_last_left_a == 0U)) {
+                s_route_events |= ROUTE_EVENT_LEFT_A;
+            }
+            if (h_info.fault == H_OVAL_ROUTE_FAULT_LINE_LOST) {
+                s_route_events |= ROUTE_EVENT_LINE_LOST;
+            } else if ((h_info.fault != H_OVAL_ROUTE_FAULT_NONE) &&
+                       (h_info.fault != H_OVAL_ROUTE_FAULT_LINE_LOST)) {
+                s_route_events |= ROUTE_EVENT_FAILED;
+            }
+            s_last_left_a = h_info.left_a;
+        }
+    }
+#endif
+
+    s_last_arrived = profile_info.arrived;
+    s_last_error = profile_info.error;
 }
 
 Project_Status_t RouteManager_ConfigureMission(
@@ -70,6 +132,7 @@ Route_ControlMode_t RouteManager_Update(const LineDetect_Result_t *line,
                                          out,
                                          request,
                                          now_ms);
+    RouteManager_UpdateEvents();
 
     return s_control_mode;
 }
@@ -110,4 +173,14 @@ Project_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->line_lost_ms = line_info.lost_ms;
 
     return PROJECT_OK;
+}
+
+uint32_t RouteManager_GetEvents(void)
+{
+    return s_route_events;
+}
+
+void RouteManager_ClearEvents(uint32_t events)
+{
+    s_route_events &= ~events;
 }

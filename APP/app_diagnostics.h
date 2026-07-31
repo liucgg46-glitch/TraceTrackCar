@@ -5,10 +5,10 @@
 extern "C" {
 #endif
 
-/* 正式固件运行指示灯任务，建议以 10 ms 周期调用。 */
+/* 正式固件运行指示灯任务，建议以10 ms周期调度。 */
 void AppDiagnostics_HeartbeatUpdate(void);
 
-/* Medicine 状态机运行日志，建议以 200 ms 周期调用。 */
+/* H题总任务状态机串口日志，建议以200 ms周期调度。 */
 void AppDiagnostics_TaskFSMLogUpdate(void);
 
 #ifdef __cplusplus

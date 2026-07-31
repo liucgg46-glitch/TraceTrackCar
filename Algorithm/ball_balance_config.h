@@ -26,7 +26,7 @@
 #define BALL_BALANCE_MIN_CONFIDENCE                     60U      /* K210位置数据允许参与控制的最低置信度 */
 #define BALL_BALANCE_POSITION_ABS_MAX_MM_X10            1200     /* 钢球位置允许的最大绝对值，单位0.1mm */
 
-#define BALL_BALANCE_NATURAL_FREQ_RAD_S                 2.5f     /* 闭环自然频率，越大响应越快、控制越强 */
+#define BALL_BALANCE_NATURAL_FREQ_RAD_S                 1.8f     /* 闭环自然频率，越大响应越快、控制越强 */
 #define BALL_BALANCE_DAMPING_RATIO                      1.15f    /* 闭环阻尼比，越大制动越强、振荡越小 */
 
 /*
@@ -34,12 +34,13 @@
  * 参考加速度降权用于避免加速/制动切换直接造成舵机大角度反向。
  */
 #define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
-#define BALL_BALANCE_VELOCITY_DEADBAND_MM_S             3.0f     /* 小于该速度时按静止处理，降低速度噪声 */
+#define BALL_BALANCE_VELOCITY_DEADBAND_MM_S             3.0f     /* 进入速度死区的阈值，降低零速附近噪声 */
+#define BALL_BALANCE_VELOCITY_DEADBAND_EXIT_MM_S        6.0f     /* 退出速度死区的阈值，避免零速状态反复切换 */
 #define BALL_BALANCE_DISTURBANCE_FILTER_TIME_S          0.200f   /* 等效扰动估计值的低通滤波时间常数 */
 #define BALL_BALANCE_DISTURBANCE_COMPENSATION_GAIN      0.0f     /* 扰动估计参与控制的比例，0表示关闭 */
 #define BALL_BALANCE_REFERENCE_ACCEL_FEEDFORWARD_GAIN   0.0f     /* 参考加速度前馈比例，0表示关闭 */
 #define BALL_BALANCE_DYNAMIC_FILTER_TIME_S              0.060f   /* 动态舵机角的低通滤波时间常数 */
-#define BALL_BALANCE_DYNAMIC_HARD_LIMIT_DEG             40.0f     /* 正常状态反馈允许输出的最大动态角 */
+#define BALL_BALANCE_DYNAMIC_HARD_LIMIT_DEG             30.0f    /* 正常状态反馈允许输出的最大动态角 */
 
  /* 舵机客观存在的全行程边界；滚球业务角度另有独立限幅。 */
 #define BALL_BALANCE_SERVO_PHYSICAL_MIN_DEG             0.0f     /* 舵机允许输出的绝对最小角度 */
@@ -57,9 +58,10 @@
  * 舵机命令采用速度、加速度受限的二阶轨迹，不再使用每周期固定角度硬限幅。
  * 接近请求角时，TRACK_TIME自动降低速度以减少顿挫。
  */
-#define BALL_BALANCE_SERVO_MAX_SPEED_DEG_S              180.0f   /* 舵机命令允许的最大角速度 */
-#define BALL_BALANCE_SERVO_MAX_ACCEL_DEG_S2             4000.0f  /* 舵机命令允许的最大角加速度 */
-#define BALL_BALANCE_SERVO_TRACK_TIME_S                 0.015f   /* 舵机接近目标角时的减速跟踪时间 */
+#define BALL_BALANCE_SERVO_MAX_SPEED_DEG_S              120.0f   /* 舵机命令允许的最大角速度 */
+#define BALL_BALANCE_SERVO_MAX_ACCEL_DEG_S2             2500.0f  /* 舵机命令允许的最大角加速度 */
+#define BALL_BALANCE_SERVO_TRACK_TIME_S                 0.030f   /* 舵机接近目标角时的减速跟踪时间 */
+#define BALL_BALANCE_SERVO_COMMAND_DEADBAND_DEG         0.4f     /* 小于该差值时保持上一目标角，抑制PWM微抖 */
 
 #define BALL_REFERENCE_MAX_SPEED_MM_S                   80.0f    /* 参考位置轨迹允许的最大速度 */
 #define BALL_REFERENCE_MAX_ACCEL_MM_S2                  160.0f   /* 参考位置轨迹允许的最大加速度 */
@@ -77,16 +79,16 @@
  */
 #define BALL_BALANCE_BREAKAWAY_MIN_ERROR_MM             8.0f     /* 误差大于该值时才允许启动脱困补偿 */
 #define BALL_BALANCE_BREAKAWAY_CLEAR_ERROR_MM           3.0f     /* 误差小于该值时开始撤销脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_DWELL_MS                 50.0      /* 满足卡住条件多久后启动脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_START_DEG                10.0f     /* 脱困补偿启动时立即加入的初始角度 */
-#define BALL_BALANCE_BREAKAWAY_MAX_DEG                  20.0f     /* 脱困补偿允许达到的最大附加角度 */
-#define BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S             4.0f     /* 脱困补偿角度的增长速度 */
-#define BALL_BALANCE_BREAKAWAY_RELEASE_DEG_S            2.0f    /* 钢球开始运动后脱困角的撤销速度 */
-#define BALL_BALANCE_BREAKAWAY_STUCK_SPEED_MM_S         6.0f    /* 低于该速度时才可能判定钢球卡住 */
-#define BALL_BALANCE_BREAKAWAY_RELEASE_SPEED_MM_S       15.0f     /* 超过该速度时开始撤销脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_PROGRESS_MM              0.5f     /* 单次VALID测量确认有效前进的最小距离 */
-#define BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT           2U       /* 连续多少次有效前进后确认已经脱困 */
-#define BALL_BALANCE_BREAKAWAY_VALID_AGE_MS             60U      /* 允许增加脱困角的VALID数据最大年龄 */
+#define BALL_BALANCE_BREAKAWAY_DWELL_MS                 180U     /* 满足卡住条件多久后启动脱困补偿 */
+#define BALL_BALANCE_BREAKAWAY_START_DEG                0.0f     /* 脱困从零开始平滑增长，禁止启动瞬跳 */
+#define BALL_BALANCE_BREAKAWAY_MAX_DEG                  20.0f    /* 脱困补偿允许达到的最大附加角度 */
+#define BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S             10.0f    /* 脱困补偿角度的增长速度 */
+#define BALL_BALANCE_BREAKAWAY_RELEASE_DEG_S            8.0f     /* 钢球开始运动后脱困角的撤销速度 */
+#define BALL_BALANCE_BREAKAWAY_COOLDOWN_MS              300U     /* 脱困角释放到零后的重新触发冷却时间 */
+#define BALL_BALANCE_BREAKAWAY_STUCK_SPEED_MM_S         6.0f     /* 低于该速度时才可能判定钢球卡住 */
+#define BALL_BALANCE_BREAKAWAY_PROGRESS_MM              2.0f     /* 单次VALID测量确认有效前进的最小距离 */
+#define BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT           3U       /* 连续多少次有效前进后确认已经脱困 */
+#define BALL_BALANCE_BREAKAWAY_VALID_AGE_MS             120U     /* 允许增加脱困角的VALID数据最大年龄 */
 
 /* 三状态增广卡尔曼滤波器参数。协方差单位与对应状态平方保持一致。 */
 #define BALL_ESTIMATOR_Q_POSITION                       0.02f    /* 位置状态的过程噪声大小 */

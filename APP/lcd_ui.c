@@ -6,6 +6,7 @@
 #include "chassis.h"
 #include "motion_action.h"
 #include "route_manager.h"
+#include "task_fsm.h"
 #include "line_detect.h"
 #include "vehicle_config.h"
 #include <stdio.h>
@@ -111,6 +112,72 @@ static void LcdUi_CopyLine(uint8_t index, const char *line)
         s_lcd_status_line[index][i++] = ' ';
     }
     s_lcd_status_line[index][i] = '\0';
+}
+
+static const char *LcdUi_MissionModeName(Mission_Mode_t mode)
+{
+    switch (mode) {
+        case MISSION_MODE_2_LINE_LAP: return "M2 LINE LAP";
+        case MISSION_MODE_3_BALL_TRANSFER: return "M3 BALL +-50";
+        case MISSION_MODE_4_LINE_TO_B_WITH_BALL_O: return "M4 A-B BALL O";
+        case MISSION_MODE_5_LINE_LAP_WITH_BALL_O: return "M5 LAP BALL O";
+        case MISSION_MODE_6_LINE_LAP_WITH_CUSTOM_BALL: return "M6 LAP CUSTOM";
+        default: return "M? UNKNOWN";
+    }
+}
+
+static const char *LcdUi_MissionStateName(Mission_State_t state)
+{
+    switch (state) {
+        case MISSION_STATE_BOOT: return "BOOT";
+        case MISSION_STATE_IDLE: return "IDLE";
+        case MISSION_STATE_ARMED: return "ARMED";
+        case MISSION_STATE_RUNNING: return "RUN";
+        case MISSION_STATE_FINISH: return "FINISH";
+        case MISSION_STATE_ABORT: return "ABORT";
+        case MISSION_STATE_FAULT: return "FAULT";
+        default: return "UNKNOWN";
+    }
+}
+
+static const char *LcdUi_MissionResultName(Mission_Result_t result)
+{
+    switch (result) {
+        case MISSION_RESULT_PASS: return "PASS";
+        case MISSION_RESULT_TIME_FAIL: return "TIME FAIL";
+        case MISSION_RESULT_BALL_ERROR_FAIL: return "BALL FAIL";
+        case MISSION_RESULT_TIMEOUT: return "TIMEOUT";
+        case MISSION_RESULT_USER_ABORT: return "USER ABORT";
+        case MISSION_RESULT_ROUTE_FAULT: return "ROUTE FAULT";
+        case MISSION_RESULT_BALL_FAULT: return "BALL FAULT";
+        case MISSION_RESULT_NOT_READY: return "NOT READY";
+        case MISSION_RESULT_NONE:
+        default: return "NONE";
+    }
+}
+
+static void LcdUi_FormatX10(char *out, uint16_t size, int16_t value_x10)
+{
+    int16_t abs_value;
+
+    if ((out == 0) || (size == 0U)) {
+        return;
+    }
+    abs_value = (value_x10 < 0) ? (int16_t)(-value_x10) : value_x10;
+    (void)snprintf(out, size, "%c%d.%01d",
+                   (value_x10 < 0) ? '-' : '+',
+                   (int)(abs_value / 10),
+                   (int)(abs_value % 10));
+}
+
+static void LcdUi_FormatTime(char *out, uint16_t size, uint32_t ms)
+{
+    if ((out == 0) || (size == 0U)) {
+        return;
+    }
+    (void)snprintf(out, size, "%lu.%01lus",
+                   (unsigned long)(ms / 1000UL),
+                   (unsigned long)((ms / 100UL) % 10UL));
 }
 
 static BSP_Status_t LcdUi_DrawBaseStep(uint8_t step)
@@ -311,6 +378,113 @@ void LcdUi_ShowBoot(void)
 #endif
 }
 
+static uint8_t LcdUi_BuildMissionDashboard(void)
+{
+    Mission_Info_t mission;
+    char text[48];
+    char target[16];
+    char position[16];
+    char error[16];
+    char max_error[16];
+    char time_text[16];
+
+    if (TaskFSM_GetInfo(&mission) != BSP_OK) {
+        return 0U;
+    }
+    if (mission.initialized == 0U) {
+        return 0U;
+    }
+
+    LcdUi_FormatX10(target,
+                    sizeof(target),
+                    (mission.mode == MISSION_MODE_6_LINE_LAP_WITH_CUSTOM_BALL) ?
+                    mission.custom_ball_target_mm_x10 :
+                    mission.active_ball_target_mm_x10);
+    LcdUi_FormatX10(position,
+                    sizeof(position),
+                    mission.current_ball_position_mm_x10);
+    LcdUi_FormatX10(error,
+                    sizeof(error),
+                    mission.current_ball_error_mm_x10);
+    LcdUi_FormatX10(max_error,
+                    sizeof(max_error),
+                    mission.max_ball_error_mm_x10);
+    LcdUi_FormatTime(time_text, sizeof(time_text), mission.elapsed_ms);
+
+    (void)snprintf(text, sizeof(text), "%s %s",
+                   LcdUi_MissionStateName(mission.state),
+                   LcdUi_MissionModeName(mission.mode));
+    LcdUi_CopyDashboardLine(0U, text);
+
+    if (mission.state == MISSION_STATE_IDLE) {
+        LcdUi_CopyDashboardLine(1U, "K1/K2 SELECT");
+        (void)snprintf(text, sizeof(text), "M6 TARGET:%sMM", target);
+        LcdUi_CopyDashboardLine(2U, text);
+        LcdUi_CopyDashboardLine(3U, "K3 -5MM K4 +5MM");
+        LcdUi_CopyDashboardLine(4U, "K5 ARM");
+    } else if (mission.state == MISSION_STATE_ARMED) {
+        (void)snprintf(text, sizeof(text), "READY R%u B%u A%u",
+                       (unsigned int)mission.route_ready,
+                       (unsigned int)mission.ball_ready,
+                       (unsigned int)mission.armed_ready);
+        LcdUi_CopyDashboardLine(1U, text);
+        (void)snprintf(text, sizeof(text), "BALL TGT:%sMM", target);
+        LcdUi_CopyDashboardLine(2U, text);
+        LcdUi_CopyDashboardLine(3U,
+                                (mission.armed_ready != 0U) ?
+                                "READY KEY5 START" :
+                                "WAIT SENSOR/BALL");
+        (void)snprintf(text, sizeof(text), "FAULT:%u",
+                       (unsigned int)mission.fault_code);
+        LcdUi_CopyDashboardLine(4U, text);
+    } else if (mission.state == MISSION_STATE_RUNNING) {
+        (void)snprintf(text, sizeof(text), "SUB:%u TIME:%s",
+                       (unsigned int)mission.substate,
+                       time_text);
+        LcdUi_CopyDashboardLine(1U, text);
+        (void)snprintf(text, sizeof(text), "T:%s P:%s",
+                       target,
+                       position);
+        LcdUi_CopyDashboardLine(2U, text);
+        (void)snprintf(text, sizeof(text), "E:%s MAX:%s",
+                       error,
+                       max_error);
+        LcdUi_CopyDashboardLine(3U, text);
+        (void)snprintf(text, sizeof(text), "EV:%02lX FF:%s K5STOP",
+                       (unsigned long)mission.route_events,
+                       (mission.vehicle_feedforward_enabled != 0U) ?
+                       "ON" : "OFF");
+        LcdUi_CopyDashboardLine(4U, text);
+    } else {
+        (void)snprintf(text, sizeof(text), "RESULT:%s",
+                       LcdUi_MissionResultName(mission.result));
+        LcdUi_CopyDashboardLine(1U, text);
+        (void)snprintf(text, sizeof(text), "TIME:%s LIMIT:%lus",
+                       time_text,
+                       (unsigned long)(mission.score_limit_ms / 1000UL));
+        LcdUi_CopyDashboardLine(2U, text);
+        (void)snprintf(text, sizeof(text), "MAX ERR:%sMM", max_error);
+        LcdUi_CopyDashboardLine(3U, text);
+        (void)snprintf(text, sizeof(text), "FAULT:%u KEY5 BACK",
+                       (unsigned int)mission.fault_code);
+        LcdUi_CopyDashboardLine(4U, text);
+    }
+
+    (void)snprintf(text, sizeof(text), "ROUTE READY:%u EV:%02lX",
+                   (unsigned int)mission.route_ready,
+                   (unsigned long)mission.route_events);
+    LcdUi_CopyDashboardLine(5U, text);
+    (void)snprintf(text, sizeof(text), "BALL READY:%u FF:%s",
+                   (unsigned int)mission.ball_ready,
+                   (mission.vehicle_feedforward_enabled != 0U) ?
+                   "ON" : "OFF");
+    LcdUi_CopyDashboardLine(6U, text);
+    LcdUi_CopyDashboardLine(7U, "KEY6-9 NOT TASKFSM");
+    LcdUi_CopyDashboardLine(8U, "NO TEST TASKS");
+    LcdUi_CopyDashboardLine(9U, "REAL TEST REQUIRED");
+    return 1U;
+}
+
 static void LcdUi_BuildNormalDashboard(void)
 {
     Sensor_Attitude_t attitude;
@@ -328,6 +502,10 @@ static void LcdUi_BuildNormalDashboard(void)
     uint8_t chassis_ok;
     uint8_t distance_ok;
     char text[48];
+
+    if (LcdUi_BuildMissionDashboard() != 0U) {
+        return;
+    }
 
     attitude_ok = (uint8_t)(Sensor_GetAttitude(&attitude) == BSP_OK);
     line_ok = (uint8_t)(LineFollow_GetInfo(&line) == BSP_OK);
