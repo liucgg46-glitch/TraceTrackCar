@@ -386,6 +386,63 @@ void Test_K210_RoadProfileUpdate(void)
     }
 }
 
+void Test_K210_TargetCommUpdate(void)
+{
+    static uint32_t last_status_ms = 0U;
+    K210_Comm_Info_t info;
+    uint16_t target_x;
+    uint16_t target_y;
+    uint8_t target_valid;
+    char buf[192];
+    int length;
+    uint32_t now_ms;
+
+    if (K210_Comm_GetNewTarget(
+            &target_x,
+            &target_y,
+            &target_valid
+        ) == BSP_OK) {
+        length = snprintf(
+            buf,
+            sizeof(buf),
+            "K210 TARGET x=%u y=%u valid=%u\r\n",
+            (unsigned int)target_x,
+            (unsigned int)target_y,
+            (unsigned int)target_valid
+        );
+        if ((length > 0) &&
+            (length < (int)sizeof(buf))) {
+            Test_K210_SendText(buf);
+        }
+    }
+
+    now_ms = BSP_GetTickMs();
+    if ((uint32_t)(now_ms - last_status_ms) <
+        K210_DIGIT_LOG_INTERVAL_MS) {
+        return;
+    }
+    last_status_ms = now_ms;
+
+    if (K210_Comm_GetInfo(&info) != BSP_OK) {
+        return;
+    }
+    length = snprintf(
+        buf,
+        sizeof(buf),
+        "K210 STATUS online=%u frames=%lu check_err=%lu "
+        "format_err=%lu timeout=%lu\r\n",
+        (unsigned int)info.online,
+        (unsigned long)info.valid_frame_count,
+        (unsigned long)info.checksum_error_count,
+        (unsigned long)info.format_error_count,
+        (unsigned long)info.timeout_count
+    );
+    if ((length > 0) &&
+        (length < (int)sizeof(buf))) {
+        Test_K210_SendText(buf);
+    }
+}
+
 
 
 void Test_K210_SingleDigitCommUpdate(void)

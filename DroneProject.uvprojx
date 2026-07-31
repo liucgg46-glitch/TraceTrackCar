@@ -648,11 +648,6 @@
               <FilePath>.\Common\project_status.h</FilePath>
             </File>
             <File>
-              <FileName>project_build_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Common\project_build_config.h</FilePath>
-            </File>
-            <File>
               <FileName>project_critical.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Common\project_critical.h</FilePath>
@@ -1118,19 +1113,19 @@
           <GroupName>Test</GroupName>
           <Files>
             <File>
-              <FileName>test_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Test\test_config.h</FilePath>
-            </File>
-            <File>
-              <FileName>test_task_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Test\test_task_config.h</FilePath>
-            </File>
-            <File>
               <FileName>test.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Test\test.c</FilePath>
+            </File>
+            <File>
+              <FileName>test_k210_comm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Test\test_k210_comm.c</FilePath>
+            </File>
+            <File>
+              <FileName>test_k210_comm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Test\test_k210_comm.h</FilePath>
             </File>
             <File>
               <FileName>test.h</FileName>

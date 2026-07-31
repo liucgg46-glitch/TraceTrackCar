@@ -1,7 +1,5 @@
 #include "test.h"
 
-#if (PROJECT_TEST_TASKS_ENABLE != 0U)
-
 #include "bsp_gpio.h"
 #include "bsp_pwm.h"
 #include "bsp_encoder.h"
@@ -39,11 +37,16 @@
 #include "drv_buzzer.h"
 #include "task_fsm.h"
 #include "k210_comm.h"
+#include "drv_servo.h"
+#include "ball_balance_app.h"
+#include "ball_balance_k210_adapter.h"
 #include "bsp_systick.h"
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
+
+#define TEST_SERVO_CAL_STEP_ANGLE_DEG             10U
 
 /* LCD公开测试入口使用的内部异步显示状态机，不对任务表暴露。 */
 void Test_AsyncDisplay_Update(void);
@@ -3118,6 +3121,120 @@ void Test_K210_BallCommUpdate(void)
         );
     }
 }
+
+static void Test_ServoCal_SendText(const char *text)
+{
+    uint16_t length;
+
+    if (text == 0) {
+        return;
+    }
+    length = 0U;
+    while ((text[length] != '\0') &&
+           (length < 255U)) {
+        length++;
+    }
+    if (length > 0U) {
+        (void)BSP_UART_WriteFrame(
+            DEBUG_UART_PORT,
+            (const uint8_t *)text,
+            length
+        );
+    }
+}
+
+static void Test_ServoCal_Apply(uint16_t angle_deg,
+                                const char *command)
+{
+    BSP_Status_t status;
+    char line[128];
+    int length;
+
+    status = Drv_Servo_SetHorizontalAngleDeg(angle_deg);
+    length = snprintf(
+        line,
+        sizeof(line),
+        "[ServoCal] angle=%udeg pulse=%uus command=%s status=%s\r\n",
+        (unsigned int)angle_deg,
+        (unsigned int)Drv_Servo_GetHorizontalPulseUs(),
+        command,
+        (status == BSP_OK) ? "OK" : "ERROR"
+    );
+    if ((length > 0) &&
+        (length < (int)sizeof(line))) {
+        Test_ServoCal_SendText(line);
+    }
+}
+
+void Test_ServoBeamCalibration_Update(void)
+{
+    static uint8_t initialized = 0U;
+    static uint16_t angle_deg = 0U;
+
+    if (initialized == 0U) {
+        Chassis_EmergencyStop();
+        Test_ServoCal_SendText(
+            "[ServoCal] range=0..180deg pulse=500..2500us step=10deg\r\n"
+            "[ServoCal] KEY1=0deg KEY2=180deg KEY3=+10deg KEY4=-10deg\r\n"
+            "[ServoCal] KEY5=stop/0deg\r\n"
+        );
+        Test_ServoCal_Apply(angle_deg, "INIT_0DEG");
+        initialized = 1U;
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
+        angle_deg = 0U;
+        Test_ServoCal_Apply(angle_deg, "KEY1_0DEG");
+        return;
+    }
+#endif
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
+        angle_deg = 180U;
+        Test_ServoCal_Apply(angle_deg, "KEY2_180DEG");
+        return;
+    }
+#endif
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
+        if (angle_deg <=
+            (180U - TEST_SERVO_CAL_STEP_ANGLE_DEG)) {
+            angle_deg =
+                (uint16_t)(
+                    angle_deg +
+                    TEST_SERVO_CAL_STEP_ANGLE_DEG
+                );
+        } else {
+            angle_deg = 180U;
+        }
+        Test_ServoCal_Apply(angle_deg, "KEY3_PLUS");
+        return;
+    }
+#endif
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4) != 0U) {
+        if (angle_deg >= TEST_SERVO_CAL_STEP_ANGLE_DEG) {
+            angle_deg =
+                (uint16_t)(
+                    angle_deg -
+                    TEST_SERVO_CAL_STEP_ANGLE_DEG
+                );
+        } else {
+            angle_deg = 0U;
+        }
+        Test_ServoCal_Apply(angle_deg, "KEY4_MINUS");
+        return;
+    }
+#endif
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5) != 0U) {
+        Chassis_EmergencyStop();
+        angle_deg = 0U;
+        Test_ServoCal_Apply(angle_deg, "KEY5_STOP");
+    }
+#endif
+}
 static const char *Test_BallState_StateText(uint8_t state)
 {
     switch (state) {
@@ -3323,9 +3440,10 @@ static void Test_BallState_PrintStatus(const char *reason)
         sizeof(line),
         "[BallState] ref=%ld.%ldmm "
         "dyn=%ld.%02lddeg "
-        "stiction=%ld.%02lddeg "
-        "servo=%u.%udeg now=%u.%udeg "
-        "settled=%u reject=%u fault=%u\r\n",
+        "breakaway=%ld.%02lddeg "
+        "servo=%u.%udeg speed=%ld.%lddeg/s "
+        "now=%u.%udeg "
+        "locked=%u reject=%u fault=%u\r\n",
         (long)(
             Test_BallState_FloatToX10(
                 app_info.reference.reference_position_mm
@@ -3355,14 +3473,14 @@ static void Test_BallState_PrintStatus(const char *reason)
         (long)(
             Test_BallState_FloatToX100(
                 app_info.control.output
-                    .stiction_angle_deg
+                    .breakaway_angle_deg
             ) / 100
         ),
         (long)(
             Test_BallState_FloatToX100(
                 Test_BallState_AbsF(
                     app_info.control.output
-                        .stiction_angle_deg
+                        .breakaway_angle_deg
                 )
             ) % 100
         ),
@@ -3373,6 +3491,18 @@ static void Test_BallState_PrintStatus(const char *reason)
         (unsigned int)(
             app_info.control.output.command_angle_x10 %
             10U
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                app_info.control.output.servo_speed_deg_s
+            ) / 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                Test_BallState_AbsF(
+                    app_info.control.output.servo_speed_deg_s
+                )
+            ) % 10
         ),
         (servo_info_ok != 0U) ?
             (unsigned int)(
@@ -3411,8 +3541,9 @@ static void Test_BallState_PrintCsv(
         line,
         sizeof(line),
         "BB,%lu,%u,%u,%u,%d,"
-        "%ld,%ld,%ld,%ld,%ld,%ld,"
         "%ld,%ld,%ld,%ld,%ld,"
+        "%ld,%ld,%ld,%ld,"
+        "%ld,%ld,%ld,%ld,%ld,%ld,"
         "%u,%u,%u\r\n",
         (unsigned long)now_ms,
         (unsigned int)app->state,
@@ -3426,7 +3557,13 @@ static void Test_BallState_PrintCsv(
             app->estimator.velocity_mm_s
         ),
         (long)Test_BallState_FloatToX10(
+            app->control.output.filtered_velocity_mm_s
+        ),
+        (long)Test_BallState_FloatToX10(
             app->estimator.disturbance_mm_s2
+        ),
+        (long)Test_BallState_FloatToX10(
+            app->control.output.filtered_disturbance_mm_s2
         ),
         (long)Test_BallState_FloatToX10(
             app->reference.reference_position_mm
@@ -3437,6 +3574,10 @@ static void Test_BallState_PrintCsv(
         (long)Test_BallState_FloatToX10(
             app->reference.reference_acceleration_mm_s2
         ),
+        (long)Test_BallState_FloatToX10(
+            app->control.output
+                .reference_accel_feedforward_mm_s2
+        ),
         (long)Test_BallState_FloatToX100(
             app->equilibrium_angle_deg
         ),
@@ -3444,13 +3585,16 @@ static void Test_BallState_PrintCsv(
             app->control.output.limited_dynamic_angle_deg
         ),
         (long)Test_BallState_FloatToX100(
-            app->control.output.stiction_angle_deg
+            app->control.output.breakaway_angle_deg
         ),
         (long)Test_BallState_FloatToX10(
             app->vehicle_disturbance_mm_s2
         ),
         (long)Test_BallState_FloatToX100(
             app->control.output.servo_angle_deg
+        ),
+        (long)Test_BallState_FloatToX10(
+            app->control.output.servo_speed_deg_s
         ),
         (unsigned int)app->data_timeout,
         (unsigned int)
@@ -3617,6 +3761,14 @@ void Test_BallBalanceControl_Update(void)
             Test_BallState_SendLine(banner_line);
         }
 
+        Test_BallState_SendLine(
+            "[BallState] CSV BB,time_ms,app,vision,conf,raw_x10,"
+            "est_x10,vel_x10,fvel_x10,dist_x10,fdist_x10,"
+            "ref_x10,refv_x10,refa_x10,refaff_x10,"
+            "eq_x100,dyn_x100,breakaway_x100,vehicle_x10,"
+            "servo_x100,servov_x10,timeout,reject,locked\r\n"
+        );
+        Test_BallState_PrintStatus("INIT");
         banner_sent = 1U;
     }
 
@@ -3909,5 +4061,3 @@ void Test_K210_GrayTuneUpdate(void)
     }
 #endif
 }
-
-#endif /* PROJECT_TEST_TASKS_ENABLE */

@@ -105,6 +105,7 @@ SRCS := \
   Algorithm/ball_equilibrium_map.c \
   Algorithm/ball_balance_control.c \
   Test/test.c \
+  Test/test_k210_comm.c \
   Driver/drv_encoder.c \
   Driver/drv_motor.c \
   Driver/driver_all.c \

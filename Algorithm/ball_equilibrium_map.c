@@ -4,8 +4,8 @@ static BallEquilibriumMap_Info_t s_map;
 
 static uint8_t BallEquilibriumMap_AngleSafe(float angle_deg)
 {
-    return ((angle_deg >= BALL_BALANCE_ABS_SAFE_MIN_DEG) &&
-            (angle_deg <= BALL_BALANCE_ABS_SAFE_MAX_DEG)) ? 1U : 0U;
+    return ((angle_deg >= BALL_BALANCE_SERVO_PHYSICAL_MIN_DEG) &&
+            (angle_deg <= BALL_BALANCE_SERVO_PHYSICAL_MAX_DEG)) ? 1U : 0U;
 }
 
 void BallEquilibriumMap_Init(void)

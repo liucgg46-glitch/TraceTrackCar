@@ -67,25 +67,24 @@ COMPLETE
 
 ## 4. 正式任务表
 
-`PROJECT_TEST_TASKS_ENABLE == 0U`时，`APP/app_task_config.h`使用完整基础循迹
-任务链。任务顺序必须保持为传感器和编码器先更新，状态机与循迹随后计算，
+需要切回基础循迹时，把`APP/app_task_config.h`中的唯一任务列表整体替换为
+以下任务链。任务顺序必须保持为传感器和编码器先更新，状态机与循迹随后计算，
 底盘最后执行：
 
 ```c
-#define APP_SCHEDULER_TASK_LIST_DEFINE()                                            \
-Task_t task_list[] = {                                                              \
-    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 运行心跳 */                    \
-    { AppTask_BSP_Background, 1U, 0U }, /* UART、总线和异步Driver后台 */          \
-    { Key_Update, 10U, 0U }, /* 按键扫描 */                                        \
-    { Sensor_Update, 1U, 0U }, /* 灰度、IMU和测距 */                               \
-    { Encoder_Update, 10U, 0U }, /* 速度反馈 */                                    \
-    { TaskProfile_Update, 10U, 0U }, /* 当前整车任务状态机 */                     \
-    { LineTrack_Update, 10U, 0U }, /* 灰度、Route和循迹 */                         \
-    { Motion_Update, 10U, 0U }, /* Route动作 */                                    \
-    { Chassis_Update, 10U, 0U }, /* 底盘速度闭环 */                                \
-    { LCD_Update, 20U, 0U }, /* 异步状态页面 */                                    \
-};                                                                                  \
-const uint8_t TASK_NUM =                                                             \
+Task_t task_list[] = {
+    { AppDiagnostics_HeartbeatUpdate, 10U, 0U }, /* 运行心跳 */
+    { AppTask_BSP_Background, 1U, 0U }, /* UART、总线和异步Driver后台 */
+    { Key_Update, 10U, 0U }, /* 按键扫描 */
+    { Sensor_Update, 1U, 0U }, /* 灰度、IMU和测距 */
+    { Encoder_Update, 10U, 0U }, /* 速度反馈 */
+    { TaskProfile_Update, 10U, 0U }, /* 当前整车任务状态机 */
+    { LineTrack_Update, 10U, 0U }, /* 灰度、Route和循迹 */
+    { Motion_Update, 10U, 0U }, /* Route动作 */
+    { Chassis_Update, 10U, 0U }, /* 底盘速度闭环 */
+    { LCD_Update, 20U, 0U }, /* 异步状态页面 */
+};
+const uint8_t TASK_NUM =
     (uint8_t)(sizeof(task_list) / sizeof(task_list[0]))
 ```
 

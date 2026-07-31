@@ -32,8 +32,8 @@ typedef struct {
 } Task_t;
 
 /*
- * task_list[] 和 TASK_NUM 在 app_task_config.h 中通过宏生成。
- * 用户需要改调度周期/任务顺序时，只改 app_task_config.h。
+ * task_list[] 和 TASK_NUM 只在app_task_config.h中定义。
+ * 用户需要改调度周期或任务顺序时，只修改该唯一任务表。
  */
 extern Task_t task_list[];
 extern const uint8_t TASK_NUM;

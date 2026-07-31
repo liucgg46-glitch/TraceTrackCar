@@ -19,10 +19,10 @@ static uint8_t s_position_out_of_range;
 static uint8_t s_duplicate_sequence;
 static uint8_t s_tracking_ready;
 static uint8_t s_valid_streak;
+static uint8_t s_estimator_reject_streak;
 static uint8_t s_ever_active;
 static uint8_t s_data_timeout;
 static uint8_t s_settled;
-static uint8_t s_settle_tracking;
 static uint8_t s_servo_fault;
 static uint8_t s_vehicle_feedforward_enabled;
 static uint8_t s_vehicle_disturbance_valid;
@@ -32,7 +32,6 @@ static float s_equilibrium_angle_deg;
 static float s_last_applied_dynamic_angle_deg;
 static uint32_t s_vehicle_disturbance_timestamp_ms;
 static uint32_t s_last_valid_sample_ms;
-static uint32_t s_settle_start_ms;
 static uint32_t s_pushed_sample_count;
 static uint32_t s_consumed_sample_count;
 static uint32_t s_rejected_sample_count;
@@ -117,15 +116,34 @@ static uint8_t BallBalance_App_TakeSample(
 
 static void BallBalance_App_AcquireTracking(float position_mm)
 {
+    uint8_t resume_existing_control;
+
+    resume_existing_control = s_ever_active;
     BallStateEstimator_Reset(position_mm);
     BallReference_Init(position_mm);
     BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
     BallReference_Resume();
-    BallBalance_Control_Reset();
-    s_last_applied_dynamic_angle_deg = 0.0f;
+    if (resume_existing_control == 0U) {
+        BallBalance_Control_Reset();
+        s_last_applied_dynamic_angle_deg = 0.0f;
+    }
     s_tracking_ready = 1U;
     s_data_timeout = 0U;
     s_ever_active = 1U;
+    s_estimator_reject_streak = 0U;
+}
+
+static void BallBalance_App_ResetEstimatorAtMeasurement(
+    float position_mm
+)
+{
+    BallStateEstimator_Reset(position_mm);
+    /*
+     * 这里只修正估计器，不重置参考轨迹。
+     * 边缘救球时如果把参考也重置到边缘，反馈会短暂变小，舵机会显得慢半拍。
+     */
+    s_last_applied_dynamic_angle_deg = 0.0f;
+    s_estimator_reject_streak = 0U;
 }
 
 static uint8_t BallBalance_App_GetVehicleDisturbance(
@@ -145,33 +163,6 @@ static uint8_t BallBalance_App_GetVehicleDisturbance(
     return 1U;
 }
 
-static void BallBalance_App_UpdateSettled(
-    uint32_t now_ms,
-    const BallStateEstimator_Info_t *estimator
-)
-{
-    float target_mm = (float)s_target_mm_x10 * 0.1f;
-
-    if ((s_state != BALL_BALANCE_APP_ACTIVE) ||
-        (BallBalance_App_AbsF(target_mm - estimator->position_mm) >
-         BALL_BALANCE_SETTLE_ERROR_MM) ||
-        (BallBalance_App_AbsF(estimator->velocity_mm_s) >
-         BALL_BALANCE_SETTLE_SPEED_MM_S)) {
-        s_settled = 0U;
-        s_settle_tracking = 0U;
-        return;
-    }
-
-    if (s_settle_tracking == 0U) {
-        s_settle_tracking = 1U;
-        s_settle_start_ms = now_ms;
-        s_settled = 0U;
-    } else if ((uint32_t)(now_ms - s_settle_start_ms) >=
-               BALL_BALANCE_SETTLE_TIME_MS) {
-        s_settled = 1U;
-    }
-}
-
 void BallBalance_App_Init(void)
 {
     BallBalance_App_ClearSamples();
@@ -180,10 +171,10 @@ void BallBalance_App_Init(void)
     s_state = BALL_BALANCE_APP_DISABLED;
     s_tracking_ready = 0U;
     s_valid_streak = 0U;
+    s_estimator_reject_streak = 0U;
     s_ever_active = 0U;
     s_data_timeout = 0U;
     s_settled = 0U;
-    s_settle_tracking = 0U;
     s_servo_fault = 0U;
     s_vehicle_feedforward_enabled = 0U;
     s_vehicle_disturbance_valid = 0U;
@@ -193,7 +184,6 @@ void BallBalance_App_Init(void)
     s_last_applied_dynamic_angle_deg = 0.0f;
     s_vehicle_disturbance_timestamp_ms = 0U;
     s_last_valid_sample_ms = 0U;
-    s_settle_start_ms = 0U;
     s_pushed_sample_count = 0U;
     s_consumed_sample_count = 0U;
     s_rejected_sample_count = 0U;
@@ -218,7 +208,6 @@ void BallBalance_App_Enable(void)
     }
     s_enabled = 1U;
     s_settled = 0U;
-    s_settle_tracking = 0U;
 }
 
 void BallBalance_App_Disable(void)
@@ -228,7 +217,6 @@ void BallBalance_App_Disable(void)
     }
     s_enabled = 0U;
     s_settled = 0U;
-    s_settle_tracking = 0U;
     BallReference_Pause();
 }
 
@@ -243,7 +231,6 @@ void BallBalance_App_SetTargetMmX10(int16_t target_mm_x10)
         BallBalance_App_LimitTargetX10(target_mm_x10);
     BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
     s_settled = 0U;
-    s_settle_tracking = 0U;
 }
 
 void BallBalance_App_PushVisionSample(
@@ -344,7 +331,9 @@ void BallBalance_App_Update(void)
     BallBalance_ControlOutput_t control_output;
     float vehicle_disturbance;
     uint8_t has_sample;
-    uint8_t allow_stiction_growth;
+    uint8_t allow_breakaway_growth;
+    uint8_t position_measurement_valid;
+    float measured_position_mm;
     uint32_t now_ms;
 
     if (s_initialized == 0U) {
@@ -353,13 +342,17 @@ void BallBalance_App_Update(void)
 
     now_ms = BSP_GetTickMs();
     has_sample = BallBalance_App_TakeSample(&sample);
-    allow_stiction_growth =
-        (s_last_sample_state == BALL_BALANCE_VISION_VALID) ? 1U : 0U;
+    allow_breakaway_growth = 0U;
+    position_measurement_valid = 0U;
+    measured_position_mm = 0.0f;
 
     if (has_sample != 0U) {
         s_consumed_sample_count =
             BallBalance_App_IncrementU32(s_consumed_sample_count);
         if (sample.valid != 0U) {
+            measured_position_mm =
+                (float)sample.position_mm_x10 * 0.1f;
+            position_measurement_valid = 1U;
             s_last_valid_sample_ms = sample.timestamp_ms;
             if (s_valid_streak < 0xFFU) {
                 s_valid_streak++;
@@ -367,24 +360,37 @@ void BallBalance_App_Update(void)
 
             if (s_tracking_ready == 0U) {
                 if (s_valid_streak == 1U) {
-                    BallStateEstimator_Reset(
-                        (float)sample.position_mm_x10 * 0.1f
-                    );
+                    BallStateEstimator_Reset(measured_position_mm);
                 }
                 if (s_valid_streak >=
                     BALL_BALANCE_REACQUIRE_VALID_COUNT) {
                     BallBalance_App_AcquireTracking(
-                        (float)sample.position_mm_x10 * 0.1f
+                        measured_position_mm
                     );
                 }
             } else {
-                (void)BallStateEstimator_UpdatePosition(
-                    (float)sample.position_mm_x10 * 0.1f
-                );
+                if (BallStateEstimator_UpdatePosition(
+                        measured_position_mm
+                    ) == PROJECT_OK) {
+                    s_estimator_reject_streak = 0U;
+                } else {
+                    if (s_estimator_reject_streak < 0xFFU) {
+                        s_estimator_reject_streak++;
+                    }
+                    if ((BallBalance_App_AbsF(measured_position_mm) >=
+                         BALL_ESTIMATOR_EDGE_RESET_POSITION_MM) ||
+                        (s_estimator_reject_streak >=
+                         BALL_ESTIMATOR_REJECT_RESET_COUNT)) {
+                        BallBalance_App_ResetEstimatorAtMeasurement(
+                            measured_position_mm
+                        );
+                    }
+                }
             }
         } else {
             s_valid_streak = 0U;
-            allow_stiction_growth = 0U;
+            s_estimator_reject_streak = 0U;
+            allow_breakaway_growth = 0U;
         }
     }
 
@@ -393,9 +399,18 @@ void BallBalance_App_Update(void)
          BALL_BALANCE_VALID_TIMEOUT_MS)) {
         s_tracking_ready = 0U;
         s_valid_streak = 0U;
+        s_estimator_reject_streak = 0U;
         s_data_timeout = 1U;
-        allow_stiction_growth = 0U;
         BallReference_Pause();
+    }
+
+    /*
+     * HOLD不提供新的位置测量，但在最近VALID仍未超时时允许继续判断静摩擦；
+     * LOST或VALID超时仍会禁止补偿，避免使用失效位置持续加大舵机角度。
+     */
+    if ((s_tracking_ready != 0U) &&
+        (s_last_sample_state != BALL_BALANCE_VISION_LOST)) {
+        allow_breakaway_growth = 1U;
     }
 
     (void)BallBalance_App_GetVehicleDisturbance(
@@ -439,9 +454,14 @@ void BallBalance_App_Update(void)
     control_input.control_enabled =
         (s_state == BALL_BALANCE_APP_ACTIVE) ? 1U : 0U;
     control_input.data_valid = s_tracking_ready;
-    control_input.allow_stiction_growth = allow_stiction_growth;
+    control_input.allow_breakaway_growth = allow_breakaway_growth;
+    control_input.position_measurement_valid =
+        position_measurement_valid;
     control_input.now_ms = now_ms;
     control_input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
+    control_input.target_position_mm =
+        (float)s_target_mm_x10 * 0.1f;
+    control_input.measured_position_mm = measured_position_mm;
     control_input.reference_position_mm =
         reference.reference_position_mm;
     control_input.reference_velocity_mm_s =
@@ -463,6 +483,7 @@ void BallBalance_App_Update(void)
     }
     s_last_applied_dynamic_angle_deg =
         control_output.applied_dynamic_angle_deg;
+    s_settled = control_output.target_locked;
 
     s_last_servo_status =
         Drv_Servo_SetHorizontalAngleX10(
@@ -476,8 +497,6 @@ void BallBalance_App_Update(void)
             BALL_BALANCE_LEVEL_ANGLE_X10
         );
     }
-
-    BallBalance_App_UpdateSettled(now_ms, &estimator);
 }
 
 BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)

@@ -1,22 +1,10 @@
 #include "scheduler.h"
-
-#include "project_build_config.h"
-
-#if (PROJECT_TEST_TASKS_ENABLE != 0U)
-#include "test_task_config.h"
-#else
 #include "app_task_config.h"
-#endif
 
 /*
- * 正式任务表只由APP配置生成；专项测试任务表只存在于Test目录。
- * 调度器本身不承载具体业务任务选择。
+ * task_list和TASK_NUM只在app_task_config.h中定义。
+ * 调度器本身不承载业务任务选择或测试档位宏。
  */
-#if (PROJECT_TEST_TASKS_ENABLE != 0U)
-TEST_SCHEDULER_TASK_LIST_DEFINE();
-#else
-APP_SCHEDULER_TASK_LIST_DEFINE();
-#endif
 
 void Scheduler_Init(void)
 {

@@ -7,10 +7,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $testHeaderPath = Join-Path $projectRoot "Test\test.h"
 $testSourcePaths = Get-ChildItem -LiteralPath (Join-Path $projectRoot "Test") `
     -Filter "test*.c" -File
-$testConfigPath = Join-Path $projectRoot "Test\test_config.h"
-$buildConfigPath = Join-Path $projectRoot "Common\project_build_config.h"
 $appTaskConfigPath = Join-Path $projectRoot "APP\app_task_config.h"
-$testTaskConfigPath = Join-Path $projectRoot "Test\test_task_config.h"
 $docRoot = Join-Path $projectRoot "Doc"
 $testDocName = (-join @(
     [char]0x6D4B, [char]0x8BD5, [char]0x4EFB, [char]0x52A1,
@@ -26,10 +23,7 @@ $testSource = @(
             Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
         }
 ) -join "`n"
-$testConfig = Get-Content -LiteralPath $testConfigPath -Raw -Encoding UTF8
-$buildConfig = Get-Content -LiteralPath $buildConfigPath -Raw -Encoding UTF8
 $appTaskConfig = Get-Content -LiteralPath $appTaskConfigPath -Raw -Encoding UTF8
-$testTaskConfig = Get-Content -LiteralPath $testTaskConfigPath -Raw -Encoding UTF8
 $testDoc = Get-Content -LiteralPath $testDocPath -Raw -Encoding UTF8
 
 $publicFunctions = @(
@@ -80,18 +74,18 @@ Get-ChildItem -LiteralPath $docRoot -Filter "*.md" -File | ForEach-Object {
         $line = $_
         if ($line -match "^\s*Task_t\s+task_list\[\]\s*=\s*\{") {
             $inTaskTable = $true
-            if ($line -notmatch "\\\s*$") {
-                $taskTableFormatErrors.Add("${markdownName}:$lineNumber task table start")
+            if ($line -match "\\\s*$") {
+                $taskTableFormatErrors.Add("${markdownName}:$lineNumber legacy task table continuation")
             }
         } elseif ($inTaskTable -and ($line -match "^\s*\};\s*$")) {
             $inTaskTable = $false
         } elseif ($inTaskTable -and
                   ($line -match "^\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*,")) {
-            if ($line -notmatch "\\\s*$") {
-                $taskTableFormatErrors.Add("${markdownName}:$lineNumber task entry")
+            if ($line -match "\\\s*$") {
+                $taskTableFormatErrors.Add("${markdownName}:$lineNumber legacy task entry continuation")
             }
             if (($line -match "//") -or
-                (($line -match "/\*") -and ($line -notmatch "\*/\s*\\\s*$"))) {
+                (($line -match "/\*") -and ($line -notmatch "\*/\s*$"))) {
                 $taskTableFormatErrors.Add("${markdownName}:$lineNumber task comment")
             }
         }
@@ -109,6 +103,18 @@ if ($invalidRegistrations.Count -ne 0) {
 
 if ($taskTableFormatErrors.Count -ne 0) {
     throw "Invalid Markdown task table format: $($taskTableFormatErrors -join ', ')"
+}
+
+$legacyTaskMacros = @(
+    Get-ChildItem -LiteralPath $docRoot -Filter "*.md" -File |
+        Where-Object {
+            (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -match
+                "(?:APP|TEST)_SCHEDULER_TASK_LIST_DEFINE"
+        } |
+        ForEach-Object { $_.Name }
+)
+if ($legacyTaskMacros.Count -ne 0) {
+    throw "Legacy scheduler task macros remain in Markdown: $($legacyTaskMacros -join ', ')"
 }
 
 $firmwareText = @(
@@ -130,18 +136,49 @@ if ($missingTaskFunctions.Count -ne 0) {
     throw "Task functions in Markdown without source declarations: $($missingTaskFunctions -join ', ')"
 }
 
-if (($appTaskConfig -match '#include\s+"test\.h"') -or
-    ($appTaskConfig -match "\{\s*Test_[A-Za-z0-9_]+\s*,")) {
-    throw "APP task config must not include or register Test functions"
+$publicHeaderText = @(
+    "APP", "Algorithm", "BSP", "Common", "Driver", "Route", "Test", "user"
+) | ForEach-Object {
+    Get-ChildItem -LiteralPath (Join-Path $projectRoot $_) -Recurse -Filter "*.h" -File |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }
 }
-if (($testTaskConfig -notmatch '#include\s+"test\.h"') -or
-    ($testTaskConfig -notmatch "\{\s*Test_[A-Za-z0-9_]+\s*,")) {
-    throw "Test task config has no Test function registrations"
-}
-if ($buildConfig -notmatch "#define\s+PROJECT_TEST_TASKS_ENABLE\s+0U") {
-    throw "PROJECT_TEST_TASKS_ENABLE default must be 0U or 1U"
+$publicHeaderText = $publicHeaderText -join "`n"
+$publicSchedulableFunctions = @(
+    [regex]::Matches(
+        $publicHeaderText,
+        "\bvoid\s+([A-Za-z_][A-Za-z0-9_]*(?:Update|Task|Run|Toggle|Ramp|Scan|Background))\s*\(\s*void\s*\)\s*;"
+    ) |
+        ForEach-Object { $_.Groups[1].Value } |
+        Sort-Object -Unique
+)
+$undocumentedSchedulableFunctions = @(
+    $publicSchedulableFunctions |
+        Where-Object { $testDoc -notmatch ("\b" + [regex]::Escape($_) + "\b") }
+)
+if ($undocumentedSchedulableFunctions.Count -ne 0) {
+    throw "Public schedulable functions missing from the test task document: $($undocumentedSchedulableFunctions -join ', ')"
 }
 
-Write-Host ("Test API documentation check passed: {0} public Test functions, {1} valid task functions." -f
+$appRegisteredTests = @(
+    [regex]::Matches(
+        $appTaskConfig,
+        "\{\s*(Test_[A-Za-z0-9_]+)\s*,"
+    ) |
+        ForEach-Object { $_.Groups[1].Value } |
+        Sort-Object -Unique
+)
+if ($appTaskConfig -notmatch '#include\s+"test\.h"') {
+    throw "APP task config registers tests but does not include test.h"
+}
+$invalidAppTests = @(
+    $appRegisteredTests |
+        Where-Object { $_ -notin $publicFunctions }
+)
+if ($invalidAppTests.Count -ne 0) {
+    throw "APP task config contains invalid Test functions: $($invalidAppTests -join ', ')"
+}
+
+Write-Host ("Test API documentation check passed: {0} public Test functions, {1} public schedulable functions, {2} valid task functions." -f
             $publicFunctions.Count,
+            $publicSchedulableFunctions.Count,
             @($allRegisteredFunctions | Sort-Object -Unique).Count)

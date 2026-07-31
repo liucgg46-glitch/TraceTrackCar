@@ -34,6 +34,43 @@ static float BallReference_LimitF(float value,
     return value;
 }
 
+static float BallReference_EstimateStopDistance(float velocity_mm_s,
+                                                 float acceleration_mm_s2,
+                                                 float dt_s)
+{
+    float distance_mm = 0.0f;
+    float next_velocity_mm_s;
+    float acceleration_step;
+    uint16_t index;
+
+    if (velocity_mm_s <= 0.0f) {
+        return 0.0f;
+    }
+
+    acceleration_step = BALL_REFERENCE_MAX_JERK_MM_S3 * dt_s;
+    for (index = 0U; index < 1000U; index++) {
+        acceleration_mm_s2 += BallReference_LimitF(
+            -BALL_REFERENCE_MAX_ACCEL_MM_S2 - acceleration_mm_s2,
+            -acceleration_step,
+            acceleration_step
+        );
+        next_velocity_mm_s =
+            velocity_mm_s + acceleration_mm_s2 * dt_s;
+        if (next_velocity_mm_s <= 0.0f) {
+            /*
+             * 最后一个周期按当前速度计入，故意保守预留一点制动距离，
+             * 防止离散积分在终点前仍保持较高速度。
+             */
+            distance_mm += velocity_mm_s * dt_s;
+            break;
+        }
+        distance_mm +=
+            0.5f * (velocity_mm_s + next_velocity_mm_s) * dt_s;
+        velocity_mm_s = next_velocity_mm_s;
+    }
+    return distance_mm;
+}
+
 void BallReference_Init(float initial_position_mm)
 {
     s_reference.initialized = 1U;
@@ -69,12 +106,10 @@ void BallReference_Update(float dt_s)
 {
     float remaining;
     float direction;
-    float velocity_direction;
-    float braking_distance;
-    float jerk_braking_margin;
-    float positive_acceleration;
-    float transition_time;
-    float acceleration_distance;
+    float remaining_abs;
+    float velocity_along_path;
+    float acceleration_along_path;
+    float stopping_distance;
     float desired_acceleration;
     float acceleration_step;
     float previous_position;
@@ -103,66 +138,37 @@ void BallReference_Update(float dt_s)
     }
 
     direction = BallReference_SignF(remaining);
-    velocity_direction =
-        BallReference_SignF(s_reference.reference_velocity_mm_s);
-    braking_distance =
-        (s_reference.reference_velocity_mm_s *
-         s_reference.reference_velocity_mm_s) /
-        (2.0f * BALL_REFERENCE_MAX_ACCEL_MM_S2);
-    /*
-     * 加速度受jerk限制，开始制动后不能瞬间反向。预留把当前运动状态
-     * 平滑切换到最大制动所需的距离，避免接近目标时高速吸附。
-     */
-    positive_acceleration =
-        velocity_direction *
-        s_reference.reference_acceleration_mm_s2;
-    if (positive_acceleration < 0.0f) {
-        positive_acceleration = 0.0f;
-    }
-    transition_time =
-        (positive_acceleration +
-         BALL_REFERENCE_MAX_ACCEL_MM_S2) /
-        BALL_REFERENCE_MAX_JERK_MM_S3;
-    acceleration_distance =
-        0.5f * positive_acceleration *
-        transition_time * transition_time -
-        (BALL_REFERENCE_MAX_JERK_MM_S3 *
-         transition_time * transition_time * transition_time) /
-        6.0f;
-    if (acceleration_distance < 0.0f) {
-        acceleration_distance = 0.0f;
-    }
-    jerk_braking_margin =
-        BallReference_AbsF(s_reference.reference_velocity_mm_s) *
-        transition_time +
-        acceleration_distance;
-    braking_distance += jerk_braking_margin;
+    remaining_abs = BallReference_AbsF(remaining);
 
-    if ((velocity_direction != 0.0f) &&
-        (velocity_direction != direction)) {
+    velocity_along_path =
+        direction * s_reference.reference_velocity_mm_s;
+    acceleration_along_path =
+        direction * s_reference.reference_acceleration_mm_s2;
+    stopping_distance = BallReference_EstimateStopDistance(
+        velocity_along_path,
+        acceleration_along_path,
+        dt_s
+    );
+
+    if (velocity_along_path < 0.0f) {
         s_braking = 0U;
         desired_acceleration =
             direction * BALL_REFERENCE_MAX_ACCEL_MM_S2;
     } else {
         if ((s_braking == 0U) &&
-            (BallReference_AbsF(remaining) <= braking_distance)) {
+            (remaining_abs <=
+             stopping_distance *
+                 BALL_REFERENCE_BRAKE_DISTANCE_FACTOR +
+             velocity_along_path * dt_s +
+             BALL_REFERENCE_SNAP_POSITION_MM)) {
             s_braking = 1U;
         }
 
-        if ((s_braking != 0U) &&
-            (BallReference_AbsF(
-                 s_reference.reference_velocity_mm_s) >
-             BALL_REFERENCE_SNAP_SPEED_MM_S)) {
+        if (s_braking != 0U) {
             desired_acceleration =
-                -velocity_direction *
-                BALL_REFERENCE_MAX_ACCEL_MM_S2;
-        } else if ((s_braking != 0U) &&
-                   (BallReference_AbsF(remaining) >
-                    BALL_REFERENCE_SNAP_POSITION_MM)) {
-            s_braking = 0U;
-            desired_acceleration =
-                direction * BALL_REFERENCE_MAX_ACCEL_MM_S2;
-        } else if (s_braking != 0U) {
+                -direction * BALL_REFERENCE_MAX_ACCEL_MM_S2;
+        } else if (velocity_along_path >=
+                   BALL_REFERENCE_MAX_SPEED_MM_S) {
             desired_acceleration = 0.0f;
         } else {
             desired_acceleration =
@@ -195,14 +201,28 @@ void BallReference_Update(float dt_s)
             -BALL_REFERENCE_MAX_SPEED_MM_S,
             BALL_REFERENCE_MAX_SPEED_MM_S
         );
+    if ((s_braking != 0U) &&
+        (remaining_abs <=
+         BALL_REFERENCE_FINAL_APPROACH_POSITION_MM) &&
+        (BallReference_AbsF(
+             s_reference.reference_velocity_mm_s) <=
+         BALL_REFERENCE_FINAL_APPROACH_SPEED_MM_S)) {
+        /*
+         * 已经完成主制动且只剩很小位置差时直接结束参考轨迹，
+         * 避免再次起步、再次刹车引起舵机方向反复切换。
+         */
+        s_reference.reference_position_mm =
+            s_reference.target_position_mm;
+        s_reference.reference_velocity_mm_s = 0.0f;
+        s_reference.reference_acceleration_mm_s2 = 0.0f;
+        s_braking = 0U;
+        return;
+    }
     if (((remaining > 0.0f) &&
          (s_reference.reference_velocity_mm_s < 0.0f)) ||
         ((remaining < 0.0f) &&
          (s_reference.reference_velocity_mm_s > 0.0f))) {
-        /*
-         * 制动余量偏保守时允许在目标前短暂停住，但不允许参考位置
-         * 反向远离目标；下一周期会重新生成向目标方向的平滑加速度。
-         */
+        /* 目标反向时先刹停，不允许参考位置继续远离新目标。 */
         s_reference.reference_velocity_mm_s = 0.0f;
         s_reference.reference_acceleration_mm_s2 = 0.0f;
         s_braking = 0U;

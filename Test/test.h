@@ -1,10 +1,6 @@
 #ifndef __TEST_H
 #define __TEST_H
 
-#include "test_config.h"
-
-#if (PROJECT_TEST_TASKS_ENABLE != 0U)
-
 /* 基础板级资源测试。 */
 void Test_GPIO_Toggle(void);
 void Test_StatusLight_Update(void);
@@ -28,6 +24,7 @@ void Test_RouteLog(void);
 
 /* 执行器、底盘和里程测试。 */
 void Test_E220_Link_Update(void);
+void Test_ServoBeamCalibration_Update(void);
 void Test_MotorCmd_Update(void);
 void Test_MotorCmd_Log(void);
 void Test_ChassisCmd_Update(void);
@@ -60,11 +57,8 @@ void Test_K210_RoadProfileUpdate(void);
 void Test_K210_SingleDigitCommUpdate(void);
 void Test_K210_LabTuneUpdate(void);
 void Test_K210_TargetCommUpdate(void);
-void Test_K210_BallCommUpdate(void);
 void Test_BallModelIdentify_Update(void);
 void Test_BallBalanceControl_Update(void);
 void Test_K210_GrayTuneUpdate(void);
-
-#endif /* PROJECT_TEST_TASKS_ENABLE */
 
 #endif /* __TEST_H */
