@@ -1,6 +1,7 @@
 #ifndef __BALL_BALANCE_CONTROL_H
 #define __BALL_BALANCE_CONTROL_H
 
+#include "ball_balance_config.h"
 #include "project_status.h"
 #include <stdint.h>
 
@@ -8,79 +9,56 @@
 extern "C" {
 #endif
 
-/*
- * 车载平衡滚球控制器。
- * 本模块只处理位置、速度和PID/PD计算，不读取K210、不访问舵机、不输出日志。
- */
-#define BALL_BALANCE_KP                         0.16f
-#define BALL_BALANCE_KI                         0.015f
-#define BALL_BALANCE_KD                         0.060f
-
-#define BALL_BALANCE_NEUTRAL_ANGLE_X10          900U
-#define BALL_BALANCE_OUTPUT_MIN_X10             700U
-#define BALL_BALANCE_OUTPUT_MAX_X10             1100U
-#define BALL_BALANCE_ABS_SAFE_MIN_X10           0U
-#define BALL_BALANCE_ABS_SAFE_MAX_X10           1800U
-#define BALL_BALANCE_PID_OUTPUT_LIMIT_DEG       20.0f
-#define BALL_BALANCE_UPDATE_PERIOD_MS           10U
-/*
- * K210 YOLO输出约50ms一帧，视觉会偶发LOST。超时不能按单帧丢失处理，
- * 否则舵机会在PID角度和90度之间来回跳。
- */
-#define BALL_BALANCE_DATA_TIMEOUT_MS            500U
-#define BALL_BALANCE_MIN_CONFIDENCE             60U
-#define BALL_BALANCE_POSITION_DEADBAND_MM       3.0f
-#define BALL_BALANCE_INTEGRAL_ACTIVE_MM         100.0f
-#define BALL_BALANCE_MIN_ACTIVE_ERROR_MM        6.0f
-#define BALL_BALANCE_MIN_OUTPUT_DEG             4.0f
-#define BALL_BALANCE_PREDICT_MAX_MS             120U
-#define BALL_BALANCE_SLEW_X10_PER_UPDATE        120U
+typedef struct {
+    uint8_t control_enabled;
+    uint8_t data_valid;
+    uint8_t allow_stiction_growth;
+    uint32_t now_ms;
+    float dt_s;
+    float reference_position_mm;
+    float reference_velocity_mm_s;
+    float reference_acceleration_mm_s2;
+    float estimated_position_mm;
+    float estimated_velocity_mm_s;
+    float estimated_disturbance_mm_s2;
+    float vehicle_disturbance_mm_s2;
+    float equilibrium_angle_deg;
+} BallBalance_ControlInput_t;
 
 typedef struct {
-    uint8_t enabled;
-    uint8_t measurement_valid;
-    uint8_t data_timeout;
-    int16_t target_mm_x10;
-    int16_t raw_position_mm_x10;
-    int16_t filtered_position_mm_x10;
-    int16_t error_mm_x10;
-    float velocity_mm_s;
-    float integral;
-    float kp;
-    float ki;
-    float kd;
-    float p_term;
-    float i_term;
-    float d_term;
-    float pid_output_deg;
+    float position_error_mm;
+    float velocity_error_mm_s;
+    float desired_acceleration_mm_s2;
+    float required_control_acceleration_mm_s2;
+    float requested_dynamic_angle_deg;
+    float limited_dynamic_angle_deg;
+    float stiction_angle_deg;
+    float requested_servo_angle_deg;
+    float servo_angle_deg;
+    float applied_dynamic_angle_deg;
     uint16_t command_angle_x10;
-    uint8_t last_sequence;
-    uint32_t last_sample_ms;
+    uint8_t dynamic_limited;
+    uint8_t absolute_limited;
+    uint8_t slew_limited;
+    uint8_t stiction_active;
+} BallBalance_ControlOutput_t;
+
+typedef struct {
+    uint8_t initialized;
+    BallBalance_ControlInput_t input;
+    BallBalance_ControlOutput_t output;
     uint32_t update_count;
-    uint32_t valid_sample_count;
-    uint32_t invalid_sample_count;
-    uint32_t timeout_count;
     uint32_t output_limit_count;
+    uint32_t stuck_elapsed_ms;
+    uint32_t stiction_step_count;
 } BallBalance_ControlInfo_t;
 
 void BallBalance_Control_Init(void);
 void BallBalance_Control_Reset(void);
-
-void BallBalance_Control_SetEnabled(uint8_t enabled);
-uint8_t BallBalance_Control_IsEnabled(void);
-
-void BallBalance_Control_SetTargetMmX10(int16_t target_mm_x10);
-int16_t BallBalance_Control_GetTargetMmX10(void);
-
-void BallBalance_Control_SetGains(float kp, float ki, float kd);
-
-void BallBalance_Control_PushMeasurement(int16_t position_mm_x10,
-                                         uint8_t sequence,
-                                         uint32_t timestamp_ms);
-void BallBalance_Control_InvalidateMeasurement(uint32_t timestamp_ms);
-
-void BallBalance_Control_Update(uint32_t now_ms);
-
+Project_Status_t BallBalance_Control_Update(
+    const BallBalance_ControlInput_t *input,
+    BallBalance_ControlOutput_t *output
+);
 Project_Status_t BallBalance_Control_GetInfo(
     BallBalance_ControlInfo_t *info
 );

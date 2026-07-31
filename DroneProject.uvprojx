@@ -648,6 +648,11 @@
               <FilePath>.\Common\project_status.h</FilePath>
             </File>
             <File>
+              <FileName>project_build_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Common\project_build_config.h</FilePath>
+            </File>
+            <File>
               <FileName>project_critical.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Common\project_critical.h</FilePath>
@@ -851,6 +856,41 @@
               <FileName>odometer.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Algorithm\odometer.h</FilePath>
+            </File>
+            <File>
+              <FileName>ball_balance_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\ball_balance_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>ball_state_estimator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\ball_state_estimator.c</FilePath>
+            </File>
+            <File>
+              <FileName>ball_state_estimator.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\ball_state_estimator.h</FilePath>
+            </File>
+            <File>
+              <FileName>ball_reference_generator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\ball_reference_generator.c</FilePath>
+            </File>
+            <File>
+              <FileName>ball_reference_generator.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\ball_reference_generator.h</FilePath>
+            </File>
+            <File>
+              <FileName>ball_equilibrium_map.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Algorithm\ball_equilibrium_map.c</FilePath>
+            </File>
+            <File>
+              <FileName>ball_equilibrium_map.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Algorithm\ball_equilibrium_map.h</FilePath>
             </File>
             <File>
               <FileName>ball_balance_control.c</FileName>
@@ -1083,6 +1123,11 @@
               <FilePath>.\Test\test_config.h</FilePath>
             </File>
             <File>
+              <FileName>test_task_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Test\test_task_config.h</FilePath>
+            </File>
+            <File>
               <FileName>test.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Test\test.c</FilePath>
@@ -1271,6 +1316,16 @@
               <FileName>ball_balance_k210_adapter.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\APP\ball_balance_k210_adapter.h</FilePath>
+            </File>
+            <File>
+              <FileName>ball_balance_vehicle_imu_adapter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\APP\ball_balance_vehicle_imu_adapter.c</FilePath>
+            </File>
+            <File>
+              <FileName>ball_balance_vehicle_imu_adapter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\APP\ball_balance_vehicle_imu_adapter.h</FilePath>
             </File>
             <File>
               <FileName>task_fsm.c</FileName>

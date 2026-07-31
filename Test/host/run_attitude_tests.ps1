@@ -40,6 +40,17 @@ $odometerTestObject = Join-Path $buildDirectory "test_odometer.obj"
 $odometerObject = Join-Path $buildDirectory "odometer.obj"
 $odometerTestSource = Join-Path $repositoryRoot "Test\host\test_odometer.c"
 $odometerSource = Join-Path $repositoryRoot "Algorithm\odometer.c"
+$ballTestExecutable = Join-Path $buildDirectory "ball_balance_tests.exe"
+$ballTestObject = Join-Path $buildDirectory "test_ball_balance.obj"
+$ballEstimatorObject = Join-Path $buildDirectory "ball_state_estimator.obj"
+$ballReferenceObject = Join-Path $buildDirectory "ball_reference_generator.obj"
+$ballMapObject = Join-Path $buildDirectory "ball_equilibrium_map.obj"
+$ballControlObject = Join-Path $buildDirectory "ball_balance_control.obj"
+$ballTestSource = Join-Path $repositoryRoot "Test\host\test_ball_balance.c"
+$ballEstimatorSource = Join-Path $repositoryRoot "Algorithm\ball_state_estimator.c"
+$ballReferenceSource = Join-Path $repositoryRoot "Algorithm\ball_reference_generator.c"
+$ballMapSource = Join-Path $repositoryRoot "Algorithm\ball_equilibrium_map.c"
+$ballControlSource = Join-Path $repositoryRoot "Algorithm\ball_balance_control.c"
 
 [void](New-Item -ItemType Directory -Force -Path $buildDirectory)
 
@@ -48,6 +59,15 @@ call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$stubInclude" /
 "@
 
 & $env:ComSpec /d /s /c $compileAndRun
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+$compileAndRunBall = @"
+call "$vcvars" >nul && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$ballTestSource" /Fo"$ballTestObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$ballEstimatorSource" /Fo"$ballEstimatorObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$ballReferenceSource" /Fo"$ballReferenceObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$ballMapSource" /Fo"$ballMapObject" && cl /nologo /TC /std:c11 /utf-8 /W4 /WX /I"$commonInclude" /I"$algorithmInclude" /c "$ballControlSource" /Fo"$ballControlObject" && cl /nologo "$ballTestObject" "$ballEstimatorObject" "$ballReferenceObject" "$ballMapObject" "$ballControlObject" /Fe"$ballTestExecutable" && "$ballTestExecutable"
+"@
+
+& $env:ComSpec /d /s /c $compileAndRunBall
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

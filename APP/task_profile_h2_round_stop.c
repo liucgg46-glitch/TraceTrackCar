@@ -1,5 +1,7 @@
 #include "task_profile_h2_round_stop.h"
 
+#include "task_profile_config.h"
+#include "ball_balance_app.h"
 #include "bsp_key.h"
 #include "bsp_systick.h"
 #include "chassis.h"
@@ -11,6 +13,326 @@
 #include "route_profile_h_oval.h"
 
 #include <stdio.h>
+
+#if (H_COMPETITION_ITEM_SELECT == H_COMPETITION_ITEM_BALL_SEQUENCE)
+
+static H2Task_Info_t s_task;
+static uint8_t s_key_release_samples;
+static uint32_t s_start_tick;
+static uint32_t s_state_enter_ms;
+static uint32_t s_last_lcd_text_ms;
+
+static void H3Task_EnterState(H2Task_State_t state, uint32_t now_ms)
+{
+    if (s_task.state == state) {
+        return;
+    }
+    s_task.state = state;
+    s_task.state_elapsed_ms = 0U;
+    s_state_enter_ms = now_ms;
+    s_task.transition_count++;
+}
+
+static void H3Task_ResetKeyArm(void)
+{
+    s_task.keys_armed = 0U;
+    s_key_release_samples = 0U;
+}
+
+static uint8_t H3Task_UpdateKeyArm(void)
+{
+    if (s_task.keys_armed != 0U) {
+        return 1U;
+    }
+
+#if BSP_KEY1_ENABLE
+    (void)BSP_Key_WasPressed(BSP_KEY1);
+    (void)BSP_Key_WasReleased(BSP_KEY1);
+#endif
+#if BSP_KEY4_ENABLE
+    (void)BSP_Key_WasPressed(BSP_KEY4);
+    (void)BSP_Key_WasReleased(BSP_KEY4);
+#endif
+
+#if BSP_KEY1_ENABLE && BSP_KEY4_ENABLE
+    if ((BSP_Key_IsPressed(BSP_KEY1) == 0U) &&
+        (BSP_Key_IsPressed(BSP_KEY4) == 0U)) {
+#elif BSP_KEY1_ENABLE
+    if (BSP_Key_IsPressed(BSP_KEY1) == 0U) {
+#elif BSP_KEY4_ENABLE
+    if (BSP_Key_IsPressed(BSP_KEY4) == 0U) {
+#else
+    if (1) {
+#endif
+        if (s_key_release_samples <
+            H2_KEY_RELEASE_CONFIRM_SAMPLES) {
+            s_key_release_samples++;
+        }
+        if (s_key_release_samples >=
+            H2_KEY_RELEASE_CONFIRM_SAMPLES) {
+            s_task.keys_armed = 1U;
+            s_key_release_samples = 0U;
+        }
+    } else {
+        s_key_release_samples = 0U;
+    }
+    return s_task.keys_armed;
+}
+
+static void H3Task_EnterFault(H2Task_Fault_t fault, uint32_t now_ms)
+{
+    s_task.fault = fault;
+    s_task.timer_running = 0U;
+    s_task.final_time_ms =
+        (s_start_tick == 0U) ? 0U :
+        (uint32_t)(now_ms - s_start_tick);
+    BallBalance_App_Disable();
+    Chassis_EmergencyStop();
+    H3Task_EnterState(H_TASK3_FAULT, now_ms);
+}
+
+static void H3Task_Start(uint32_t now_ms)
+{
+    Chassis_EmergencyStop();
+    s_task.fault = H2_FAULT_NONE;
+    s_task.timer_running = 1U;
+    s_task.task3_timeout = 0U;
+    s_task.elapsed_ms = 0U;
+    s_task.final_time_ms = 0U;
+    s_start_tick = now_ms;
+    BallBalance_App_SetVehicleFeedforwardEnabled(0U);
+    BallBalance_App_SetTargetMmX10(0);
+    BallBalance_App_Enable();
+    H3Task_EnterState(H_TASK3_WAIT_VALID, now_ms);
+}
+
+static const char *H3Task_StateName(H2Task_State_t state)
+{
+    switch (state) {
+    case H_TASK3_WAIT_START:       return "READY";
+    case H_TASK3_WAIT_VALID:       return "WAIT VISION";
+    case H_TASK3_SETTLE_CENTER:    return "SETTLE O";
+    case H_TASK3_MOVE_PLUS_50:     return "MOVE +50";
+    case H_TASK3_SETTLE_PLUS_50:   return "SETTLE +50";
+    case H_TASK3_MOVE_MINUS_50:    return "MOVE -50";
+    case H_TASK3_SETTLE_MINUS_50:  return "SETTLE -50";
+    case H_TASK3_FINISHED:         return "DONE -50";
+    case H_TASK3_FAULT:
+    default:                       return "FAULT";
+    }
+}
+
+static void H3Task_UpdateDisplay(uint32_t now_ms, uint8_t force)
+{
+    char line1[24];
+    char line2[24];
+    char line3[24];
+    uint32_t display_ms;
+
+    if ((force == 0U) &&
+        ((uint32_t)(now_ms - s_last_lcd_text_ms) <
+         H2_LCD_TEXT_UPDATE_MS)) {
+        return;
+    }
+    s_last_lcd_text_ms = now_ms;
+    display_ms = (s_task.state == H_TASK3_FINISHED) ?
+                 s_task.final_time_ms : s_task.elapsed_ms;
+
+    (void)snprintf(line1, sizeof(line1), "H3 %s",
+                   H3Task_StateName(s_task.state));
+    (void)snprintf(line2, sizeof(line2), "TIME %02lu.%03lus",
+                   (unsigned long)(display_ms / 1000U),
+                   (unsigned long)(display_ms % 1000U));
+    if (s_task.state == H_TASK3_FAULT) {
+        (void)snprintf(line3, sizeof(line3), "FAULT %u",
+                       (unsigned int)s_task.fault);
+    } else if (s_task.task3_timeout != 0U) {
+        (void)snprintf(line3, sizeof(line3), "OVER 5S SAFE");
+    } else {
+        (void)snprintf(line3, sizeof(line3), "APP %u",
+                       (unsigned int)s_task.ball_app_state);
+    }
+    LcdUi_ShowStatus(line1, line2, line3);
+}
+
+void H2Task_Init(void)
+{
+    uint32_t now_ms = BSP_GetTickMs();
+
+    s_task.state = H_TASK3_WAIT_START;
+    s_task.fault = H2_FAULT_NONE;
+    s_task.keys_armed = 0U;
+    s_task.timer_running = 0U;
+    s_task.route_state = 0U;
+    s_task.finish_armed = 0U;
+    s_task.finish_candidate = 0U;
+    s_task.encoder_reliable = 0U;
+    s_task.line_follow_running = 0U;
+    s_task.chassis_fault = 0U;
+    s_task.ball_app_state = (uint8_t)BALL_BALANCE_APP_DISABLED;
+    s_task.task3_timeout = 0U;
+    s_task.elapsed_ms = 0U;
+    s_task.final_time_ms = 0U;
+    s_task.state_elapsed_ms = 0U;
+    s_task.transition_count = 0U;
+    s_task.encoder_distance_mm = 0;
+    s_task.marker_distance_mm = 0;
+    s_task.stop_offset_mm = 0;
+    s_task.left_speed_cps = 0;
+    s_task.right_speed_cps = 0;
+
+    s_key_release_samples = 0U;
+    s_start_tick = 0U;
+    s_state_enter_ms = now_ms;
+    s_last_lcd_text_ms = now_ms - H2_LCD_TEXT_UPDATE_MS;
+
+    BallBalance_App_Disable();
+    BallBalance_App_SetVehicleFeedforwardEnabled(0U);
+    BallBalance_App_SetTargetMmX10(0);
+    Motion_Stop();
+    LineFollow_Stop();
+    Chassis_EmergencyStop();
+}
+
+void H2Task_Reset(void)
+{
+    H2Task_Init();
+}
+
+void H2Task_Update(void)
+{
+    BallBalance_AppInfo_t app;
+    uint32_t now_ms = BSP_GetTickMs();
+    uint8_t key1_pressed = 0U;
+    uint8_t key4_pressed = 0U;
+
+    Chassis_EmergencyStop();
+    s_task.state_elapsed_ms =
+        (uint32_t)(now_ms - s_state_enter_ms);
+    if (s_task.timer_running != 0U) {
+        s_task.elapsed_ms = (uint32_t)(now_ms - s_start_tick);
+        if (s_task.elapsed_ms > H3_TASK_TIMEOUT_MS) {
+            /* 超时只记录评分结果，闭环安全控制继续运行。 */
+            s_task.task3_timeout = 1U;
+        }
+    }
+
+    if (BallBalance_App_GetInfo(&app) != BSP_OK) {
+        H3Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
+        H3Task_UpdateDisplay(now_ms, 1U);
+        return;
+    }
+    s_task.ball_app_state = (uint8_t)app.state;
+
+    if (H3Task_UpdateKeyArm() != 0U) {
+#if BSP_KEY1_ENABLE
+        key1_pressed = BSP_Key_WasPressed(BSP_KEY1);
+#endif
+#if BSP_KEY4_ENABLE
+        key4_pressed = BSP_Key_WasPressed(BSP_KEY4);
+#endif
+    }
+
+    if (key4_pressed != 0U) {
+        H3Task_EnterFault(H2_FAULT_MANUAL_STOP, now_ms);
+        H3Task_ResetKeyArm();
+        H3Task_UpdateDisplay(now_ms, 1U);
+        return;
+    }
+
+    if (app.servo_fault != 0U) {
+        H3Task_EnterFault(H3_FAULT_SERVO, now_ms);
+        H3Task_UpdateDisplay(now_ms, 1U);
+        return;
+    }
+
+    switch (s_task.state) {
+    case H_TASK3_WAIT_START:
+        if (key1_pressed != 0U) {
+            H3Task_Start(now_ms);
+        }
+        break;
+
+    case H_TASK3_WAIT_VALID:
+        if (app.state == BALL_BALANCE_APP_ACTIVE) {
+            H3Task_EnterState(H_TASK3_SETTLE_CENTER, now_ms);
+        } else if (s_task.state_elapsed_ms >=
+                   H3_WAIT_VALID_TIMEOUT_MS) {
+            H3Task_EnterFault(H3_FAULT_VISION_TIMEOUT, now_ms);
+        }
+        break;
+
+    case H_TASK3_SETTLE_CENTER:
+        if (app.state == BALL_BALANCE_APP_DEGRADED) {
+            H3Task_EnterFault(H3_FAULT_VISION_TIMEOUT, now_ms);
+        } else if (BallBalance_App_IsSettled() != 0U) {
+            H3Task_EnterState(H_TASK3_MOVE_PLUS_50, now_ms);
+        }
+        break;
+
+    case H_TASK3_MOVE_PLUS_50:
+        BallBalance_App_SetTargetMmX10(500);
+        H3Task_EnterState(H_TASK3_SETTLE_PLUS_50, now_ms);
+        break;
+
+    case H_TASK3_SETTLE_PLUS_50:
+        if (app.state == BALL_BALANCE_APP_DEGRADED) {
+            H3Task_EnterFault(H3_FAULT_VISION_TIMEOUT, now_ms);
+        } else if (BallBalance_App_IsSettled() != 0U) {
+            H3Task_EnterState(H_TASK3_MOVE_MINUS_50, now_ms);
+        }
+        break;
+
+    case H_TASK3_MOVE_MINUS_50:
+        BallBalance_App_SetTargetMmX10(-500);
+        H3Task_EnterState(H_TASK3_SETTLE_MINUS_50, now_ms);
+        break;
+
+    case H_TASK3_SETTLE_MINUS_50:
+        if (app.state == BALL_BALANCE_APP_DEGRADED) {
+            H3Task_EnterFault(H3_FAULT_VISION_TIMEOUT, now_ms);
+        } else if (BallBalance_App_IsSettled() != 0U) {
+            s_task.final_time_ms =
+                (uint32_t)(now_ms - s_start_tick);
+            s_task.elapsed_ms = s_task.final_time_ms;
+            s_task.timer_running = 0U;
+            H3Task_EnterState(H_TASK3_FINISHED, now_ms);
+        }
+        break;
+
+    case H_TASK3_FINISHED:
+        /* 完成后继续保持-50mm，KEY1可重新开始一次完整流程。 */
+        if (key1_pressed != 0U) {
+            H3Task_Start(now_ms);
+        }
+        break;
+
+    case H_TASK3_FAULT:
+        Chassis_EmergencyStop();
+        if (key1_pressed != 0U) {
+            H2Task_Reset();
+            H3Task_ResetKeyArm();
+        }
+        break;
+
+    default:
+        H3Task_EnterFault(H2_FAULT_INTERNAL, now_ms);
+        break;
+    }
+
+    H3Task_UpdateDisplay(now_ms, 0U);
+}
+
+BSP_Status_t H2Task_GetInfo(H2Task_Info_t *info)
+{
+    if (info == 0) {
+        return BSP_PARAM;
+    }
+    *info = s_task;
+    return BSP_OK;
+}
+
+#else
 
 static H2Task_Info_t s_task;
 static uint8_t s_key_release_samples;
@@ -516,3 +838,5 @@ BSP_Status_t H2Task_GetInfo(H2Task_Info_t *info)
     *info = s_task;
     return BSP_OK;
 }
+
+#endif /* H_COMPETITION_ITEM_SELECT */

@@ -1,14 +1,14 @@
 #include "ball_balance_app.h"
 
+#include "ball_balance_config.h"
+#include "ball_equilibrium_map.h"
 #include "bsp_systick.h"
 #include "drv_servo.h"
 #include "project_critical.h"
 
-#define BALL_BALANCE_APP_POSITION_ABS_MAX_MM_X10     1200
-#define BALL_BALANCE_HOLD_MAX_MS                     BALL_BALANCE_DATA_TIMEOUT_MS
-
 static uint8_t s_initialized;
 static uint8_t s_enabled;
+static BallBalance_AppState_t s_state;
 static uint8_t s_pending_sample;
 static uint8_t s_has_sequence;
 static uint8_t s_last_sequence;
@@ -17,12 +17,22 @@ static uint8_t s_last_sample_valid;
 static uint8_t s_low_confidence;
 static uint8_t s_position_out_of_range;
 static uint8_t s_duplicate_sequence;
-static uint8_t s_hold_active;
-static uint8_t s_hold_expired;
-static uint8_t s_has_valid_measurement;
+static uint8_t s_tracking_ready;
+static uint8_t s_valid_streak;
+static uint8_t s_ever_active;
+static uint8_t s_data_timeout;
+static uint8_t s_settled;
+static uint8_t s_settle_tracking;
 static uint8_t s_servo_fault;
+static uint8_t s_vehicle_feedforward_enabled;
+static uint8_t s_vehicle_disturbance_valid;
+static int16_t s_target_mm_x10;
+static float s_vehicle_disturbance_mm_s2;
+static float s_equilibrium_angle_deg;
+static float s_last_applied_dynamic_angle_deg;
+static uint32_t s_vehicle_disturbance_timestamp_ms;
 static uint32_t s_last_valid_sample_ms;
-static uint32_t s_last_hold_sample_ms;
+static uint32_t s_settle_start_ms;
 static uint32_t s_pushed_sample_count;
 static uint32_t s_consumed_sample_count;
 static uint32_t s_rejected_sample_count;
@@ -38,35 +48,39 @@ static uint32_t BallBalance_App_IncrementU32(uint32_t value)
     return (value < 0xFFFFFFFFUL) ? (value + 1UL) : value;
 }
 
-static int16_t BallBalance_App_AbsI16(int16_t value)
+static float BallBalance_App_AbsF(float value)
 {
-    if (value >= 0) {
-        return value;
+    return (value >= 0.0f) ? value : -value;
+}
+
+static int16_t BallBalance_App_LimitTargetX10(int16_t target_mm_x10)
+{
+    if (target_mm_x10 > BALL_BALANCE_POSITION_ABS_MAX_MM_X10) {
+        return BALL_BALANCE_POSITION_ABS_MAX_MM_X10;
     }
-    if (value == (int16_t)-32768) {
-        return 32767;
+    if (target_mm_x10 < -BALL_BALANCE_POSITION_ABS_MAX_MM_X10) {
+        return -BALL_BALANCE_POSITION_ABS_MAX_MM_X10;
     }
-    return (int16_t)(-value);
+    return target_mm_x10;
 }
 
-static uint8_t BallBalance_App_IsPositionInRange(int16_t position_mm_x10)
+static uint8_t BallBalance_App_IsPositionInRange(
+    int16_t position_mm_x10
+)
 {
-    return (BallBalance_App_AbsI16(position_mm_x10) <=
-            BALL_BALANCE_APP_POSITION_ABS_MAX_MM_X10) ? 1U : 0U;
+    int32_t position = position_mm_x10;
+
+    if (position < 0) {
+        position = -position;
+    }
+    return (position <= BALL_BALANCE_POSITION_ABS_MAX_MM_X10) ?
+           1U : 0U;
 }
 
-static BSP_Status_t BallBalance_App_OutputNeutral(void)
+static void BallBalance_App_ClearSamples(void)
 {
-    return Drv_Servo_SetHorizontalTargetAngleX10(
-        BALL_BALANCE_NEUTRAL_ANGLE_X10
-    );
-}
+    uint32_t primask = Project_EnterCritical();
 
-static void BallBalance_App_ClearVisionState(void)
-{
-    uint32_t primask;
-
-    primask = Project_EnterCritical();
     s_pending_sample = 0U;
     s_has_sequence = 0U;
     s_last_sequence = 0U;
@@ -75,11 +89,6 @@ static void BallBalance_App_ClearVisionState(void)
     s_low_confidence = 0U;
     s_position_out_of_range = 0U;
     s_duplicate_sequence = 0U;
-    s_hold_active = 0U;
-    s_hold_expired = 0U;
-    s_has_valid_measurement = 0U;
-    s_last_valid_sample_ms = 0U;
-    s_last_hold_sample_ms = 0U;
     s_pending_vision_sample.position_mm_x10 = 0;
     s_pending_vision_sample.state = BALL_BALANCE_VISION_LOST;
     s_pending_vision_sample.valid = 0U;
@@ -90,139 +99,126 @@ static void BallBalance_App_ClearVisionState(void)
     Project_ExitCritical(primask);
 }
 
-static uint8_t BallBalance_App_NormalizeSample(
-    const BallBalance_VisionSample_t *sample,
-    BallBalance_VisionSample_t *checked_sample,
-    uint8_t *low_confidence,
-    uint8_t *position_out_of_range,
-    uint8_t *hold_expired
+static uint8_t BallBalance_App_TakeSample(
+    BallBalance_VisionSample_t *sample
 )
 {
-    uint8_t sample_valid;
+    uint8_t available = 0U;
+    uint32_t primask = Project_EnterCritical();
 
-    *checked_sample = *sample;
-    *low_confidence = 0U;
-    *position_out_of_range = 0U;
-    *hold_expired = 0U;
-    sample_valid = 0U;
+    if (s_pending_sample != 0U) {
+        *sample = s_pending_vision_sample;
+        s_pending_sample = 0U;
+        available = 1U;
+    }
+    Project_ExitCritical(primask);
+    return available;
+}
 
-    if (checked_sample->timestamp_ms == 0U) {
-        checked_sample->timestamp_ms = BSP_GetTickMs();
+static void BallBalance_App_AcquireTracking(float position_mm)
+{
+    BallStateEstimator_Reset(position_mm);
+    BallReference_Init(position_mm);
+    BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
+    BallReference_Resume();
+    BallBalance_Control_Reset();
+    s_last_applied_dynamic_angle_deg = 0.0f;
+    s_tracking_ready = 1U;
+    s_data_timeout = 0U;
+    s_ever_active = 1U;
+}
+
+static uint8_t BallBalance_App_GetVehicleDisturbance(
+    uint32_t now_ms,
+    float *disturbance_mm_s2
+)
+{
+    if ((s_vehicle_feedforward_enabled == 0U) ||
+        (s_vehicle_disturbance_valid == 0U) ||
+        ((uint32_t)(now_ms - s_vehicle_disturbance_timestamp_ms) >
+         BALL_VEHICLE_IMU_TIMEOUT_MS)) {
+        *disturbance_mm_s2 = 0.0f;
+        return 0U;
     }
 
-    /*
-     * 当前联调阶段先相信K210传回的距离字段。state/confidence只保留为
-     * 状态显示，不再因为LOST、HOLD或低置信度直接丢弃位置。
-     */
-    if (sample->confidence < BALL_BALANCE_MIN_CONFIDENCE) {
-        *low_confidence = 1U;
+    *disturbance_mm_s2 = s_vehicle_disturbance_mm_s2;
+    return 1U;
+}
+
+static void BallBalance_App_UpdateSettled(
+    uint32_t now_ms,
+    const BallStateEstimator_Info_t *estimator
+)
+{
+    float target_mm = (float)s_target_mm_x10 * 0.1f;
+
+    if ((s_state != BALL_BALANCE_APP_ACTIVE) ||
+        (BallBalance_App_AbsF(target_mm - estimator->position_mm) >
+         BALL_BALANCE_SETTLE_ERROR_MM) ||
+        (BallBalance_App_AbsF(estimator->velocity_mm_s) >
+         BALL_BALANCE_SETTLE_SPEED_MM_S)) {
+        s_settled = 0U;
+        s_settle_tracking = 0U;
+        return;
     }
 
-    if (BallBalance_App_IsPositionInRange(sample->position_mm_x10) != 0U) {
-        checked_sample->valid = 1U;
-        sample_valid = 1U;
-    } else {
-        checked_sample->valid = 0U;
-        *position_out_of_range = 1U;
+    if (s_settle_tracking == 0U) {
+        s_settle_tracking = 1U;
+        s_settle_start_ms = now_ms;
+        s_settled = 0U;
+    } else if ((uint32_t)(now_ms - s_settle_start_ms) >=
+               BALL_BALANCE_SETTLE_TIME_MS) {
+        s_settled = 1U;
     }
-
-    return sample_valid;
 }
 
 void BallBalance_App_Init(void)
 {
-    BallBalance_Control_Init();
-    BallBalance_App_ClearVisionState();
+    BallBalance_App_ClearSamples();
+    s_initialized = 0U;
     s_enabled = 0U;
+    s_state = BALL_BALANCE_APP_DISABLED;
+    s_tracking_ready = 0U;
+    s_valid_streak = 0U;
+    s_ever_active = 0U;
+    s_data_timeout = 0U;
+    s_settled = 0U;
+    s_settle_tracking = 0U;
     s_servo_fault = 0U;
+    s_vehicle_feedforward_enabled = 0U;
+    s_vehicle_disturbance_valid = 0U;
+    s_target_mm_x10 = 0;
+    s_vehicle_disturbance_mm_s2 = 0.0f;
+    s_equilibrium_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
+    s_last_applied_dynamic_angle_deg = 0.0f;
+    s_vehicle_disturbance_timestamp_ms = 0U;
+    s_last_valid_sample_ms = 0U;
+    s_settle_start_ms = 0U;
     s_pushed_sample_count = 0U;
     s_consumed_sample_count = 0U;
     s_rejected_sample_count = 0U;
     s_valid_sample_count = 0U;
     s_hold_sample_count = 0U;
     s_lost_sample_count = 0U;
-    s_last_servo_status = BallBalance_App_OutputNeutral();
-    s_initialized = 1U;
-}
-
-void BallBalance_App_Update(void)
-{
-    BallBalance_VisionSample_t sample;
-    BallBalance_ControlInfo_t control_info;
-    uint8_t has_sample;
-    uint32_t primask;
-    uint32_t now_ms;
-    uint16_t command_angle_x10;
-
-    if (s_initialized == 0U) {
-        return;
-    }
-
-    now_ms = BSP_GetTickMs();
-    has_sample = 0U;
-    primask = Project_EnterCritical();
-    if (s_pending_sample != 0U) {
-        sample = s_pending_vision_sample;
-        s_pending_sample = 0U;
-        has_sample = 1U;
-    }
-    Project_ExitCritical(primask);
-
-    if (has_sample != 0U) {
-        s_consumed_sample_count = BallBalance_App_IncrementU32(
-            s_consumed_sample_count
-        );
-        if (sample.valid != 0U) {
-            BallBalance_Control_PushMeasurement(
-                sample.position_mm_x10,
-                sample.sequence,
-                sample.timestamp_ms
-            );
-        } else if ((s_has_valid_measurement == 0U) ||
-                   ((uint32_t)(now_ms - s_last_valid_sample_ms) >=
-                    BALL_BALANCE_DATA_TIMEOUT_MS)) {
-            BallBalance_Control_InvalidateMeasurement(sample.timestamp_ms);
-        } else {
-            /*
-             * 视觉会出现单帧或短时间LOST。这里不立刻清空控制测量，
-             * 由控制器按最近一次有效样本的时间统一做超时保护。
-             */
-        }
-    }
-
-    BallBalance_Control_Update(now_ms);
-    if (BallBalance_Control_GetInfo(&control_info) != PROJECT_OK) {
-        return;
-    }
-
-    if ((s_enabled == 0U) ||
-        (control_info.enabled == 0U) ||
-        (control_info.measurement_valid == 0U) ||
-        (control_info.data_timeout != 0U)) {
-        command_angle_x10 = BALL_BALANCE_NEUTRAL_ANGLE_X10;
-    } else {
-        command_angle_x10 = control_info.command_angle_x10;
-    }
-
     s_last_servo_status =
-        Drv_Servo_SetHorizontalTargetAngleX10(command_angle_x10);
+        Drv_Servo_SetHorizontalAngleX10(
+            BALL_BALANCE_LEVEL_ANGLE_X10
+        );
     if (s_last_servo_status != BSP_OK) {
         s_servo_fault = 1U;
-        s_enabled = 0U;
-        BallBalance_Control_SetEnabled(0U);
-        (void)BallBalance_App_OutputNeutral();
+        s_state = BALL_BALANCE_APP_FAULT;
     }
+    s_initialized = 1U;
 }
 
 void BallBalance_App_Enable(void)
 {
-    if (s_initialized == 0U) {
+    if ((s_initialized == 0U) || (s_servo_fault != 0U)) {
         return;
     }
-
     s_enabled = 1U;
-    s_servo_fault = 0U;
-    BallBalance_Control_SetEnabled(1U);
+    s_settled = 0U;
+    s_settle_tracking = 0U;
 }
 
 void BallBalance_App_Disable(void)
@@ -230,10 +226,10 @@ void BallBalance_App_Disable(void)
     if (s_initialized == 0U) {
         return;
     }
-
     s_enabled = 0U;
-    BallBalance_Control_SetEnabled(0U);
-    s_last_servo_status = BallBalance_App_OutputNeutral();
+    s_settled = 0U;
+    s_settle_tracking = 0U;
+    BallReference_Pause();
 }
 
 uint8_t BallBalance_App_IsEnabled(void)
@@ -243,88 +239,245 @@ uint8_t BallBalance_App_IsEnabled(void)
 
 void BallBalance_App_SetTargetMmX10(int16_t target_mm_x10)
 {
-    BallBalance_Control_SetTargetMmX10(target_mm_x10);
-}
-
-void BallBalance_App_SetGains(float kp, float ki, float kd)
-{
-    BallBalance_Control_SetGains(kp, ki, kd);
+    s_target_mm_x10 =
+        BallBalance_App_LimitTargetX10(target_mm_x10);
+    BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
+    s_settled = 0U;
+    s_settle_tracking = 0U;
 }
 
 void BallBalance_App_PushVisionSample(
     const BallBalance_VisionSample_t *sample
 )
 {
-    BallBalance_VisionSample_t checked_sample;
+    BallBalance_VisionSample_t checked;
     uint8_t sample_valid;
-    uint8_t low_confidence;
-    uint8_t position_out_of_range;
-    uint8_t hold_expired;
     uint32_t primask;
 
     if (sample == 0) {
         return;
     }
 
-    sample_valid = BallBalance_App_NormalizeSample(
-        sample,
-        &checked_sample,
-        &low_confidence,
-        &position_out_of_range,
-        &hold_expired
-    );
+    checked = *sample;
+    if (checked.timestamp_ms == 0U) {
+        checked.timestamp_ms = BSP_GetTickMs();
+    }
+    if (checked.state > BALL_BALANCE_VISION_VALID) {
+        checked.state = BALL_BALANCE_VISION_LOST;
+    }
+
+    sample_valid =
+        ((checked.state == BALL_BALANCE_VISION_VALID) &&
+         (checked.confidence >= BALL_BALANCE_MIN_CONFIDENCE) &&
+         (BallBalance_App_IsPositionInRange(
+              checked.position_mm_x10) != 0U)) ? 1U : 0U;
+    checked.valid = sample_valid;
 
     primask = Project_EnterCritical();
     if ((s_has_sequence != 0U) &&
-        (checked_sample.sequence == s_last_sequence)) {
+        (checked.sequence == s_last_sequence)) {
         s_duplicate_sequence = 1U;
         Project_ExitCritical(primask);
         return;
     }
 
-    s_pending_vision_sample = checked_sample;
-    s_last_vision_sample = checked_sample;
+    s_pending_vision_sample = checked;
+    s_last_vision_sample = checked;
     s_pending_sample = 1U;
-    s_last_sequence = checked_sample.sequence;
     s_has_sequence = 1U;
-    s_last_sample_state = checked_sample.state;
+    s_last_sequence = checked.sequence;
+    s_last_sample_state = checked.state;
     s_last_sample_valid = sample_valid;
-    s_low_confidence = low_confidence;
-    s_position_out_of_range = position_out_of_range;
+    s_low_confidence =
+        (checked.confidence < BALL_BALANCE_MIN_CONFIDENCE) ? 1U : 0U;
+    s_position_out_of_range =
+        (BallBalance_App_IsPositionInRange(
+             checked.position_mm_x10) == 0U) ? 1U : 0U;
     s_duplicate_sequence = 0U;
-    s_hold_expired = hold_expired;
-    s_pushed_sample_count = BallBalance_App_IncrementU32(
-        s_pushed_sample_count
-    );
+    s_pushed_sample_count =
+        BallBalance_App_IncrementU32(s_pushed_sample_count);
 
-    if (sample_valid != 0U) {
-        s_has_valid_measurement = 1U;
-        s_last_valid_sample_ms = checked_sample.timestamp_ms;
-        if (checked_sample.state == BALL_BALANCE_VISION_HOLD) {
-            s_hold_active = 1U;
-            s_last_hold_sample_ms = checked_sample.timestamp_ms;
-            s_hold_sample_count = BallBalance_App_IncrementU32(
-                s_hold_sample_count
-            );
-        } else {
-            s_hold_active = 0U;
-            s_valid_sample_count = BallBalance_App_IncrementU32(
-                s_valid_sample_count
-            );
-        }
+    if (checked.state == BALL_BALANCE_VISION_VALID) {
+        s_valid_sample_count =
+            BallBalance_App_IncrementU32(s_valid_sample_count);
+    } else if (checked.state == BALL_BALANCE_VISION_HOLD) {
+        s_hold_sample_count =
+            BallBalance_App_IncrementU32(s_hold_sample_count);
     } else {
-        s_hold_active = 0U;
-        s_lost_sample_count = BallBalance_App_IncrementU32(
-            s_lost_sample_count
-        );
+        s_lost_sample_count =
+            BallBalance_App_IncrementU32(s_lost_sample_count);
     }
-
     if (sample_valid == 0U) {
-        s_rejected_sample_count = BallBalance_App_IncrementU32(
-            s_rejected_sample_count
-        );
+        s_rejected_sample_count =
+            BallBalance_App_IncrementU32(s_rejected_sample_count);
     }
     Project_ExitCritical(primask);
+}
+
+void BallBalance_App_SetVehicleDisturbanceMmS2(
+    float disturbance_mm_s2,
+    uint8_t valid,
+    uint32_t timestamp_ms
+)
+{
+    s_vehicle_disturbance_mm_s2 = disturbance_mm_s2;
+    s_vehicle_disturbance_valid = (valid != 0U) ? 1U : 0U;
+    s_vehicle_disturbance_timestamp_ms = timestamp_ms;
+}
+
+void BallBalance_App_SetVehicleFeedforwardEnabled(uint8_t enabled)
+{
+    s_vehicle_feedforward_enabled = (enabled != 0U) ? 1U : 0U;
+}
+
+uint8_t BallBalance_App_IsSettled(void)
+{
+    return s_settled;
+}
+
+void BallBalance_App_Update(void)
+{
+    BallBalance_VisionSample_t sample;
+    BallStateEstimator_Info_t estimator;
+    BallReference_Info_t reference;
+    BallBalance_ControlInput_t control_input;
+    BallBalance_ControlOutput_t control_output;
+    float vehicle_disturbance;
+    uint8_t has_sample;
+    uint8_t allow_stiction_growth;
+    uint32_t now_ms;
+
+    if (s_initialized == 0U) {
+        return;
+    }
+
+    now_ms = BSP_GetTickMs();
+    has_sample = BallBalance_App_TakeSample(&sample);
+    allow_stiction_growth =
+        (s_last_sample_state == BALL_BALANCE_VISION_VALID) ? 1U : 0U;
+
+    if (has_sample != 0U) {
+        s_consumed_sample_count =
+            BallBalance_App_IncrementU32(s_consumed_sample_count);
+        if (sample.valid != 0U) {
+            s_last_valid_sample_ms = sample.timestamp_ms;
+            if (s_valid_streak < 0xFFU) {
+                s_valid_streak++;
+            }
+
+            if (s_tracking_ready == 0U) {
+                if (s_valid_streak == 1U) {
+                    BallStateEstimator_Reset(
+                        (float)sample.position_mm_x10 * 0.1f
+                    );
+                }
+                if (s_valid_streak >=
+                    BALL_BALANCE_REACQUIRE_VALID_COUNT) {
+                    BallBalance_App_AcquireTracking(
+                        (float)sample.position_mm_x10 * 0.1f
+                    );
+                }
+            } else {
+                (void)BallStateEstimator_UpdatePosition(
+                    (float)sample.position_mm_x10 * 0.1f
+                );
+            }
+        } else {
+            s_valid_streak = 0U;
+            allow_stiction_growth = 0U;
+        }
+    }
+
+    if ((s_tracking_ready != 0U) &&
+        ((uint32_t)(now_ms - s_last_valid_sample_ms) >
+         BALL_BALANCE_VALID_TIMEOUT_MS)) {
+        s_tracking_ready = 0U;
+        s_valid_streak = 0U;
+        s_data_timeout = 1U;
+        allow_stiction_growth = 0U;
+        BallReference_Pause();
+    }
+
+    (void)BallBalance_App_GetVehicleDisturbance(
+        now_ms,
+        &vehicle_disturbance
+    );
+
+    BallStateEstimator_Predict(
+        s_last_applied_dynamic_angle_deg,
+        vehicle_disturbance,
+        BALL_BALANCE_CONTROL_PERIOD_S
+    );
+    if (BallStateEstimator_GetInfo(&estimator) != PROJECT_OK) {
+        return;
+    }
+
+    if ((s_enabled != 0U) && (s_tracking_ready != 0U)) {
+        BallReference_Resume();
+        BallReference_Update(BALL_BALANCE_CONTROL_PERIOD_S);
+        s_state = BALL_BALANCE_APP_ACTIVE;
+        s_data_timeout = 0U;
+    } else {
+        BallReference_Pause();
+        if (s_servo_fault != 0U) {
+            s_state = BALL_BALANCE_APP_FAULT;
+        } else if (s_enabled == 0U) {
+            s_state = BALL_BALANCE_APP_DISABLED;
+        } else if (s_ever_active != 0U) {
+            s_state = BALL_BALANCE_APP_DEGRADED;
+        } else {
+            s_state = BALL_BALANCE_APP_WAIT_VALID;
+        }
+    }
+
+    if (BallReference_GetInfo(&reference) != PROJECT_OK) {
+        return;
+    }
+    s_equilibrium_angle_deg =
+        BallEquilibriumMap_GetAngleDeg(estimator.position_mm);
+
+    control_input.control_enabled =
+        (s_state == BALL_BALANCE_APP_ACTIVE) ? 1U : 0U;
+    control_input.data_valid = s_tracking_ready;
+    control_input.allow_stiction_growth = allow_stiction_growth;
+    control_input.now_ms = now_ms;
+    control_input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
+    control_input.reference_position_mm =
+        reference.reference_position_mm;
+    control_input.reference_velocity_mm_s =
+        reference.reference_velocity_mm_s;
+    control_input.reference_acceleration_mm_s2 =
+        reference.reference_acceleration_mm_s2;
+    control_input.estimated_position_mm = estimator.position_mm;
+    control_input.estimated_velocity_mm_s = estimator.velocity_mm_s;
+    control_input.estimated_disturbance_mm_s2 =
+        estimator.disturbance_mm_s2;
+    control_input.vehicle_disturbance_mm_s2 = vehicle_disturbance;
+    control_input.equilibrium_angle_deg = s_equilibrium_angle_deg;
+
+    if (BallBalance_Control_Update(
+            &control_input,
+            &control_output
+        ) != PROJECT_OK) {
+        return;
+    }
+    s_last_applied_dynamic_angle_deg =
+        control_output.applied_dynamic_angle_deg;
+
+    s_last_servo_status =
+        Drv_Servo_SetHorizontalAngleX10(
+            control_output.command_angle_x10
+        );
+    if (s_last_servo_status != BSP_OK) {
+        s_servo_fault = 1U;
+        s_enabled = 0U;
+        s_state = BALL_BALANCE_APP_FAULT;
+        (void)Drv_Servo_SetHorizontalAngleX10(
+            BALL_BALANCE_LEVEL_ANGLE_X10
+        );
+    }
+
+    BallBalance_App_UpdateSettled(now_ms, &estimator);
 }
 
 BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)
@@ -337,8 +490,24 @@ BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)
 
     info->initialized = s_initialized;
     info->enabled = s_enabled;
+    info->state = s_state;
+    info->tracking_ready = s_tracking_ready;
+    info->valid_streak = s_valid_streak;
+    info->data_timeout = s_data_timeout;
+    info->settled = s_settled;
     info->servo_fault = s_servo_fault;
     info->last_servo_status = s_last_servo_status;
+    info->vehicle_feedforward_enabled =
+        s_vehicle_feedforward_enabled;
+    info->vehicle_disturbance_valid =
+        s_vehicle_disturbance_valid;
+    info->vehicle_disturbance_mm_s2 =
+        s_vehicle_disturbance_mm_s2;
+    info->vehicle_disturbance_timestamp_ms =
+        s_vehicle_disturbance_timestamp_ms;
+    info->last_valid_sample_ms = s_last_valid_sample_ms;
+    info->target_mm_x10 = s_target_mm_x10;
+    info->equilibrium_angle_deg = s_equilibrium_angle_deg;
 
     primask = Project_EnterCritical();
     info->pending_sample = s_pending_sample;
@@ -347,10 +516,6 @@ BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)
     info->low_confidence = s_low_confidence;
     info->position_out_of_range = s_position_out_of_range;
     info->duplicate_sequence = s_duplicate_sequence;
-    info->hold_active = s_hold_active;
-    info->hold_expired = s_hold_expired;
-    info->last_valid_sample_ms = s_last_valid_sample_ms;
-    info->last_hold_sample_ms = s_last_hold_sample_ms;
     info->pushed_sample_count = s_pushed_sample_count;
     info->consumed_sample_count = s_consumed_sample_count;
     info->rejected_sample_count = s_rejected_sample_count;
@@ -360,7 +525,9 @@ BSP_Status_t BallBalance_App_GetInfo(BallBalance_AppInfo_t *info)
     info->last_sample = s_last_vision_sample;
     Project_ExitCritical(primask);
 
-    if (BallBalance_Control_GetInfo(&info->control) != PROJECT_OK) {
+    if ((BallStateEstimator_GetInfo(&info->estimator) != PROJECT_OK) ||
+        (BallReference_GetInfo(&info->reference) != PROJECT_OK) ||
+        (BallBalance_Control_GetInfo(&info->control) != PROJECT_OK)) {
         return BSP_ERROR;
     }
     return BSP_OK;

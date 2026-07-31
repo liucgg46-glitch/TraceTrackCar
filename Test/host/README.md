@@ -1,6 +1,6 @@
 # 算法主机单元测试
 
-本目录直接编译项目中的`Algorithm/attitude_estimator.c`和`Algorithm/odometer.c`，不复制算法实现。通用状态码来自`Common/project_status.h`，`stubs/project_critical.c`只提供主机临界区空操作实现，因此测试不依赖STM32芯片头文件、Keil工程或实物硬件。
+本目录直接编译项目中的姿态、里程和钢球平衡Algorithm实现，不复制算法代码。通用状态码来自`Common/project_status.h`，`stubs/project_critical.c`只提供主机临界区空操作实现，因此测试不依赖STM32芯片头文件、Keil工程或实物硬件。
 
 ## 测试入口文档一致性检查
 
@@ -10,7 +10,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Test\host\check_test_docs.ps1
 ```
 
-脚本会核对公共`Test_*`入口是否有真实实现、是否已写入`Doc/测试任务完整手册.md`，并检查`Doc`中任务表示例是否仍使用有效名称和正确的宏续行格式。脚本还会检查任务表与测试开关一致：任务表包含`Test_*`时必须为`1U`，正式任务表时必须为`0U`。
+脚本会核对公共`Test_*`入口是否有真实实现、是否已写入`Doc/测试任务完整手册.md`，并检查`Doc`中任务表示例是否仍使用有效名称和正确的宏续行格式。脚本还会确认正式默认值为`0U`、`APP/app_task_config.h`不包含任何测试入口，并且专项任务只位于`Test/test_task_config.h`。
 
 ## 运行方法
 
@@ -32,5 +32,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Test\host\run_attitude
 6. 里程相对距离：验证左右累计里程、平均里程和周期增量。
 7. 软件清零：硬件累计值不清零时，新的软件基准仍从0开始计程。
 8. 计数回绕：验证32位有符号累计值跨越边界后的相对距离。
+9. 钢球控制：验证方向、动态角和变化率限幅、静摩擦时序。
+10. 钢球参考：验证速度、加速度、加加速度限制以及到点无超调。
+11. 钢球估计与平衡表：验证模型方向、创新拒绝和安全角度检查。
 
-测试使用`/W4 /WX`编译，任何主机编译警告或断言失败都会返回非零退出码。修改姿态接口、融合参数、时间戳处理、失效逻辑、磁力计门控或里程清零/增量逻辑后，必须重新运行本测试。
+测试使用`/W4 /WX`编译，任何主机编译警告或断言失败都会返回非零退出码。修改姿态、里程或钢球Algorithm接口和参数后，必须重新运行本测试。

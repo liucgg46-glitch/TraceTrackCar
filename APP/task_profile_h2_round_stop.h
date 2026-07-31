@@ -23,6 +23,8 @@ extern "C" {
 #define H2_KEY_RELEASE_CONFIRM_SAMPLES           10U
 #define H2_ENCODER_MAX_REASONABLE_CPS            6000
 #define H2_ENCODER_MAX_STEP_MM                   100
+#define H3_TASK_TIMEOUT_MS                       5000U
+#define H3_WAIT_VALID_TIMEOUT_MS                 2000U
 
 typedef enum {
     H2_IDLE = 0,
@@ -33,7 +35,16 @@ typedef enum {
     H2_FINAL_APPROACH,
     H2_BRAKING,
     H2_STOPPED,
-    H2_FAULT
+    H2_FAULT,
+    H_TASK3_WAIT_START,
+    H_TASK3_WAIT_VALID,
+    H_TASK3_SETTLE_CENTER,
+    H_TASK3_MOVE_PLUS_50,
+    H_TASK3_SETTLE_PLUS_50,
+    H_TASK3_MOVE_MINUS_50,
+    H_TASK3_SETTLE_MINUS_50,
+    H_TASK3_FINISHED,
+    H_TASK3_FAULT
 } H2Task_State_t;
 
 typedef enum {
@@ -46,7 +57,9 @@ typedef enum {
     H2_FAULT_CHASSIS,
     H2_FAULT_BRAKE_TIMEOUT,
     H2_FAULT_MANUAL_STOP,
-    H2_FAULT_INTERNAL
+    H2_FAULT_INTERNAL,
+    H3_FAULT_VISION_TIMEOUT,
+    H3_FAULT_SERVO
 } H2Task_Fault_t;
 
 typedef struct {
@@ -60,6 +73,8 @@ typedef struct {
     uint8_t encoder_reliable;
     uint8_t line_follow_running;
     uint8_t chassis_fault;
+    uint8_t ball_app_state;
+    uint8_t task3_timeout;
     uint32_t elapsed_ms;
     uint32_t final_time_ms;
     uint32_t state_elapsed_ms;

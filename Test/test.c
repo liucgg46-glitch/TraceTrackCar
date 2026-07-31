@@ -3385,7 +3385,7 @@ length = snprintf(
     }
 }
 
-static const char *Test_BallPid_StateText(uint8_t state)
+static const char *Test_BallState_StateText(uint8_t state)
 {
     switch (state) {
         case BALL_BALANCE_VISION_VALID:
@@ -3399,7 +3399,7 @@ static const char *Test_BallPid_StateText(uint8_t state)
     }
 }
 
-static int32_t Test_BallPid_FloatToX10(float value)
+static int32_t Test_BallState_FloatToX10(float value)
 {
     float scaled;
 
@@ -3412,7 +3412,7 @@ static int32_t Test_BallPid_FloatToX10(float value)
     return (int32_t)scaled;
 }
 
-static int32_t Test_BallPid_FloatToX100(float value)
+static int32_t Test_BallState_FloatToX100(float value)
 {
     float scaled;
 
@@ -3425,77 +3425,12 @@ static int32_t Test_BallPid_FloatToX100(float value)
     return (int32_t)scaled;
 }
 
-static void Test_BallPid_PrintSignedX10(char *buf,
-                                        uint16_t buf_size,
-                                        int *used,
-                                        int32_t value_x10,
-                                        const char *unit)
+static float Test_BallState_AbsF(float value)
 {
-    uint32_t abs_value;
-    int n;
-
-    if ((buf == 0) || (used == 0) || (*used >= (int)buf_size)) {
-        return;
-    }
-
-    if (value_x10 < 0) {
-        abs_value = (uint32_t)(-value_x10);
-    } else {
-        abs_value = (uint32_t)value_x10;
-    }
-
-    n = snprintf(
-        &buf[*used],
-        (size_t)((int)buf_size - *used),
-        "%c%lu.%lu%s",
-        (value_x10 < 0) ? '-' : '+',
-        (unsigned long)(abs_value / 10UL),
-        (unsigned long)(abs_value % 10UL),
-        unit
-    );
-    if ((n > 0) && (n < ((int)buf_size - *used))) {
-        *used += n;
-    } else {
-        *used = (int)buf_size;
-    }
+    return (value >= 0.0f) ? value : -value;
 }
 
-static void Test_BallPid_PrintSignedX100(char *buf,
-                                         uint16_t buf_size,
-                                         int *used,
-                                         int32_t value_x100,
-                                         const char *unit)
-{
-    uint32_t abs_value;
-    int n;
-
-    if ((buf == 0) || (used == 0) || (*used >= (int)buf_size)) {
-        return;
-    }
-
-    if (value_x100 < 0) {
-        abs_value = (uint32_t)(-value_x100);
-    } else {
-        abs_value = (uint32_t)value_x100;
-    }
-
-    n = snprintf(
-        &buf[*used],
-        (size_t)((int)buf_size - *used),
-        "%c%lu.%02lu%s",
-        (value_x100 < 0) ? '-' : '+',
-        (unsigned long)(abs_value / 100UL),
-        (unsigned long)(abs_value % 100UL),
-        unit
-    );
-    if ((n > 0) && (n < ((int)buf_size - *used))) {
-        *used += n;
-    } else {
-        *used = (int)buf_size;
-    }
-}
-
-static void Test_BallPid_SendLine(const char *line)
+static void Test_BallState_SendLine(const char *line)
 {
     uint16_t length;
 
@@ -3516,7 +3451,7 @@ static void Test_BallPid_SendLine(const char *line)
     }
 }
 
-static void Test_BallPid_PrintStatus(const char *reason)
+static void Test_BallState_PrintStatus(const char *reason)
 {
     K210_Comm_Info_t k210_info;
     BallBalance_AppInfo_t app_info;
@@ -3524,7 +3459,6 @@ static void Test_BallPid_PrintStatus(const char *reason)
     Drv_Servo_Info_t servo_info;
     uint8_t servo_info_ok;
     char line[256];
-    int used;
     int n;
 
     servo_info_ok = 0U;
@@ -3541,7 +3475,7 @@ static void Test_BallPid_PrintStatus(const char *reason)
     n = snprintf(
         line,
         sizeof(line),
-        "[BallPID] %s k210_online=%u frames=%lu checksum_err=%lu format_err=%lu\r\n",
+        "[BallState] %s k210_online=%u frames=%lu checksum_err=%lu format_err=%lu\r\n",
         (reason == 0) ? "STATUS" : reason,
         (unsigned int)k210_info.online,
         (unsigned long)k210_info.valid_frame_count,
@@ -3549,120 +3483,215 @@ static void Test_BallPid_PrintStatus(const char *reason)
         (unsigned long)k210_info.format_error_count
     );
     if ((n > 0) && (n < (int)sizeof(line))) {
-        Test_BallPid_SendLine(line);
+        Test_BallState_SendLine(line);
     }
 
     n = snprintf(
         line,
         sizeof(line),
-        "[BallPID] state=%s conf=%u seq=%u hold=%u hold_exp=%u pushed=%lu\r\n",
-        Test_BallPid_StateText(app_info.last_sample_state),
+        "[BallState] app=%u vision=%s conf=%u seq=%u streak=%u timeout=%u pushed=%lu\r\n",
+        (unsigned int)app_info.state,
+        Test_BallState_StateText(app_info.last_sample_state),
         (unsigned int)app_info.last_sample.confidence,
         (unsigned int)adapter_info.sequence,
-        (unsigned int)app_info.hold_active,
-        (unsigned int)app_info.hold_expired,
+        (unsigned int)app_info.valid_streak,
+        (unsigned int)app_info.data_timeout,
         (unsigned long)adapter_info.pushed_count
     );
     if ((n > 0) && (n < (int)sizeof(line))) {
-        Test_BallPid_SendLine(line);
-    }
-
-    used = snprintf(line, sizeof(line), "[BallPID] target=");
-    Test_BallPid_PrintSignedX10(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        app_info.control.target_mm_x10,
-        "mm raw="
-    );
-    Test_BallPid_PrintSignedX10(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        app_info.control.raw_position_mm_x10,
-        "mm filt="
-    );
-    Test_BallPid_PrintSignedX10(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        app_info.control.filtered_position_mm_x10,
-        "mm err="
-    );
-    Test_BallPid_PrintSignedX10(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        app_info.control.error_mm_x10,
-        "mm\r\n"
-    );
-    if ((used > 0) && (used < (int)sizeof(line))) {
-        Test_BallPid_SendLine(line);
-    }
-
-    used = snprintf(line, sizeof(line), "[BallPID] vel=");
-    Test_BallPid_PrintSignedX10(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        Test_BallPid_FloatToX10(app_info.control.velocity_mm_s),
-        "mm/s P="
-    );
-    Test_BallPid_PrintSignedX100(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        Test_BallPid_FloatToX100(app_info.control.p_term),
-        "deg I="
-    );
-    Test_BallPid_PrintSignedX100(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        Test_BallPid_FloatToX100(app_info.control.i_term),
-        "deg D="
-    );
-    Test_BallPid_PrintSignedX100(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        Test_BallPid_FloatToX100(app_info.control.d_term),
-        "deg out="
-    );
-    Test_BallPid_PrintSignedX100(
-        line,
-        (uint16_t)sizeof(line),
-        &used,
-        Test_BallPid_FloatToX100(app_info.control.pid_output_deg),
-        "deg\r\n"
-    );
-    if ((used > 0) && (used < (int)sizeof(line))) {
-        Test_BallPid_SendLine(line);
+        Test_BallState_SendLine(line);
     }
 
     n = snprintf(
         line,
         sizeof(line),
-        "[BallPID] servo_cmd=%u.%udeg servo_now=%u.%udeg servo_tgt=%u.%udeg enabled=%u valid=%u timeout=%u low_conf=%u out_range=%u fault=%u\r\n",
-        (unsigned int)(app_info.control.command_angle_x10 / 10U),
-        (unsigned int)(app_info.control.command_angle_x10 % 10U),
+        "[BallState] target=%d.%dmm raw=%d.%dmm est=%ld.%ldmm vel=%ld.%ldmm/s dist=%ld.%ldmm/s2\r\n",
+        (int)(app_info.target_mm_x10 / 10),
+        (int)((app_info.target_mm_x10 < 0 ?
+               -app_info.target_mm_x10 :
+               app_info.target_mm_x10) % 10),
+        (int)(app_info.last_sample.position_mm_x10 / 10),
+        (int)((app_info.last_sample.position_mm_x10 < 0 ?
+               -app_info.last_sample.position_mm_x10 :
+               app_info.last_sample.position_mm_x10) % 10),
+        (long)(Test_BallState_FloatToX10(
+            app_info.estimator.position_mm) / 10),
+        (long)(Test_BallState_FloatToX10(
+            Test_BallState_AbsF(app_info.estimator.position_mm)) % 10),
+        (long)(Test_BallState_FloatToX10(
+            app_info.estimator.velocity_mm_s) / 10),
+        (long)(Test_BallState_FloatToX10(
+            Test_BallState_AbsF(app_info.estimator.velocity_mm_s)) % 10),
+        (long)(Test_BallState_FloatToX10(
+            app_info.estimator.disturbance_mm_s2) / 10),
+        (long)(Test_BallState_FloatToX10(
+            Test_BallState_AbsF(app_info.estimator.disturbance_mm_s2)) % 10)
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallState_SendLine(line);
+    }
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "[BallState] ref=%ld.%ldmm dyn=%ld.%02lddeg stiction=%ld.%02lddeg servo=%u.%udeg now=%u.%udeg settled=%u reject=%u fault=%u\r\n",
+        (long)(Test_BallState_FloatToX10(
+            app_info.reference.reference_position_mm) / 10),
+        (long)(Test_BallState_FloatToX10(
+            Test_BallState_AbsF(
+                app_info.reference.reference_position_mm)) % 10),
+        (long)(Test_BallState_FloatToX100(
+            app_info.control.output.limited_dynamic_angle_deg) / 100),
+        (long)(Test_BallState_FloatToX100(
+            Test_BallState_AbsF(
+                app_info.control.output.limited_dynamic_angle_deg)) % 100),
+        (long)(Test_BallState_FloatToX100(
+            app_info.control.output.stiction_angle_deg) / 100),
+        (long)(Test_BallState_FloatToX100(
+            Test_BallState_AbsF(
+                app_info.control.output.stiction_angle_deg)) % 100),
+        (unsigned int)(app_info.control.output.command_angle_x10 / 10U),
+        (unsigned int)(app_info.control.output.command_angle_x10 % 10U),
         (servo_info_ok != 0U) ?
             (unsigned int)(servo_info.horizontal_angle_x10 / 10U) : 0U,
         (servo_info_ok != 0U) ?
             (unsigned int)(servo_info.horizontal_angle_x10 % 10U) : 0U,
-        (servo_info_ok != 0U) ?
-            (unsigned int)(servo_info.horizontal_target_angle_x10 / 10U) : 0U,
-        (servo_info_ok != 0U) ?
-            (unsigned int)(servo_info.horizontal_target_angle_x10 % 10U) : 0U,
-        (unsigned int)app_info.enabled,
-        (unsigned int)app_info.control.measurement_valid,
-        (unsigned int)app_info.control.data_timeout,
-        (unsigned int)app_info.low_confidence,
-        (unsigned int)app_info.position_out_of_range,
+        (unsigned int)app_info.settled,
+        (unsigned int)app_info.estimator.innovation_rejected,
         (unsigned int)app_info.servo_fault
     );
     if ((n > 0) && (n < (int)sizeof(line))) {
-        Test_BallPid_SendLine(line);
+        Test_BallState_SendLine(line);
+    }
+}
+
+static void Test_BallState_PrintCsv(uint32_t now_ms,
+                                    const BallBalance_AppInfo_t *app)
+{
+    char line[320];
+    int n;
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "BB,%lu,%u,%u,%u,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%u,%u,%u\r\n",
+        (unsigned long)now_ms,
+        (unsigned int)app->state,
+        (unsigned int)app->last_sample_state,
+        (unsigned int)app->last_sample.confidence,
+        (int)app->last_sample.position_mm_x10,
+        (long)Test_BallState_FloatToX10(
+            app->estimator.position_mm),
+        (long)Test_BallState_FloatToX10(
+            app->estimator.velocity_mm_s),
+        (long)Test_BallState_FloatToX10(
+            app->estimator.disturbance_mm_s2),
+        (long)Test_BallState_FloatToX10(
+            app->reference.reference_position_mm),
+        (long)Test_BallState_FloatToX10(
+            app->reference.reference_velocity_mm_s),
+        (long)Test_BallState_FloatToX10(
+            app->reference.reference_acceleration_mm_s2),
+        (long)Test_BallState_FloatToX100(
+            app->equilibrium_angle_deg),
+        (long)Test_BallState_FloatToX100(
+            app->control.output.limited_dynamic_angle_deg),
+        (long)Test_BallState_FloatToX100(
+            app->control.output.stiction_angle_deg),
+        (long)Test_BallState_FloatToX10(
+            app->vehicle_disturbance_mm_s2),
+        (long)Test_BallState_FloatToX100(
+            app->control.output.servo_angle_deg),
+        (unsigned int)app->data_timeout,
+        (unsigned int)app->estimator.innovation_rejected,
+        (unsigned int)app->settled
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallState_SendLine(line);
+    }
+}
+
+void Test_BallModelIdentify_Update(void)
+{
+    static uint8_t initialized = 0U;
+    static uint16_t servo_angle_x10 =
+        BALL_BALANCE_LEVEL_ANGLE_X10;
+    static uint32_t last_print_ms = 0U;
+    BallBalance_K210AdapterInfo_t adapter;
+    char line[192];
+    int position_abs;
+    int n;
+    uint32_t now_ms;
+
+    if (initialized == 0U) {
+        BallBalance_App_Disable();
+        BallBalance_App_SetVehicleFeedforwardEnabled(0U);
+        (void)Drv_Servo_SetHorizontalAngleX10(servo_angle_x10);
+        Test_BallState_SendLine(
+            "[BallModel] READY KEY1=LEVEL KEY2=+0.5 KEY3=-0.5 KEY4=+1.0 KEY5=-1.0\r\n"
+        );
+        initialized = 1U;
+    }
+
+#if BSP_KEY1_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY1)) {
+        servo_angle_x10 = BALL_BALANCE_LEVEL_ANGLE_X10;
+    }
+#endif
+#if BSP_KEY2_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY2)) {
+        servo_angle_x10 =
+            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 + 5U);
+    }
+#endif
+#if BSP_KEY3_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY3)) {
+        servo_angle_x10 =
+            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 - 5U);
+    }
+#endif
+#if BSP_KEY4_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY4)) {
+        servo_angle_x10 =
+            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 + 10U);
+    }
+#endif
+#if BSP_KEY5_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY5)) {
+        servo_angle_x10 =
+            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 - 10U);
+    }
+#endif
+    (void)Drv_Servo_SetHorizontalAngleX10(servo_angle_x10);
+
+    now_ms = BSP_GetTickMs();
+    if ((uint32_t)(now_ms - last_print_ms) < 50U) {
+        return;
+    }
+    last_print_ms = now_ms;
+    if (BallBalance_K210Adapter_GetInfo(&adapter) != BSP_OK) {
+        return;
+    }
+
+    position_abs = adapter.last_position_mm_x10;
+    if (position_abs < 0) {
+        position_abs = -position_abs;
+    }
+    n = snprintf(
+        line,
+        sizeof(line),
+        "BMODEL,%lu,%s,%u,%c%d.%d,%u.%u\r\n",
+        (unsigned long)now_ms,
+        Test_BallState_StateText(adapter.last_app_state),
+        (unsigned int)adapter.last_confidence,
+        (adapter.last_position_mm_x10 < 0) ? '-' : '+',
+        position_abs / 10,
+        position_abs % 10,
+        (unsigned int)(servo_angle_x10 / 10U),
+        (unsigned int)(servo_angle_x10 % 10U)
+    );
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallState_SendLine(line);
     }
 }
 
@@ -3671,13 +3700,23 @@ void Test_BallBalanceControl_Update(void)
     static uint8_t banner_sent = 0U;
     static uint8_t last_servo_fault = 0U;
     static uint8_t last_timeout = 0U;
+    static uint32_t last_debug_ms = 0U;
     static const char *pending_status_reason = 0;
     BallBalance_AppInfo_t app_info;
+    char banner_line[160];
+    int banner_len;
 
     if (banner_sent == 0U) {
-        Test_BallPid_SendLine(
-        "[BallPID] READY neutral=90.0deg KEY1=O KEY2=+50.0mm KEY3=-50.0mm KEY4=STOP KEY5=STATUS\r\n"
+        banner_len = snprintf(
+            banner_line,
+            sizeof(banner_line),
+            "[BallState] READY level=%u.%udeg KEY1=O KEY2=+50.0mm KEY3=-50.0mm KEY4=STOP KEY5=STATUS\r\n",
+            (unsigned int)(BALL_BALANCE_LEVEL_ANGLE_X10 / 10U),
+            (unsigned int)(BALL_BALANCE_LEVEL_ANGLE_X10 % 10U)
         );
+        if ((banner_len > 0) && (banner_len < (int)sizeof(banner_line))) {
+            Test_BallState_SendLine(banner_line);
+        }
         banner_sent = 1U;
     }
 
@@ -3686,7 +3725,7 @@ void Test_BallBalanceControl_Update(void)
      * 让串口状态反映APP已经计算并输出过一次舵机命令后的结果。
      */
     if (pending_status_reason != 0) {
-        Test_BallPid_PrintStatus(pending_status_reason);
+        Test_BallState_PrintStatus(pending_status_reason);
         pending_status_reason = 0;
         return;
     }
@@ -3721,14 +3760,14 @@ void Test_BallBalanceControl_Update(void)
 #if BSP_KEY4_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY4)) {
         BallBalance_App_Disable();
-        Test_BallPid_PrintStatus("KEY4_STOP");
+        Test_BallState_PrintStatus("KEY4_STOP");
         return;
     }
 #endif
 
 #if BSP_KEY5_ENABLE
     if (BSP_Key_WasPressed(BSP_KEY5)) {
-        Test_BallPid_PrintStatus("KEY5_STATUS");
+        Test_BallState_PrintStatus("KEY5_STATUS");
         return;
     }
 #endif
@@ -3738,11 +3777,19 @@ void Test_BallBalanceControl_Update(void)
     }
     if (app_info.servo_fault != last_servo_fault) {
         last_servo_fault = app_info.servo_fault;
-        Test_BallPid_PrintStatus("SERVO_FAULT_CHANGE");
-    } else if (app_info.control.data_timeout != last_timeout) {
-        last_timeout = app_info.control.data_timeout;
-        Test_BallPid_PrintStatus("TIMEOUT_CHANGE");
+        Test_BallState_PrintStatus("SERVO_FAULT_CHANGE");
+    } else if (app_info.data_timeout != last_timeout) {
+        last_timeout = app_info.data_timeout;
+        Test_BallState_PrintStatus("TIMEOUT_CHANGE");
     }
+
+#if (BALL_BALANCE_DEBUG_STREAM_ENABLE != 0U)
+    if ((uint32_t)(BSP_GetTickMs() - last_debug_ms) >=
+        BALL_BALANCE_DEBUG_STREAM_PERIOD_MS) {
+        last_debug_ms = BSP_GetTickMs();
+        Test_BallState_PrintCsv(last_debug_ms, &app_info);
+    }
+#endif
 }
 
 #endif /* PROJECT_TEST_TASKS_ENABLE */

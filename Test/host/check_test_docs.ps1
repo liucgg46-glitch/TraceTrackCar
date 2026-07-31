@@ -8,7 +8,9 @@ $testHeaderPath = Join-Path $projectRoot "Test\test.h"
 $testSourcePaths = Get-ChildItem -LiteralPath (Join-Path $projectRoot "Test") `
     -Filter "test*.c" -File
 $testConfigPath = Join-Path $projectRoot "Test\test_config.h"
-$taskConfigPath = Join-Path $projectRoot "APP\app_task_config.h"
+$buildConfigPath = Join-Path $projectRoot "Common\project_build_config.h"
+$appTaskConfigPath = Join-Path $projectRoot "APP\app_task_config.h"
+$testTaskConfigPath = Join-Path $projectRoot "Test\test_task_config.h"
 $docRoot = Join-Path $projectRoot "Doc"
 $testDocName = (-join @(
     [char]0x6D4B, [char]0x8BD5, [char]0x4EFB, [char]0x52A1,
@@ -25,7 +27,9 @@ $testSource = @(
         }
 ) -join "`n"
 $testConfig = Get-Content -LiteralPath $testConfigPath -Raw -Encoding UTF8
-$taskConfig = Get-Content -LiteralPath $taskConfigPath -Raw -Encoding UTF8
+$buildConfig = Get-Content -LiteralPath $buildConfigPath -Raw -Encoding UTF8
+$appTaskConfig = Get-Content -LiteralPath $appTaskConfigPath -Raw -Encoding UTF8
+$testTaskConfig = Get-Content -LiteralPath $testTaskConfigPath -Raw -Encoding UTF8
 $testDoc = Get-Content -LiteralPath $testDocPath -Raw -Encoding UTF8
 
 $publicFunctions = @(
@@ -126,14 +130,16 @@ if ($missingTaskFunctions.Count -ne 0) {
     throw "Task functions in Markdown without source declarations: $($missingTaskFunctions -join ', ')"
 }
 
-$taskConfigUsesTests = (($taskConfig -match '#include\s+"test\.h"') -or
-                        ($taskConfig -match "\{\s*Test_[A-Za-z0-9_]+\s*,"))
-if ($taskConfigUsesTests) {
-    if ($testConfig -notmatch "#define\s+PROJECT_TEST_TASKS_ENABLE\s+1U") {
-        throw "APP task table uses Test functions, so PROJECT_TEST_TASKS_ENABLE must be 1U"
-    }
-} elseif ($testConfig -notmatch "#define\s+PROJECT_TEST_TASKS_ENABLE\s+0U") {
-    throw "Formal APP task table requires PROJECT_TEST_TASKS_ENABLE=0U"
+if (($appTaskConfig -match '#include\s+"test\.h"') -or
+    ($appTaskConfig -match "\{\s*Test_[A-Za-z0-9_]+\s*,")) {
+    throw "APP task config must not include or register Test functions"
+}
+if (($testTaskConfig -notmatch '#include\s+"test\.h"') -or
+    ($testTaskConfig -notmatch "\{\s*Test_[A-Za-z0-9_]+\s*,")) {
+    throw "Test task config has no Test function registrations"
+}
+if ($buildConfig -notmatch "#define\s+PROJECT_TEST_TASKS_ENABLE\s+0U") {
+    throw "PROJECT_TEST_TASKS_ENABLE default must be 0U or 1U"
 }
 
 Write-Host ("Test API documentation check passed: {0} public Test functions, {1} valid task functions." -f

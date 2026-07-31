@@ -1,523 +1,322 @@
 #include "ball_balance_control.h"
 
-#define BALL_BALANCE_POSITION_FILTER_ALPHA       0.55f
-#define BALL_BALANCE_VELOCITY_FILTER_ALPHA       0.45f
-#define BALL_BALANCE_INTEGRAL_LIMIT_MM_S         300.0f
+static BallBalance_ControlInfo_t s_control;
+static float s_command_angle_deg;
+static float s_stiction_magnitude_deg;
+static int8_t s_stiction_direction;
+static uint32_t s_last_stiction_step_ms;
 
-static uint8_t s_enabled;
-static uint8_t s_measurement_valid;
-static uint8_t s_data_timeout;
-static uint8_t s_position_filter_valid;
-static uint8_t s_velocity_filter_valid;
-static uint8_t s_has_sequence;
-static uint8_t s_last_sequence;
-static int16_t s_target_mm_x10;
-static int16_t s_raw_position_mm_x10;
-static float s_filtered_position_mm;
-static float s_control_position_mm;
-static float s_velocity_mm_s;
-static float s_integral;
-static float s_kp;
-static float s_ki;
-static float s_kd;
-static float s_p_term;
-static float s_i_term;
-static float s_d_term;
-static float s_pid_output_deg;
-static uint16_t s_command_angle_x10;
-static uint32_t s_last_sample_ms;
-static uint32_t s_last_update_ms;
-static uint32_t s_update_count;
-static uint32_t s_valid_sample_count;
-static uint32_t s_invalid_sample_count;
-static uint32_t s_timeout_count;
-static uint32_t s_output_limit_count;
-
-static float BallBalance_AbsFloat(float value)
+static float BallBalance_Control_AbsF(float value)
 {
     return (value >= 0.0f) ? value : -value;
 }
 
-static float BallBalance_LimitFloat(float value, float min_value, float max_value)
+static float BallBalance_Control_LimitF(float value,
+                                        float minimum,
+                                        float maximum)
 {
-    if (value > max_value) {
-        return max_value;
+    if (value < minimum) {
+        return minimum;
     }
-    if (value < min_value) {
-        return min_value;
+    if (value > maximum) {
+        return maximum;
     }
     return value;
 }
 
-static uint16_t BallBalance_LimitAngleX10(uint16_t angle_x10)
+static int8_t BallBalance_Control_SignF(float value)
 {
-#if (BALL_BALANCE_ABS_SAFE_MIN_X10 > 0U)
-    if (angle_x10 < BALL_BALANCE_ABS_SAFE_MIN_X10) {
-        return BALL_BALANCE_ABS_SAFE_MIN_X10;
+    if (value > 0.0f) {
+        return 1;
     }
-#endif
-    if (angle_x10 > BALL_BALANCE_ABS_SAFE_MAX_X10) {
-        return BALL_BALANCE_ABS_SAFE_MAX_X10;
+    if (value < 0.0f) {
+        return -1;
     }
-    return angle_x10;
+    return 0;
 }
 
-static int16_t BallBalance_FloatMmToX10(float value_mm)
-{
-    float scaled;
-    int32_t value;
-
-    scaled = value_mm * 10.0f;
-    if (scaled >= 0.0f) {
-        scaled += 0.5f;
-    } else {
-        scaled -= 0.5f;
-    }
-
-    value = (int32_t)scaled;
-    if (value > 32767) {
-        return 32767;
-    }
-    if (value < -32768) {
-        return (int16_t)-32768;
-    }
-    return (int16_t)value;
-}
-
-static uint16_t BallBalance_FloatDegToX10(float value_deg)
-{
-    float scaled;
-    int32_t value;
-
-    scaled = value_deg * 10.0f;
-    if (scaled >= 0.0f) {
-        scaled += 0.5f;
-    } else {
-        scaled -= 0.5f;
-    }
-
-    value = (int32_t)scaled;
-    if (value < 0) {
-        return 0U;
-    }
-    if (value > 1800) {
-        return 1800U;
-    }
-    return (uint16_t)value;
-}
-
-static void BallBalance_ClearRuntime(void)
-{
-    s_measurement_valid = 0U;
-    s_data_timeout = 0U;
-    s_position_filter_valid = 0U;
-    s_velocity_filter_valid = 0U;
-    s_has_sequence = 0U;
-    s_last_sequence = 0U;
-    s_raw_position_mm_x10 = 0;
-    s_filtered_position_mm = 0.0f;
-    s_control_position_mm = 0.0f;
-    s_velocity_mm_s = 0.0f;
-    s_integral = 0.0f;
-    s_p_term = 0.0f;
-    s_i_term = 0.0f;
-    s_d_term = 0.0f;
-    s_pid_output_deg = 0.0f;
-    s_command_angle_x10 = BALL_BALANCE_NEUTRAL_ANGLE_X10;
-    s_last_sample_ms = 0U;
-    s_last_update_ms = 0U;
-}
-
-static void BallBalance_ResetToNeutral(void)
-{
-    s_p_term = 0.0f;
-    s_i_term = 0.0f;
-    s_d_term = 0.0f;
-    s_pid_output_deg = 0.0f;
-    s_integral = 0.0f;
-    s_velocity_mm_s = 0.0f;
-    s_velocity_filter_valid = 0U;
-    s_command_angle_x10 = BALL_BALANCE_NEUTRAL_ANGLE_X10;
-}
-
-static uint32_t BallBalance_IncrementU32(uint32_t value)
+static uint32_t BallBalance_Control_IncrementU32(uint32_t value)
 {
     return (value < 0xFFFFFFFFUL) ? (value + 1UL) : value;
 }
 
-static uint16_t BallBalance_ApplySlew(uint16_t target_x10)
+static uint16_t BallBalance_Control_DegToX10(float angle_deg)
 {
-    uint16_t next_x10;
+    float scaled = angle_deg * 10.0f;
 
-    if (target_x10 > s_command_angle_x10) {
-        next_x10 = (uint16_t)(s_command_angle_x10 +
-                              BALL_BALANCE_SLEW_X10_PER_UPDATE);
-        if ((next_x10 < s_command_angle_x10) || (next_x10 > target_x10)) {
-            next_x10 = target_x10;
-        }
-        if (next_x10 != target_x10) {
-            s_output_limit_count = BallBalance_IncrementU32(
-                s_output_limit_count
-            );
-        }
-        return next_x10;
+    scaled += (scaled >= 0.0f) ? 0.5f : -0.5f;
+    if (scaled < 0.0f) {
+        return 0U;
+    }
+    if (scaled > 1800.0f) {
+        return 1800U;
+    }
+    return (uint16_t)scaled;
+}
+
+static void BallBalance_Control_ClearStiction(void)
+{
+    s_stiction_magnitude_deg = 0.0f;
+    s_stiction_direction = 0;
+    s_control.stuck_elapsed_ms = 0U;
+    s_last_stiction_step_ms = 0U;
+}
+
+static float BallBalance_Control_UpdateStiction(
+    const BallBalance_ControlInput_t *input,
+    float position_error_mm
+)
+{
+    float desired_acceleration_sign;
+    float stiction_angle_sign;
+    int8_t requested_direction;
+    uint32_t dt_ms;
+
+    if ((input->control_enabled == 0U) ||
+        (input->data_valid == 0U)) {
+        BallBalance_Control_ClearStiction();
+        return 0.0f;
     }
 
-    if (target_x10 < s_command_angle_x10) {
-        if (s_command_angle_x10 <= BALL_BALANCE_SLEW_X10_PER_UPDATE) {
-            next_x10 = target_x10;
+    requested_direction = BallBalance_Control_SignF(position_error_mm);
+    if ((requested_direction != 0) &&
+        (s_stiction_direction != 0) &&
+        (requested_direction != s_stiction_direction)) {
+        BallBalance_Control_ClearStiction();
+    }
+
+    if ((BallBalance_Control_AbsF(position_error_mm) <=
+         BALL_BALANCE_SETTLE_ERROR_MM) ||
+        (requested_direction == 0)) {
+        BallBalance_Control_ClearStiction();
+        return 0.0f;
+    }
+
+    if (BallBalance_Control_AbsF(input->estimated_velocity_mm_s) >=
+        BALL_BALANCE_STICTION_RELEASE_SPEED_MM_S) {
+        s_control.stuck_elapsed_ms = 0U;
+        if (s_stiction_magnitude_deg >
+            BALL_BALANCE_STICTION_STEP_DEG) {
+            s_stiction_magnitude_deg -=
+                BALL_BALANCE_STICTION_STEP_DEG;
         } else {
-            next_x10 = (uint16_t)(s_command_angle_x10 -
-                                  BALL_BALANCE_SLEW_X10_PER_UPDATE);
-            if (next_x10 < target_x10) {
-                next_x10 = target_x10;
-            }
+            s_stiction_magnitude_deg = 0.0f;
         }
-        if (next_x10 != target_x10) {
-            s_output_limit_count = BallBalance_IncrementU32(
-                s_output_limit_count
-            );
+    } else if ((input->allow_stiction_growth != 0U) &&
+               (BallBalance_Control_AbsF(position_error_mm) >
+                BALL_BALANCE_STUCK_ERROR_MM) &&
+               (BallBalance_Control_AbsF(
+                    input->estimated_velocity_mm_s) <
+                BALL_BALANCE_STUCK_SPEED_MM_S)) {
+        dt_ms = (uint32_t)(input->dt_s * 1000.0f + 0.5f);
+        if (dt_ms > BALL_BALANCE_CONTROL_PERIOD_MS) {
+            dt_ms = BALL_BALANCE_CONTROL_PERIOD_MS;
         }
-        return next_x10;
+        if (s_control.stuck_elapsed_ms <
+            (0xFFFFFFFFUL - dt_ms)) {
+            s_control.stuck_elapsed_ms += dt_ms;
+        }
+        s_stiction_direction = requested_direction;
+
+        if ((s_control.stuck_elapsed_ms >=
+             BALL_BALANCE_STUCK_TIME_MS) &&
+            (s_stiction_magnitude_deg == 0.0f)) {
+            s_stiction_magnitude_deg =
+                BALL_BALANCE_STICTION_START_DEG;
+            s_last_stiction_step_ms = input->now_ms;
+            s_control.stiction_step_count =
+                BallBalance_Control_IncrementU32(
+                    s_control.stiction_step_count
+                );
+        } else if ((s_stiction_magnitude_deg > 0.0f) &&
+                   ((uint32_t)(input->now_ms -
+                               s_last_stiction_step_ms) >=
+                    BALL_BALANCE_STICTION_STEP_PERIOD_MS)) {
+            s_stiction_magnitude_deg +=
+                BALL_BALANCE_STICTION_STEP_DEG;
+            s_stiction_magnitude_deg =
+                BallBalance_Control_LimitF(
+                    s_stiction_magnitude_deg,
+                    0.0f,
+                    BALL_BALANCE_STICTION_MAX_DEG
+                );
+            s_last_stiction_step_ms = input->now_ms;
+            s_control.stiction_step_count =
+                BallBalance_Control_IncrementU32(
+                    s_control.stiction_step_count
+                );
+        }
+    } else {
+        s_control.stuck_elapsed_ms = 0U;
     }
 
-    return target_x10;
+    if ((s_stiction_magnitude_deg <= 0.0f) ||
+        (s_stiction_direction == 0)) {
+        return 0.0f;
+    }
+
+    desired_acceleration_sign = (float)s_stiction_direction;
+    stiction_angle_sign = BallBalance_Control_SignF(
+        BallBalance_Model_AccelToDynamicAngleDeg(
+            desired_acceleration_sign
+        )
+    );
+    return stiction_angle_sign * s_stiction_magnitude_deg;
 }
 
-static float BallBalance_GetPredictedPositionMm(uint32_t now_ms)
+static float BallBalance_Control_ApplySlew(float requested_angle_deg,
+                                           uint8_t *limited)
 {
-    uint32_t predict_ms;
+    float difference = requested_angle_deg - s_command_angle_deg;
 
-    if ((s_measurement_valid == 0U) || (s_last_sample_ms == 0U)) {
-        return s_filtered_position_mm;
+    *limited = 0U;
+    if (difference > BALL_BALANCE_ANGLE_SLEW_DEG_PER_UPDATE) {
+        s_command_angle_deg +=
+            BALL_BALANCE_ANGLE_SLEW_DEG_PER_UPDATE;
+        *limited = 1U;
+    } else if (difference <
+               -BALL_BALANCE_ANGLE_SLEW_DEG_PER_UPDATE) {
+        s_command_angle_deg -=
+            BALL_BALANCE_ANGLE_SLEW_DEG_PER_UPDATE;
+        *limited = 1U;
+    } else {
+        s_command_angle_deg = requested_angle_deg;
     }
-
-    predict_ms = now_ms - s_last_sample_ms;
-    if (predict_ms > BALL_BALANCE_PREDICT_MAX_MS) {
-        predict_ms = BALL_BALANCE_PREDICT_MAX_MS;
-    }
-
-    return s_filtered_position_mm +
-           (s_velocity_mm_s * ((float)predict_ms / 1000.0f));
-}
-
-static float BallBalance_ApplyMinimumOutput(float output_deg,
-                                            float control_error_mm)
-{
-    float abs_error;
-    float abs_output;
-
-    abs_error = BallBalance_AbsFloat(control_error_mm);
-    abs_output = BallBalance_AbsFloat(output_deg);
-
-    if ((abs_error < BALL_BALANCE_MIN_ACTIVE_ERROR_MM) ||
-        (abs_output >= BALL_BALANCE_MIN_OUTPUT_DEG)) {
-        return output_deg;
-    }
-
-    if (output_deg > 0.0f) {
-        return BALL_BALANCE_MIN_OUTPUT_DEG;
-    }
-    if (output_deg < 0.0f) {
-        return -BALL_BALANCE_MIN_OUTPUT_DEG;
-    }
-
-    return (control_error_mm >= 0.0f) ?
-           BALL_BALANCE_MIN_OUTPUT_DEG :
-           -BALL_BALANCE_MIN_OUTPUT_DEG;
+    return s_command_angle_deg;
 }
 
 void BallBalance_Control_Init(void)
 {
-    s_enabled = 0U;
-    s_target_mm_x10 = 0;
-    s_kp = BALL_BALANCE_KP;
-    s_ki = BALL_BALANCE_KI;
-    s_kd = BALL_BALANCE_KD;
-    s_update_count = 0U;
-    s_valid_sample_count = 0U;
-    s_invalid_sample_count = 0U;
-    s_timeout_count = 0U;
-    s_output_limit_count = 0U;
-    BallBalance_ClearRuntime();
+    s_control.initialized = 1U;
+    s_control.update_count = 0U;
+    s_control.output_limit_count = 0U;
+    s_control.stiction_step_count = 0U;
+    BallBalance_Control_Reset();
 }
 
 void BallBalance_Control_Reset(void)
 {
-    s_enabled = 0U;
-    s_target_mm_x10 = 0;
-    s_kp = BALL_BALANCE_KP;
-    s_ki = BALL_BALANCE_KI;
-    s_kd = BALL_BALANCE_KD;
-    s_update_count = 0U;
-    s_valid_sample_count = 0U;
-    s_invalid_sample_count = 0U;
-    s_timeout_count = 0U;
-    s_output_limit_count = 0U;
-    BallBalance_ClearRuntime();
+    BallBalance_ControlInput_t zero_input = {0};
+    BallBalance_ControlOutput_t zero_output = {0};
+
+    s_command_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
+    BallBalance_Control_ClearStiction();
+    zero_output.requested_servo_angle_deg =
+        BALL_BALANCE_LEVEL_ANGLE_DEG;
+    zero_output.servo_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
+    zero_output.command_angle_x10 = BALL_BALANCE_LEVEL_ANGLE_X10;
+    s_control.input = zero_input;
+    s_control.output = zero_output;
 }
 
-void BallBalance_Control_SetEnabled(uint8_t enabled)
+Project_Status_t BallBalance_Control_Update(
+    const BallBalance_ControlInput_t *input,
+    BallBalance_ControlOutput_t *output
+)
 {
-    if (enabled == 0U) {
-        s_enabled = 0U;
-        BallBalance_ClearRuntime();
-        return;
+    BallBalance_ControlOutput_t result = {0};
+    float position_gain;
+    float velocity_gain;
+    float requested_angle;
+
+    if ((input == 0) || (output == 0) || (input->dt_s <= 0.0f)) {
+        return PROJECT_PARAM;
     }
 
-    if (s_enabled == 0U) {
-        BallBalance_ClearRuntime();
-    }
-    s_enabled = 1U;
-}
+    result.position_error_mm =
+        input->reference_position_mm -
+        input->estimated_position_mm;
+    result.velocity_error_mm_s =
+        input->reference_velocity_mm_s -
+        input->estimated_velocity_mm_s;
 
-uint8_t BallBalance_Control_IsEnabled(void)
-{
-    return s_enabled;
-}
-
-void BallBalance_Control_SetTargetMmX10(int16_t target_mm_x10)
-{
-    s_target_mm_x10 = target_mm_x10;
-}
-
-int16_t BallBalance_Control_GetTargetMmX10(void)
-{
-    return s_target_mm_x10;
-}
-
-void BallBalance_Control_SetGains(float kp, float ki, float kd)
-{
-    s_kp = kp;
-    s_ki = ki;
-    s_kd = kd;
-}
-
-void BallBalance_Control_PushMeasurement(int16_t position_mm_x10,
-                                         uint8_t sequence,
-                                         uint32_t timestamp_ms)
-{
-    uint8_t previous_valid;
-    uint32_t dt_ms;
-    float raw_position_mm;
-    float previous_filtered_mm;
-    float raw_velocity_mm_s;
-
-    if ((s_has_sequence != 0U) && (sequence == s_last_sequence)) {
-        return;
-    }
-
-    previous_valid = (uint8_t)((s_measurement_valid != 0U) &&
-                               (s_data_timeout == 0U));
-    previous_filtered_mm = s_filtered_position_mm;
-    raw_position_mm = (float)position_mm_x10 / 10.0f;
-
-    if ((s_position_filter_valid == 0U) || (previous_valid == 0U)) {
-        s_filtered_position_mm = raw_position_mm;
-        s_position_filter_valid = 1U;
-    } else {
-        s_filtered_position_mm +=
-            BALL_BALANCE_POSITION_FILTER_ALPHA *
-            (raw_position_mm - s_filtered_position_mm);
-    }
-
-    dt_ms = timestamp_ms - s_last_sample_ms;
-    if ((previous_valid != 0U) &&
-        (dt_ms > 0U) &&
-        (dt_ms <= BALL_BALANCE_DATA_TIMEOUT_MS)) {
-        raw_velocity_mm_s =
-            (s_filtered_position_mm - previous_filtered_mm) *
-            1000.0f / (float)dt_ms;
-    } else {
-        raw_velocity_mm_s = 0.0f;
-        s_velocity_filter_valid = 0U;
-    }
-
-    if (s_velocity_filter_valid == 0U) {
-        s_velocity_mm_s = raw_velocity_mm_s;
-        s_velocity_filter_valid = 1U;
-    } else {
-        s_velocity_mm_s +=
-            BALL_BALANCE_VELOCITY_FILTER_ALPHA *
-            (raw_velocity_mm_s - s_velocity_mm_s);
-    }
-
-    s_raw_position_mm_x10 = position_mm_x10;
-    s_control_position_mm = s_filtered_position_mm;
-    s_last_sequence = sequence;
-    s_has_sequence = 1U;
-    s_last_sample_ms = timestamp_ms;
-    s_measurement_valid = 1U;
-    s_data_timeout = 0U;
-    s_valid_sample_count = BallBalance_IncrementU32(s_valid_sample_count);
-}
-
-void BallBalance_Control_InvalidateMeasurement(uint32_t timestamp_ms)
-{
-    s_measurement_valid = 0U;
-    s_data_timeout = 0U;
-    s_velocity_filter_valid = 0U;
-    s_velocity_mm_s = 0.0f;
-    s_last_sample_ms = timestamp_ms;
-    s_invalid_sample_count = BallBalance_IncrementU32(s_invalid_sample_count);
-}
-
-void BallBalance_Control_Update(uint32_t now_ms)
-{
-    uint32_t dt_ms;
-    float dt_s;
-    float target_mm;
-    float error_mm;
-    float control_error_mm;
-    float candidate_integral;
-    float output_deg;
-    float limited_output_deg;
-    uint16_t desired_angle_x10;
-
-    s_update_count = BallBalance_IncrementU32(s_update_count);
-
-    if (s_enabled == 0U) {
-        BallBalance_ResetToNeutral();
-        return;
-    }
-
-    if (s_measurement_valid != 0U) {
-        if ((uint32_t)(now_ms - s_last_sample_ms) >=
-            BALL_BALANCE_DATA_TIMEOUT_MS) {
-            s_measurement_valid = 0U;
-            s_data_timeout = 1U;
-            s_timeout_count = BallBalance_IncrementU32(s_timeout_count);
-            BallBalance_ResetToNeutral();
-            return;
-        }
-    }
-
-    if (s_measurement_valid == 0U) {
-        BallBalance_ResetToNeutral();
-        return;
-    }
-
-    dt_ms = now_ms - s_last_update_ms;
-    if (s_last_update_ms == 0U) {
-        dt_ms = BALL_BALANCE_UPDATE_PERIOD_MS;
-    }
-    s_last_update_ms = now_ms;
-
-    if ((dt_ms == 0U) || (dt_ms > BALL_BALANCE_DATA_TIMEOUT_MS)) {
-        dt_s = 0.0f;
-    } else {
-        dt_s = (float)dt_ms / 1000.0f;
-    }
-
-    target_mm = (float)s_target_mm_x10 / 10.0f;
-    s_control_position_mm = BallBalance_GetPredictedPositionMm(now_ms);
-    error_mm = s_control_position_mm - target_mm;
-    control_error_mm = error_mm;
-    if (BallBalance_AbsFloat(control_error_mm) <
-        BALL_BALANCE_POSITION_DEADBAND_MM) {
-        control_error_mm = 0.0f;
-    }
-
-    candidate_integral = s_integral;
-    if ((dt_s > 0.0f) &&
-        (BallBalance_AbsFloat(control_error_mm) <=
-         BALL_BALANCE_INTEGRAL_ACTIVE_MM)) {
-        candidate_integral += control_error_mm * dt_s;
-        candidate_integral = BallBalance_LimitFloat(
-            candidate_integral,
-            -BALL_BALANCE_INTEGRAL_LIMIT_MM_S,
-            BALL_BALANCE_INTEGRAL_LIMIT_MM_S
-        );
-    }
-
-    s_p_term = s_kp * control_error_mm;
-    s_i_term = s_ki * candidate_integral;
-    s_d_term = s_kd * s_velocity_mm_s;
-    output_deg = s_p_term + s_i_term + s_d_term;
-    output_deg = BallBalance_ApplyMinimumOutput(
-        output_deg,
-        control_error_mm
-    );
-    limited_output_deg = BallBalance_LimitFloat(
-        output_deg,
-        -BALL_BALANCE_PID_OUTPUT_LIMIT_DEG,
-        BALL_BALANCE_PID_OUTPUT_LIMIT_DEG
-    );
-
-    if (limited_output_deg != output_deg) {
-        s_output_limit_count = BallBalance_IncrementU32(s_output_limit_count);
-        if (((output_deg > limited_output_deg) && (control_error_mm > 0.0f)) ||
-            ((output_deg < limited_output_deg) && (control_error_mm < 0.0f))) {
-            s_i_term = s_ki * s_integral;
-            output_deg = s_p_term + s_i_term + s_d_term;
-            limited_output_deg = BallBalance_LimitFloat(
-                output_deg,
-                -BALL_BALANCE_PID_OUTPUT_LIMIT_DEG,
-                BALL_BALANCE_PID_OUTPUT_LIMIT_DEG
+    if ((input->control_enabled != 0U) &&
+        (input->data_valid != 0U)) {
+        position_gain =
+            BALL_BALANCE_NATURAL_FREQ_RAD_S *
+            BALL_BALANCE_NATURAL_FREQ_RAD_S;
+        velocity_gain =
+            2.0f *
+            BALL_BALANCE_DAMPING_RATIO *
+            BALL_BALANCE_NATURAL_FREQ_RAD_S;
+        result.desired_acceleration_mm_s2 =
+            input->reference_acceleration_mm_s2 +
+            position_gain * result.position_error_mm +
+            velocity_gain * result.velocity_error_mm_s;
+        result.required_control_acceleration_mm_s2 =
+            result.desired_acceleration_mm_s2 -
+            input->estimated_disturbance_mm_s2 -
+            input->vehicle_disturbance_mm_s2;
+        result.requested_dynamic_angle_deg =
+            BallBalance_Model_AccelToDynamicAngleDeg(
+                result.required_control_acceleration_mm_s2
             );
-        } else {
-            s_integral = candidate_integral;
-        }
+        result.limited_dynamic_angle_deg =
+            BallBalance_Control_LimitF(
+                result.requested_dynamic_angle_deg,
+                -BALL_BALANCE_DYNAMIC_ANGLE_LIMIT_DEG,
+                BALL_BALANCE_DYNAMIC_ANGLE_LIMIT_DEG
+            );
+        result.dynamic_limited =
+            (result.requested_dynamic_angle_deg !=
+             result.limited_dynamic_angle_deg) ? 1U : 0U;
+        result.stiction_angle_deg =
+            BallBalance_Control_UpdateStiction(
+                input,
+                result.position_error_mm
+            );
+        requested_angle =
+            input->equilibrium_angle_deg +
+            result.limited_dynamic_angle_deg +
+            result.stiction_angle_deg;
     } else {
-        s_integral = candidate_integral;
+        BallBalance_Control_ClearStiction();
+        requested_angle = BALL_BALANCE_LEVEL_ANGLE_DEG;
     }
 
-    s_pid_output_deg = limited_output_deg;
-    desired_angle_x10 = BallBalance_FloatDegToX10(
-        ((float)BALL_BALANCE_NEUTRAL_ANGLE_X10 / 10.0f) +
-        s_pid_output_deg
+    result.requested_servo_angle_deg = requested_angle;
+    requested_angle = BallBalance_Control_LimitF(
+        requested_angle,
+        BALL_BALANCE_ABS_SAFE_MIN_DEG,
+        BALL_BALANCE_ABS_SAFE_MAX_DEG
     );
-    if (desired_angle_x10 < BALL_BALANCE_OUTPUT_MIN_X10) {
-        desired_angle_x10 = BALL_BALANCE_OUTPUT_MIN_X10;
-        s_output_limit_count = BallBalance_IncrementU32(s_output_limit_count);
-    }
-    if (desired_angle_x10 > BALL_BALANCE_OUTPUT_MAX_X10) {
-        desired_angle_x10 = BALL_BALANCE_OUTPUT_MAX_X10;
-        s_output_limit_count = BallBalance_IncrementU32(s_output_limit_count);
-    }
+    result.absolute_limited =
+        (requested_angle != result.requested_servo_angle_deg) ? 1U : 0U;
+    result.servo_angle_deg =
+        BallBalance_Control_ApplySlew(
+            requested_angle,
+            &result.slew_limited
+        );
+    result.command_angle_x10 =
+        BallBalance_Control_DegToX10(result.servo_angle_deg);
+    result.applied_dynamic_angle_deg =
+        result.servo_angle_deg - input->equilibrium_angle_deg;
+    result.stiction_active =
+        (s_stiction_magnitude_deg > 0.0f) ? 1U : 0U;
 
-    desired_angle_x10 = BallBalance_LimitAngleX10(desired_angle_x10);
-    s_command_angle_x10 = BallBalance_ApplySlew(desired_angle_x10);
+    if ((result.dynamic_limited != 0U) ||
+        (result.absolute_limited != 0U) ||
+        (result.slew_limited != 0U)) {
+        s_control.output_limit_count =
+            BallBalance_Control_IncrementU32(
+                s_control.output_limit_count
+            );
+    }
+    s_control.update_count =
+        BallBalance_Control_IncrementU32(s_control.update_count);
+    s_control.input = *input;
+    s_control.output = result;
+    *output = result;
+    return PROJECT_OK;
 }
 
 Project_Status_t BallBalance_Control_GetInfo(
     BallBalance_ControlInfo_t *info
 )
 {
-    float target_mm;
-    float error_mm;
-
     if (info == 0) {
         return PROJECT_PARAM;
     }
-
-    target_mm = (float)s_target_mm_x10 / 10.0f;
-    error_mm = s_control_position_mm - target_mm;
-
-    info->enabled = s_enabled;
-    info->measurement_valid = s_measurement_valid;
-    info->data_timeout = s_data_timeout;
-    info->target_mm_x10 = s_target_mm_x10;
-    info->raw_position_mm_x10 = s_raw_position_mm_x10;
-    info->filtered_position_mm_x10 =
-        BallBalance_FloatMmToX10(s_filtered_position_mm);
-    info->error_mm_x10 = BallBalance_FloatMmToX10(error_mm);
-    info->velocity_mm_s = s_velocity_mm_s;
-    info->integral = s_integral;
-    info->kp = s_kp;
-    info->ki = s_ki;
-    info->kd = s_kd;
-    info->p_term = s_p_term;
-    info->i_term = s_i_term;
-    info->d_term = s_d_term;
-    info->pid_output_deg = s_pid_output_deg;
-    info->command_angle_x10 = s_command_angle_x10;
-    info->last_sequence = s_last_sequence;
-    info->last_sample_ms = s_last_sample_ms;
-    info->update_count = s_update_count;
-    info->valid_sample_count = s_valid_sample_count;
-    info->invalid_sample_count = s_invalid_sample_count;
-    info->timeout_count = s_timeout_count;
-    info->output_limit_count = s_output_limit_count;
+    *info = s_control;
     return PROJECT_OK;
 }

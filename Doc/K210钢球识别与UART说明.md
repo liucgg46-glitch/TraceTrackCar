@@ -115,12 +115,18 @@ AA 55 32 00 00 BC ED
 ## 7. STM32接入关系
 
 K210原始UART字节只由`K210_Comm_Update()`解析。滚球闭环模式中，
-`BallBalance_K210Adapter_Update()`是`K210_Comm_GetNewBallPosition()`唯一消费者，
+`BallBalance_K210Adapter_Update()`是正式控制路径中
+`K210_Comm_GetNewBallPosition()`的唯一消费者，
 它把0x32帧转换为`BallBalance_VisionSample_t`并调用
 `BallBalance_App_PushVisionSample()`。
 
-`Test_K210_BallCommUpdate()`只在纯通信测试档位使用；滚球PID联调档位不能同时
-注册该任务，否则会提前清除新钢球帧。
+`Test_K210_BallCommUpdate()`只在纯通信测试档位使用；模型辨识、状态反馈测试
+和正式比赛模式都由适配层消费新帧，不能同时注册纯通信任务，否则会提前清除
+新钢球帧。
+
+适配层不改变0.1 mm单位，也不反转方向。APP只有在状态为VALID、置信度不低于
+`BALL_BALANCE_MIN_CONFIDENCE`且位置位于±120.0 mm内时才执行卡尔曼测量更新。
+HOLD和LOST只保留诊断状态，不会把旧位置或0 mm重复送入估计器。
 
 ## 8. 正常调试输出
 

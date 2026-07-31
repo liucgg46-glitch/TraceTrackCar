@@ -10,7 +10,15 @@
 #define TASK_PROFILE_B_BASIC                      2U
 #define TASK_PROFILE_H2_ROUND_STOP                3U
 
-/* 当前使用2026年电赛H题第2项整圈停车正式任务状态机。 */
+/*
+ * H题使用同一个顶层状态机，比赛项目只在该状态机内部选择子流程。
+ * 当前分支用于第3项静止滚球顺序，禁止再注册第二个并行比赛状态机。
+ */
+#define H_COMPETITION_ITEM_ROUND_STOP              2U
+#define H_COMPETITION_ITEM_BALL_SEQUENCE           3U
+#define H_COMPETITION_ITEM_SELECT                  \
+    H_COMPETITION_ITEM_BALL_SEQUENCE
+
 #define TASK_PROFILE_SELECT                       TASK_PROFILE_H2_ROUND_STOP
 
 #endif /* __TASK_PROFILE_CONFIG_H */
