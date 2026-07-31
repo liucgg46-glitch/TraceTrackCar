@@ -122,7 +122,7 @@ static void BallBalance_App_AcquireTracking(float position_mm)
     BallStateEstimator_Reset(position_mm);
     BallReference_Init(position_mm);
     BallReference_SetTargetMm((float)s_target_mm_x10 * 0.1f);
-    BallReference_Resume();
+    BallReference_Pause();
     if (resume_existing_control == 0U) {
         BallBalance_Control_Reset();
         s_last_applied_dynamic_angle_deg = 0.0f;
@@ -326,13 +326,10 @@ void BallBalance_App_Update(void)
 {
     BallBalance_VisionSample_t sample;
     BallStateEstimator_Info_t estimator;
-    BallReference_Info_t reference;
     BallBalance_ControlInput_t control_input;
     BallBalance_ControlOutput_t control_output;
     float vehicle_disturbance;
     uint8_t has_sample;
-    uint8_t allow_breakaway_growth;
-    uint8_t position_measurement_valid;
     float measured_position_mm;
     uint32_t now_ms;
 
@@ -342,8 +339,6 @@ void BallBalance_App_Update(void)
 
     now_ms = BSP_GetTickMs();
     has_sample = BallBalance_App_TakeSample(&sample);
-    allow_breakaway_growth = 0U;
-    position_measurement_valid = 0U;
     measured_position_mm = 0.0f;
 
     if (has_sample != 0U) {
@@ -352,7 +347,6 @@ void BallBalance_App_Update(void)
         if (sample.valid != 0U) {
             measured_position_mm =
                 (float)sample.position_mm_x10 * 0.1f;
-            position_measurement_valid = 1U;
             s_last_valid_sample_ms = sample.timestamp_ms;
             if (s_valid_streak < 0xFFU) {
                 s_valid_streak++;
@@ -390,7 +384,6 @@ void BallBalance_App_Update(void)
         } else {
             s_valid_streak = 0U;
             s_estimator_reject_streak = 0U;
-            allow_breakaway_growth = 0U;
         }
     }
 
@@ -402,18 +395,6 @@ void BallBalance_App_Update(void)
         s_estimator_reject_streak = 0U;
         s_data_timeout = 1U;
         BallReference_Pause();
-    }
-
-    /*
-     * 只有新鲜VALID允许增长脱困补偿；HOLD没有新测量，只允许控制器逐步释放。
-     */
-    if ((s_tracking_ready != 0U) &&
-        (s_last_sample_state == BALL_BALANCE_VISION_VALID) &&
-        (s_last_sample_valid != 0U) &&
-        (s_data_timeout == 0U) &&
-        ((uint32_t)(now_ms - s_last_valid_sample_ms) <=
-         BALL_BALANCE_BREAKAWAY_VALID_AGE_MS)) {
-        allow_breakaway_growth = 1U;
     }
 
     (void)BallBalance_App_GetVehicleDisturbance(
@@ -431,8 +412,6 @@ void BallBalance_App_Update(void)
     }
 
     if ((s_enabled != 0U) && (s_tracking_ready != 0U)) {
-        BallReference_Resume();
-        BallReference_Update(BALL_BALANCE_CONTROL_PERIOD_S);
         s_state = BALL_BALANCE_APP_ACTIVE;
         s_data_timeout = 0U;
     } else {
@@ -448,34 +427,18 @@ void BallBalance_App_Update(void)
         }
     }
 
-    if (BallReference_GetInfo(&reference) != PROJECT_OK) {
-        return;
-    }
     s_equilibrium_angle_deg =
         BallEquilibriumMap_GetAngleDeg(estimator.position_mm);
 
     control_input.control_enabled =
         (s_state == BALL_BALANCE_APP_ACTIVE) ? 1U : 0U;
     control_input.data_valid = s_tracking_ready;
-    control_input.allow_breakaway_growth = allow_breakaway_growth;
-    control_input.position_measurement_valid =
-        position_measurement_valid;
     control_input.now_ms = now_ms;
     control_input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
     control_input.target_position_mm =
         (float)s_target_mm_x10 * 0.1f;
-    control_input.measured_position_mm = measured_position_mm;
-    control_input.reference_position_mm =
-        reference.reference_position_mm;
-    control_input.reference_velocity_mm_s =
-        reference.reference_velocity_mm_s;
-    control_input.reference_acceleration_mm_s2 =
-        reference.reference_acceleration_mm_s2;
     control_input.estimated_position_mm = estimator.position_mm;
     control_input.estimated_velocity_mm_s = estimator.velocity_mm_s;
-    control_input.estimated_disturbance_mm_s2 =
-        estimator.disturbance_mm_s2;
-    control_input.vehicle_disturbance_mm_s2 = vehicle_disturbance;
     control_input.equilibrium_angle_deg = s_equilibrium_angle_deg;
 
     if (BallBalance_Control_Update(

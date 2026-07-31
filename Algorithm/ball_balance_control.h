@@ -9,59 +9,39 @@
 extern "C" {
 #endif
 
-typedef enum {
-    BREAKAWAY_IDLE = 0U,
-    BREAKAWAY_RAMP,
-    BREAKAWAY_DECAY,
-    BREAKAWAY_CAPTURE,
-    BREAKAWAY_COOLDOWN
-} BallBalance_BreakawayState_t;
-
 typedef struct {
     uint8_t control_enabled;
     uint8_t data_valid;
-    uint8_t allow_breakaway_growth;
-    uint8_t position_measurement_valid;
     uint32_t now_ms;
     float dt_s;
     float target_position_mm;
-    float measured_position_mm;
-    float reference_position_mm;
-    float reference_velocity_mm_s;
-    float reference_acceleration_mm_s2;
     float estimated_position_mm;
     float estimated_velocity_mm_s;
-    float estimated_disturbance_mm_s2;
-    float vehicle_disturbance_mm_s2;
     float equilibrium_angle_deg;
 } BallBalance_ControlInput_t;
 
 typedef struct {
+    float target_position_mm;
+    float estimated_position_mm;
     float position_error_mm;
-    float velocity_error_mm_s;
+    float target_velocity_mm_s;
     float filtered_velocity_mm_s;
-    float filtered_disturbance_mm_s2;
-    float reference_accel_feedforward_mm_s2;
-    float desired_acceleration_mm_s2;
-    float required_control_acceleration_mm_s2;
-    float requested_dynamic_angle_deg;
-    float limited_dynamic_angle_deg;
-    float breakaway_angle_deg;
-    float breakaway_start_angle_deg;
-    float breakaway_progress_mm;
-    float hold_servo_angle_deg;
+    float velocity_error_mm_s;
+    float velocity_integral_angle_deg;
+    float proportional_angle_deg;
+    float dynamic_angle_deg;
+    float equilibrium_angle_deg;
     float requested_servo_angle_deg;
     float servo_angle_deg;
     float servo_speed_deg_s;
+    float hold_servo_angle_deg;
     float applied_dynamic_angle_deg;
     uint16_t command_angle_x10;
-    uint8_t dynamic_limited;
     uint8_t absolute_limited;
     uint8_t motion_limited;
-    uint8_t breakaway_active;
     uint8_t hold_active;
     uint8_t target_locked;
-    BallBalance_BreakawayState_t breakaway_state;
+    uint8_t integral_blocked;
 } BallBalance_ControlOutput_t;
 
 typedef struct {
@@ -70,8 +50,6 @@ typedef struct {
     BallBalance_ControlOutput_t output;
     uint32_t update_count;
     uint32_t output_limit_count;
-    uint32_t breakaway_elapsed_ms;
-    uint32_t breakaway_update_count;
 } BallBalance_ControlInfo_t;
 
 void BallBalance_Control_Init(void);

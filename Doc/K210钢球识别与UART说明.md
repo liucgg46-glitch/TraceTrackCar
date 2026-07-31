@@ -120,7 +120,7 @@ K210原始UART字节只由`K210_Comm_Update()`解析。滚球闭环模式中，
 它把0x32帧转换为`BallBalance_VisionSample_t`并调用
 `BallBalance_App_PushVisionSample()`。
 
-`Test_K210_BallCommUpdate()`只在纯通信测试档位使用；模型辨识、状态反馈测试
+`Test_K210_BallCommUpdate()`只在纯通信测试档位使用；模型辨识、位置速度串级测试
 和正式比赛模式都由适配层消费新帧，不能同时注册纯通信任务，否则会提前清除
 新钢球帧。
 
