@@ -26,17 +26,23 @@
 #define BALL_BALANCE_POSITION_ABS_MAX_MM_X10            1200     /* 钢球位置允许的最大绝对值，单位0.1mm */
 
 /*
- * 外环位置P + 内环速度PI参数。首次上板建议：
+ * 外环制动距离速度曲线 + 内环速度PI参数。首次上板建议：
  * 1. 先将BALL_BALANCE_VELOCITY_KI设为0，只调VELOCITY_KP，使实际速度能够跟随目标速度且不过度振荡。
  * 2. 再逐渐增加VELOCITY_KI，直到能够自然克服静摩擦。
- * 3. 再调整POSITION_KP和TARGET_VELOCITY_MAX，决定整体运行速度。
+ * 3. 再调整BRAKE_ACCEL和TARGET_VELOCITY_MAX，决定整体运行速度和接近目标时的减速距离。
  * 4. 最后调整HOLD阈值。
+ *
+ * BRAKE_ACCEL增大：更晚减速、接近目标速度更高，但更容易过冲。
+ * BRAKE_ACCEL减小：更早减速、更稳定。
+ * TARGET_VELOCITY_MAX控制远距离最高速度。
+ * TARGET_ACCEL_MAX控制目标速度变化快慢。
  */
-#define BALL_BALANCE_POSITION_KP                        1.95f     /* 位置误差到目标速度的比例系数 */
-#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           100.0f    /* 外环目标速度绝对限幅 */
+//#define BALL_BALANCE_POSITION_KP                        1.95f     /* 保留给兼容和对比调参，当前制动距离外环不使用 */
+#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  80.0f     /* 制动距离速度曲线使用的等效减速度 */
+#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           80.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             800.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
-#define BALL_BALANCE_VELOCITY_KP                        0.70f    /* 速度PI比例角增益 */
+#define BALL_BALANCE_VELOCITY_KP                        0.60f    /* 速度PI比例角增益 */
 #define BALL_BALANCE_VELOCITY_KI                        1.2f    /* 速度PI积分角增益 */
 #define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
 

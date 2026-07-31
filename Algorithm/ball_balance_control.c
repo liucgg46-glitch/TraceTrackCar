@@ -1,5 +1,7 @@
 #include "ball_balance_control.h"
 
+#include <math.h>
+
 static BallBalance_ControlInfo_t s_control;
 static float s_command_angle_deg;
 static float s_command_speed_deg_s;
@@ -214,13 +216,28 @@ static void BallBalance_Control_UpdateTargetVelocity(
 )
 {
     float raw_target_velocity_mm_s;
+    float abs_error_mm;
+    float remaining_distance_mm;
+    float target_speed_mm_s;
     float maximum_step_mm_s;
 
-    raw_target_velocity_mm_s =
-        BALL_BALANCE_POSITION_KP * result->position_error_mm;
-    if (BallBalance_Control_AbsF(result->position_error_mm) <=
-        BALL_BALANCE_POSITION_DEADBAND_MM) {
+    abs_error_mm = BallBalance_Control_AbsF(
+        result->position_error_mm
+    );
+    if (abs_error_mm <= BALL_BALANCE_POSITION_DEADBAND_MM) {
         raw_target_velocity_mm_s = 0.0f;
+    } else {
+        remaining_distance_mm =
+            abs_error_mm - BALL_BALANCE_POSITION_DEADBAND_MM;
+        target_speed_mm_s = sqrtf(
+            2.0f *
+            BALL_BALANCE_BRAKE_ACCEL_MM_S2 *
+            remaining_distance_mm
+        );
+        raw_target_velocity_mm_s =
+            (result->position_error_mm >= 0.0f) ?
+            target_speed_mm_s :
+            -target_speed_mm_s;
     }
     raw_target_velocity_mm_s = BallBalance_Control_LimitF(
         raw_target_velocity_mm_s,

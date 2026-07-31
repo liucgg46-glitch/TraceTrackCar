@@ -334,6 +334,7 @@ static void Mission_StartRunning(Mission_SubState_t substate)
     s_mission.start_ms = now_ms;
     s_mission.elapsed_ms = 0U;
     s_mission.max_ball_error_mm_x10 = 0;
+    Mission_ClearMode3PlusConfirm();
     Mission_SetSubstate(substate);
     Mission_EnterState(MISSION_STATE_RUNNING,
                        MISSION_RESULT_NONE,
