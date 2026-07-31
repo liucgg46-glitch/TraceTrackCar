@@ -9,6 +9,13 @@
 extern "C" {
 #endif
 
+typedef enum {
+    BREAKAWAY_IDLE = 0U,
+    BREAKAWAY_RAMP,
+    BREAKAWAY_DECAY,
+    BREAKAWAY_COOLDOWN
+} BallBalance_BreakawayState_t;
+
 typedef struct {
     uint8_t control_enabled;
     uint8_t data_valid;
@@ -39,6 +46,9 @@ typedef struct {
     float requested_dynamic_angle_deg;
     float limited_dynamic_angle_deg;
     float breakaway_angle_deg;
+    float breakaway_start_angle_deg;
+    float breakaway_progress_mm;
+    float hold_servo_angle_deg;
     float requested_servo_angle_deg;
     float servo_angle_deg;
     float servo_speed_deg_s;
@@ -48,7 +58,9 @@ typedef struct {
     uint8_t absolute_limited;
     uint8_t motion_limited;
     uint8_t breakaway_active;
+    uint8_t hold_active;
     uint8_t target_locked;
+    BallBalance_BreakawayState_t breakaway_state;
 } BallBalance_ControlOutput_t;
 
 typedef struct {

@@ -47,7 +47,14 @@
 #define BALL_BALANCE_SERVO_PHYSICAL_MAX_DEG             180.0f   /* 舵机允许输出的绝对最大角度 */
 
 /*
- * 到点标志只用于settled/target_locked状态，不冻结瞬时舵机角。
+ * 滚球机构的独立机械安全角。当前仅有Driver全行程标定资料，因此暂时引用该范围；
+ * 若实物齿条端点小于舵机全行程，必须在上板标定后收窄，具体安全端点待确认。
+ */
+#define BALL_BALANCE_SERVO_SAFE_MIN_DEG                 BALL_BALANCE_SERVO_PHYSICAL_MIN_DEG
+#define BALL_BALANCE_SERVO_SAFE_MAX_DEG                 BALL_BALANCE_SERVO_PHYSICAL_MAX_DEG
+
+/*
+ * 到点保持在满足条件后记录当前稳定舵机角，并冻结该角度直到退出条件成立。
  */
 #define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         3.0f     /* 进入到点状态允许的最大位置误差 */
 #define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          6.0f     /* 超过该位置误差后退出到点状态 */
@@ -74,21 +81,24 @@
 #define BALL_REFERENCE_FINAL_APPROACH_SPEED_MM_S        5.0f     /* 最终慢速接近阶段允许的参考速度 */
 
 /*
- * 有界脱困补偿。单位：误差mm、速度mm/s、时间ms、角度deg。
- * 只在参考误差较大且VALID新鲜时缓慢增加，用于克服静摩擦。
+ * 脱困状态机参数。脱困角没有固定角度上限，RAMP只受最终舵机机械安全角约束。
+ * 单位：误差和位移mm、速度mm/s、时间ms、角度deg。
  */
-#define BALL_BALANCE_BREAKAWAY_MIN_ERROR_MM             8.0f     /* 误差大于该值时才允许启动脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_CLEAR_ERROR_MM           3.0f     /* 误差小于该值时开始撤销脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_DWELL_MS                 180U     /* 满足卡住条件多久后启动脱困补偿 */
-#define BALL_BALANCE_BREAKAWAY_START_DEG                0.0f     /* 脱困从零开始平滑增长，禁止启动瞬跳 */
-#define BALL_BALANCE_BREAKAWAY_MAX_DEG                  20.0f    /* 脱困补偿允许达到的最大附加角度 */
-#define BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S             10.0f    /* 脱困补偿角度的增长速度 */
-#define BALL_BALANCE_BREAKAWAY_RELEASE_DEG_S            8.0f     /* 钢球开始运动后脱困角的撤销速度 */
-#define BALL_BALANCE_BREAKAWAY_COOLDOWN_MS              300U     /* 脱困角释放到零后的重新触发冷却时间 */
-#define BALL_BALANCE_BREAKAWAY_STUCK_SPEED_MM_S         6.0f     /* 低于该速度时才可能判定钢球卡住 */
-#define BALL_BALANCE_BREAKAWAY_PROGRESS_MM              2.0f     /* 单次VALID测量确认有效前进的最小距离 */
-#define BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT           3U       /* 连续多少次有效前进后确认已经脱困 */
-#define BALL_BALANCE_BREAKAWAY_VALID_AGE_MS             120U     /* 允许增加脱困角的VALID数据最大年龄 */
+#define BALL_BALANCE_BREAKAWAY_MIN_ERROR_MM             5.0f     /* 误差超过该值才允许判定卡住 */
+#define BALL_BALANCE_BREAKAWAY_STUCK_SPEED_MM_S         3.0f     /* 低于该速度才允许判定卡住或再次停住 */
+#define BALL_BALANCE_BREAKAWAY_IDLE_DWELL_MS            300U     /* IDLE满足卡住条件后进入RAMP的等待时间 */
+#define BALL_BALANCE_BREAKAWAY_RESTART_DWELL_MS         300U     /* DECAY再次停住后恢复RAMP的等待时间 */
+#define BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S             10.0f    /* RAMP脱困角连续增长速度 */
+#define BALL_BALANCE_BREAKAWAY_START_PROGRESS_MM        1.5f     /* 从RAMP起点累计前进达到该位移后确认启动 */
+#define BALL_BALANCE_BREAKAWAY_FORWARD_STEP_MIN_MM      0.1f     /* 单帧向目标运动的最小有效位移 */
+#define BALL_BALANCE_BREAKAWAY_FORWARD_FRAME_COUNT      2U       /* 确认启动所需的连续向目标运动帧数 */
+#define BALL_BALANCE_BREAKAWAY_DECAY_RATE_DEG_S         12.0f    /* DECAY正常撤销脱困角的最大速度 */
+#define BALL_BALANCE_BREAKAWAY_CLEAR_RATE_DEG_S         30.0f    /* 异常、越过目标或目标变化时的快速平滑清零速度 */
+#define BALL_BALANCE_BREAKAWAY_DECAY_SPEED_SCALE_MM_S   20.0f    /* 速度越接近该值，DECAY目标角下降越快 */
+#define BALL_BALANCE_BREAKAWAY_DECAY_PROGRESS_WEIGHT    0.5f     /* DECAY目标角中运动进度相对剩余误差的权重 */
+#define BALL_BALANCE_BREAKAWAY_COOLDOWN_MS              250U     /* 脱困角清零后的冷却时间 */
+#define BALL_BALANCE_BREAKAWAY_VALID_AGE_MS             120U     /* 允许启动和推进脱困的VALID数据最大年龄 */
+#define BALL_BALANCE_TARGET_CHANGE_EPSILON_MM           0.05f    /* 判定目标位置发生变化的最小差值 */
 
 /* 三状态增广卡尔曼滤波器参数。协方差单位与对应状态平方保持一致。 */
 #define BALL_ESTIMATOR_Q_POSITION                       0.02f    /* 位置状态的过程噪声大小 */

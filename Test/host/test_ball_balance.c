@@ -22,14 +22,15 @@ static void TestControlDirectionAndBreakaway(void)
 {
     BallBalance_ControlInput_t input = {0};
     BallBalance_ControlOutput_t output;
-    float breakaway_before_motion;
+    float angle_before_transition;
+    float angle_before_restart;
+    float previous_angle;
+    float previous_request;
     float held_angle_deg;
-    float previous_breakaway;
     float previous_speed;
-    uint32_t dwell_updates;
     uint32_t index;
 
-    printf("[TEST] ball control direction and continuous breakaway\n");
+    printf("[TEST] ball control direction and breakaway state machine\n");
     input.control_enabled = 1U;
     input.data_valid = 1U;
     input.allow_breakaway_growth = 1U;
@@ -106,146 +107,160 @@ static void TestControlDirectionAndBreakaway(void)
     input.data_valid = 1U;
 
     BallBalance_Control_Reset();
-    input.target_position_mm = -10.0f;
-    input.reference_position_mm = -10.0f;
+    input.target_position_mm = -20.0f;
+    input.reference_position_mm = -20.0f;
     input.estimated_position_mm = 0.0f;
+    input.estimated_velocity_mm_s = 4.0f;
+    input.allow_breakaway_growth = 1U;
+    input.position_measurement_valid = 0U;
+    input.now_ms = 0U;
+    for (index = 0U; index < 100U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("speed above 3mm/s blocks breakaway dwell",
+              output.breakaway_state == BREAKAWAY_IDLE);
+
+    BallBalance_Control_Reset();
     input.estimated_velocity_mm_s = 0.0f;
     input.allow_breakaway_growth = 1U;
     input.position_measurement_valid = 0U;
     input.now_ms = 0U;
-    dwell_updates = BALL_BALANCE_BREAKAWAY_DWELL_MS /
-                    BALL_BALANCE_CONTROL_PERIOD_MS;
-    for (index = 0U; index + 1U < dwell_updates; index++) {
+    for (index = 0U; index < 30U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
         (void)BallBalance_Control_Update(&input, &output);
     }
-    CheckTrue("breakaway remains zero throughout dwell",
-              output.breakaway_active == 0U);
+    CheckTrue("breakaway stays idle before 300ms dwell",
+              output.breakaway_state == BREAKAWAY_IDLE);
     input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
     (void)BallBalance_Control_Update(&input, &output);
-    CheckTrue("breakaway activates after dwell",
-              output.breakaway_active != 0U);
-    CheckTrue("breakaway starts without angle jump",
-              fabsf(output.breakaway_angle_deg) <=
+    CheckTrue("breakaway enters ramp after dwell",
+              output.breakaway_state == BREAKAWAY_RAMP);
+    CheckTrue("ramp transition has no angle jump",
+              output.breakaway_angle_deg == 0.0f);
+
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    previous_request = output.requested_servo_angle_deg;
+    previous_angle = output.breakaway_angle_deg;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("ramp grows continuously from zero",
+              fabsf(output.breakaway_angle_deg - previous_angle) <=
               (BALL_BALANCE_BREAKAWAY_GROWTH_DEG_S *
                BALL_BALANCE_CONTROL_PERIOD_S) + 0.001f);
-    for (index = 0U; index < 150U; index++) {
+    CheckTrue("breakaway bypasses normal 0.4 degree deadband",
+              fabsf(output.requested_servo_angle_deg -
+                    previous_request) > 0.05f);
+
+    for (index = 0U; index < 210U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
         (void)BallBalance_Control_Update(&input, &output);
     }
-    CheckTrue("breakaway respects configured maximum",
-              fabsf(output.breakaway_angle_deg) <=
-              BALL_BALANCE_BREAKAWAY_MAX_DEG + 0.001f);
-    breakaway_before_motion =
-        fabsf(output.breakaway_angle_deg);
+    CheckTrue("ramp has no former fixed 20 degree limit",
+              fabsf(output.breakaway_angle_deg) > 20.0f);
+    CheckTrue("ramp request stays inside calibrated safety range",
+              (output.requested_servo_angle_deg >=
+               BALL_BALANCE_SERVO_SAFE_MIN_DEG - 0.001f) &&
+              (output.requested_servo_angle_deg <=
+               BALL_BALANCE_SERVO_SAFE_MAX_DEG + 0.001f));
 
     input.position_measurement_valid = 1U;
     input.measured_position_mm = 0.0f;
     input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
     (void)BallBalance_Control_Update(&input, &output);
-    for (index = 1U; index <= 3U; index++) {
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        input.measured_position_mm = 2.1f * (float)index;
-        (void)BallBalance_Control_Update(&input, &output);
-    }
-    CheckTrue("wrong-way motion does not release breakaway",
+    input.measured_position_mm = 1.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    input.measured_position_mm = 2.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("wrong-way movement remains in ramp",
+              output.breakaway_state == BREAKAWAY_RAMP);
+
+    input.measured_position_mm = -0.8f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("one forward frame is insufficient",
+              output.breakaway_state == BREAKAWAY_RAMP);
+    angle_before_transition = output.breakaway_angle_deg;
+    input.measured_position_mm = -1.6f;
+    input.estimated_position_mm = -1.6f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("cumulative 1.5mm and two frames enter decay",
+              output.breakaway_state == BREAKAWAY_DECAY);
+    CheckTrue("decay starts from actual ramp angle",
+              fabsf(output.breakaway_start_angle_deg -
+                    output.breakaway_angle_deg) < 0.001f);
+    CheckTrue("decay transition does not halve angle",
               fabsf(output.breakaway_angle_deg) >=
-              breakaway_before_motion - 0.001f);
+              fabsf(angle_before_transition));
 
-    BallBalance_Control_Reset();
+    previous_angle = fabsf(output.breakaway_angle_deg);
     input.position_measurement_valid = 0U;
-    input.measured_position_mm = 0.0f;
-    for (index = 0U; index < dwell_updates + 50U; index++) {
+    input.estimated_velocity_mm_s = -12.0f;
+    for (index = 0U; index < 10U; index++) {
+        input.estimated_position_mm -= 0.5f;
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
         (void)BallBalance_Control_Update(&input, &output);
-    }
-    input.position_measurement_valid = 1U;
-    input.measured_position_mm = 0.0f;
-    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-    (void)BallBalance_Control_Update(&input, &output);
-    input.measured_position_mm = -1.0f;
-    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-    (void)BallBalance_Control_Update(&input, &output);
-    for (index = 1U; index <= BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT;
-         index++) {
-        input.measured_position_mm =
-            -1.0f -
-            BALL_BALANCE_BREAKAWAY_PROGRESS_MM * (float)index;
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        if (index == BALL_BALANCE_BREAKAWAY_PROGRESS_COUNT) {
-            breakaway_before_motion =
-                fabsf(output.breakaway_angle_deg);
-        }
-        (void)BallBalance_Control_Update(&input, &output);
-    }
-    CheckTrue("three measured progress steps start release",
-              fabsf(output.breakaway_angle_deg) <
-              breakaway_before_motion);
-    previous_breakaway = fabsf(output.breakaway_angle_deg);
-    for (index = 0U; index < 150U; index++) {
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        (void)BallBalance_Control_Update(&input, &output);
-        CheckTrue("release lock decays monotonically",
+        CheckTrue("decay angle is monotonic",
                   fabsf(output.breakaway_angle_deg) <=
-                  previous_breakaway + 0.001f);
-        previous_breakaway = fabsf(output.breakaway_angle_deg);
-        if (output.breakaway_active == 0U) {
+                  previous_angle + 0.001f);
+        previous_angle = fabsf(output.breakaway_angle_deg);
+    }
+    CheckTrue("decay reports forward progress",
+              output.breakaway_progress_mm > 0.0f);
+
+    input.estimated_velocity_mm_s = 0.0f;
+    angle_before_restart = fabsf(output.breakaway_angle_deg);
+    for (index = 0U; index < 80U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+        if (output.breakaway_state == BREAKAWAY_RAMP) {
             break;
         }
     }
-    CheckTrue("release lock reaches zero",
-              output.breakaway_active == 0U);
-    for (index = 0U;
-         index + 1U < (BALL_BALANCE_BREAKAWAY_COOLDOWN_MS /
-                       BALL_BALANCE_CONTROL_PERIOD_MS);
-         index++) {
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        (void)BallBalance_Control_Update(&input, &output);
-        CheckTrue("cooldown blocks immediate retrigger",
-                  output.breakaway_active == 0U);
-    }
-    for (index = 0U; index < dwell_updates + 2U; index++) {
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        (void)BallBalance_Control_Update(&input, &output);
-    }
-    CheckTrue("breakaway can retrigger after cooldown and dwell",
-              output.breakaway_active != 0U);
-
-    breakaway_before_motion = output.breakaway_angle_deg;
-    input.target_position_mm = 10.0f;
-    input.reference_position_mm = 10.0f;
-    input.position_measurement_valid = 0U;
+    CheckTrue("decay restop resumes ramp after 300ms",
+              output.breakaway_state == BREAKAWAY_RAMP);
+    CheckTrue("restop keeps remaining breakaway angle",
+              fabsf(output.breakaway_angle_deg) > 0.0f);
+    CheckTrue("restop does not restart from zero",
+              fabsf(output.breakaway_angle_deg) <=
+              angle_before_restart + 0.001f);
+    previous_angle = fabsf(output.breakaway_angle_deg);
     input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
     (void)BallBalance_Control_Update(&input, &output);
-    CheckTrue("direction change releases without clearing",
-              (output.breakaway_angle_deg != 0.0f) &&
-              (output.breakaway_angle_deg *
-               breakaway_before_motion > 0.0f) &&
-              (fabsf(output.breakaway_angle_deg) <
-               fabsf(breakaway_before_motion)));
+    CheckTrue("resumed ramp continues increasing",
+              fabsf(output.breakaway_angle_deg) > previous_angle);
 
-    BallBalance_Control_Reset();
-    input.target_position_mm = 0.0f;
-    input.reference_position_mm = 0.0f;
-    input.estimated_position_mm = -120.0f;
-    input.measured_position_mm = -120.0f;
-    input.position_measurement_valid = 1U;
-    input.allow_breakaway_growth = 1U;
-    input.estimated_velocity_mm_s = 0.0f;
-    for (index = 0U; index < dwell_updates + 30U; index++) {
-        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        (void)BallBalance_Control_Update(&input, &output);
-    }
-    CheckTrue("far stationary error activates breakaway",
-              output.breakaway_active != 0U);
+    previous_angle = output.breakaway_angle_deg;
+    input.target_position_mm = 20.0f;
+    input.reference_position_mm = 20.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("target change starts smooth fast decay",
+              output.breakaway_state == BREAKAWAY_DECAY);
+    CheckTrue("target change does not clear angle instantly",
+              (output.breakaway_angle_deg != 0.0f) &&
+              (output.breakaway_angle_deg * previous_angle > 0.0f) &&
+              (fabsf(output.breakaway_angle_deg) <
+               fabsf(previous_angle)));
     for (index = 0U; index < 300U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
-        input.estimated_velocity_mm_s =
-            ((index & 1U) != 0U) ? 180.0f : -180.0f;
         (void)BallBalance_Control_Update(&input, &output);
+        if (output.breakaway_state == BREAKAWAY_COOLDOWN) {
+            break;
+        }
     }
-    CheckTrue("fake estimator speed does not cancel breakaway",
-              output.breakaway_active != 0U);
+    CheckTrue("fast decay reaches cooldown",
+              output.breakaway_state == BREAKAWAY_COOLDOWN);
+    for (index = 0U; index < 24U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+        CheckTrue("250ms cooldown blocks ramp",
+                  output.breakaway_state == BREAKAWAY_COOLDOWN);
+    }
 
     BallBalance_Control_Reset();
     input.target_position_mm = 100.0f;
@@ -256,8 +271,9 @@ static void TestControlDirectionAndBreakaway(void)
     for (index = 0U; index < 100U; index++) {
         (void)BallBalance_Control_Update(&input, &output);
     }
-    CheckTrue("dynamic feedback is softened before edge push",
-              fabsf(output.limited_dynamic_angle_deg) < 16.0f);
+    CheckTrue("dynamic feedback respects configured limit",
+              fabsf(output.limited_dynamic_angle_deg) <=
+              BALL_BALANCE_DYNAMIC_HARD_LIMIT_DEG + 0.001f);
     CheckTrue("command remains inside physical servo travel",
               output.command_angle_x10 <= 1800U);
     printf(s_failed ? "  FAIL\n" : "  PASS\n");
@@ -269,6 +285,7 @@ static void TestControlNoiseAndTargetLock(void)
     BallBalance_ControlOutput_t output;
     uint16_t held_command_x10;
     uint16_t locked_command_x10;
+    float hold_servo_angle_deg;
     float maximum_servo_deviation = 0.0f;
     float deviation;
     uint32_t index;
@@ -276,6 +293,7 @@ static void TestControlNoiseAndTargetLock(void)
     printf("[TEST] stationary noise rejection and target lock\n");
     input.control_enabled = 1U;
     input.data_valid = 1U;
+    input.allow_breakaway_growth = 1U;
     input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
     input.target_position_mm = 0.0f;
     input.equilibrium_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
@@ -300,7 +318,10 @@ static void TestControlNoiseAndTargetLock(void)
               maximum_servo_deviation < 0.8f);
     CheckTrue("controller locks after reaching target",
               output.target_locked != 0U);
+    CheckTrue("target lock enters real hold state",
+              output.hold_active != 0U);
     locked_command_x10 = output.command_angle_x10;
+    hold_servo_angle_deg = output.hold_servo_angle_deg;
 
     for (index = 0U; index < 200U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
@@ -311,6 +332,9 @@ static void TestControlNoiseAndTargetLock(void)
         (void)BallBalance_Control_Update(&input, &output);
         CheckTrue("locked servo ignores in-band estimator noise",
                   output.command_angle_x10 == locked_command_x10);
+        CheckTrue("hold output remains exact recorded angle",
+                  fabsf(output.servo_angle_deg -
+                        hold_servo_angle_deg) < 0.001f);
     }
     CheckTrue("target lock remains active inside hysteresis",
               output.target_locked != 0U);
@@ -322,8 +346,62 @@ static void TestControlNoiseAndTargetLock(void)
     (void)BallBalance_Control_Update(&input, &output);
     CheckTrue("target lock releases after real position deviation",
               output.target_locked == 0U);
+    CheckTrue("hold exit resumes through motion profile",
+              fabsf(output.servo_angle_deg -
+                    hold_servo_angle_deg) <=
+              (BALL_BALANCE_SERVO_MAX_ACCEL_DEG_S2 *
+               BALL_BALANCE_CONTROL_PERIOD_S *
+               BALL_BALANCE_CONTROL_PERIOD_S) + 0.001f);
 
     BallBalance_Control_Reset();
+    input.target_position_mm = 0.0f;
+    input.reference_position_mm = 0.0f;
+    input.estimated_position_mm = 0.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    input.data_valid = 1U;
+    input.control_enabled = 1U;
+    for (index = 0U; index < 27U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("hold reenters for exit-condition tests",
+              output.hold_active != 0U);
+    input.target_position_mm = 1.0f;
+    input.reference_position_mm = 1.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("target change exits hold inside position hysteresis",
+              output.hold_active == 0U);
+
+    input.estimated_position_mm = 1.0f;
+    for (index = 0U; index < 27U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("hold reenters at changed target",
+              output.hold_active != 0U);
+    input.data_valid = 0U;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("invalid vision exits hold",
+              output.hold_active == 0U);
+    input.data_valid = 1U;
+    for (index = 0U; index < 27U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("hold reenters after vision recovery",
+              output.hold_active != 0U);
+    input.control_enabled = 0U;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("control disable exits hold",
+              output.hold_active == 0U);
+    input.control_enabled = 1U;
+
+    BallBalance_Control_Reset();
+    input.target_position_mm = 0.0f;
+    input.reference_position_mm = 0.0f;
     input.estimated_position_mm = 0.0f;
     input.estimated_disturbance_mm_s2 = 0.0f;
     input.estimated_velocity_mm_s = 4.0f;
@@ -358,6 +436,9 @@ static void TestControlNoiseAndTargetLock(void)
               output.filtered_velocity_mm_s == 0.0f);
 
     BallBalance_Control_Reset();
+    input.target_position_mm = 10.0f;
+    input.reference_position_mm = 0.0f;
+    input.allow_breakaway_growth = 0U;
     input.estimated_position_mm = 0.0f;
     input.estimated_velocity_mm_s = 0.0f;
     input.equilibrium_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
@@ -366,16 +447,14 @@ static void TestControlNoiseAndTargetLock(void)
         (void)BallBalance_Control_Update(&input, &output);
     }
     held_command_x10 = output.command_angle_x10;
-    input.equilibrium_angle_deg =
-        BALL_BALANCE_LEVEL_ANGLE_DEG + 0.3f;
+    input.reference_position_mm = 1.0f;
     for (index = 0U; index < 30U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
         (void)BallBalance_Control_Update(&input, &output);
     }
     CheckTrue("servo command deadband rejects tiny request",
               output.command_angle_x10 == held_command_x10);
-    input.equilibrium_angle_deg =
-        BALL_BALANCE_LEVEL_ANGLE_DEG + 0.5f;
+    input.reference_position_mm = 3.0f;
     for (index = 0U; index < 30U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
         (void)BallBalance_Control_Update(&input, &output);

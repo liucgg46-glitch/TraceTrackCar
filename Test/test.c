@@ -3497,6 +3497,45 @@ static void Test_BallState_PrintStatus(const char *reason)
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
+
+    n = snprintf(
+        line,
+        sizeof(line),
+        "[BallState] bstate=%u bstart=%ld.%02lddeg "
+        "bprogress=%ld.%ldmm hold=%u "
+        "hold_angle=%ld.%02lddeg error=%ld.%ldmm "
+        "fvel=%ld.%ldmm/s final=%ld.%02lddeg\r\n",
+        (unsigned int)app_info.control.output.breakaway_state,
+        (long)(Test_BallState_FloatToX100(
+            app_info.control.output.breakaway_start_angle_deg) / 100),
+        (long)(Test_BallState_FloatToX100(Test_BallState_AbsF(
+            app_info.control.output.breakaway_start_angle_deg)) % 100),
+        (long)(Test_BallState_FloatToX10(
+            app_info.control.output.breakaway_progress_mm) / 10),
+        (long)(Test_BallState_FloatToX10(Test_BallState_AbsF(
+            app_info.control.output.breakaway_progress_mm)) % 10),
+        (unsigned int)app_info.control.output.hold_active,
+        (long)(Test_BallState_FloatToX100(
+            app_info.control.output.hold_servo_angle_deg) / 100),
+        (long)(Test_BallState_FloatToX100(Test_BallState_AbsF(
+            app_info.control.output.hold_servo_angle_deg)) % 100),
+        (long)(Test_BallState_FloatToX10(
+            app_info.control.output.position_error_mm) / 10),
+        (long)(Test_BallState_FloatToX10(Test_BallState_AbsF(
+            app_info.control.output.position_error_mm)) % 10),
+        (long)(Test_BallState_FloatToX10(
+            app_info.control.output.filtered_velocity_mm_s) / 10),
+        (long)(Test_BallState_FloatToX10(Test_BallState_AbsF(
+            app_info.control.output.filtered_velocity_mm_s)) % 10),
+        (long)(Test_BallState_FloatToX100(
+            app_info.control.output.servo_angle_deg) / 100),
+        (long)(Test_BallState_FloatToX100(Test_BallState_AbsF(
+            app_info.control.output.servo_angle_deg)) % 100)
+    );
+
+    if ((n > 0) && (n < (int)sizeof(line))) {
+        Test_BallState_SendLine(line);
+    }
 }
 
 static void Test_BallState_PrintCsv(
@@ -3504,7 +3543,7 @@ static void Test_BallState_PrintCsv(
     const BallBalance_AppInfo_t *app
 )
 {
-    char line[320];
+    char line[400];
     int n;
 
     if (app == 0) {
@@ -3515,9 +3554,10 @@ static void Test_BallState_PrintCsv(
         line,
         sizeof(line),
         "BB,%lu,%u,%u,%u,%d,"
-        "%ld,%ld,%ld,%ld,%ld,"
-        "%ld,%ld,%ld,%ld,"
         "%ld,%ld,%ld,%ld,%ld,%ld,"
+        "%ld,%ld,%ld,%ld,"
+        "%ld,%ld,%u,%ld,%ld,%ld,"
+        "%ld,%u,%ld,%ld,%ld,"
         "%u,%u,%u\r\n",
         (unsigned long)now_ms,
         (unsigned int)app->state,
@@ -3532,6 +3572,9 @@ static void Test_BallState_PrintCsv(
         ),
         (long)Test_BallState_FloatToX10(
             app->control.output.filtered_velocity_mm_s
+        ),
+        (long)Test_BallState_FloatToX10(
+            app->control.output.position_error_mm
         ),
         (long)Test_BallState_FloatToX10(
             app->estimator.disturbance_mm_s2
@@ -3558,11 +3601,22 @@ static void Test_BallState_PrintCsv(
         (long)Test_BallState_FloatToX100(
             app->control.output.limited_dynamic_angle_deg
         ),
+        (unsigned int)app->control.output.breakaway_state,
         (long)Test_BallState_FloatToX100(
             app->control.output.breakaway_angle_deg
         ),
+        (long)Test_BallState_FloatToX100(
+            app->control.output.breakaway_start_angle_deg
+        ),
+        (long)Test_BallState_FloatToX10(
+            app->control.output.breakaway_progress_mm
+        ),
         (long)Test_BallState_FloatToX10(
             app->vehicle_disturbance_mm_s2
+        ),
+        (unsigned int)app->control.output.hold_active,
+        (long)Test_BallState_FloatToX100(
+            app->control.output.hold_servo_angle_deg
         ),
         (long)Test_BallState_FloatToX100(
             app->control.output.servo_angle_deg
@@ -3737,9 +3791,12 @@ void Test_BallBalanceControl_Update(void)
 
         Test_BallState_SendLine(
             "[BallState] CSV BB,time_ms,app,vision,conf,raw_x10,"
-            "est_x10,vel_x10,fvel_x10,dist_x10,fdist_x10,"
+            "est_x10,vel_x10,fvel_x10,poserr_x10,"
+            "dist_x10,fdist_x10,"
             "ref_x10,refv_x10,refa_x10,refaff_x10,"
-            "eq_x100,dyn_x100,breakaway_x100,vehicle_x10,"
+            "eq_x100,dyn_x100,breakaway_state,breakaway_x100,"
+            "breakaway_start_x100,breakaway_progress_x10,"
+            "vehicle_x10,hold_active,hold_servo_x100,"
             "servo_x100,servov_x10,timeout,reject,locked\r\n"
         );
         Test_BallState_PrintStatus("INIT");
