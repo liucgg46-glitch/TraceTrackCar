@@ -13,7 +13,6 @@
 #include "bsp_spi.h"
 #include "drv_motor.h"
 #include "drv_encoder.h"
-#include "drv_servo.h"
 #include "chassis.h"
 #include "lcd_ui.h"
 #include "oled_ui.h"
@@ -40,8 +39,6 @@
 #include "drv_buzzer.h"
 #include "task_fsm.h"
 #include "k210_comm.h"
-#include "ball_balance_app.h"
-#include "ball_balance_k210_adapter.h"
 #include "bsp_systick.h"
 
 #include <stdio.h>
@@ -840,137 +837,9 @@ static void Test_Key_Send(const char *message, uint16_t length)
     (void)BSP_UART_WriteFrame(UART_PORT1, (const uint8_t *)message, length);
 }
 
-#define TEST_SERVO_CAL_MIN_ANGLE_DEG       0U
-#define TEST_SERVO_CAL_MAX_ANGLE_DEG       180U
-#define TEST_SERVO_CAL_STEP_ANGLE_DEG      10U
-
-static void Test_ServoCal_PrintState(const char *command,
-                                     BSP_Status_t status)
-{
-    char message[128];
-    int length;
-
-    length = snprintf(
-        message,
-        sizeof(message),
-        "[ServoCal] angle=%udeg pulse=%uus command=%s status=%s\r\n",
-        (unsigned int)Drv_Servo_GetHorizontalAngleDeg(),
-        (unsigned int)Drv_Servo_GetHorizontalPulseUs(),
-        command,
-        (status == BSP_OK) ? "OK" : "ERROR"
-    );
-    if ((length > 0) && (length < (int)sizeof(message))) {
-        Test_Key_Send(message, (uint16_t)length);
-    }
-}
-
 /*
- * WHEELTEC S20F齿轮齿条摆杆开环角度测试。
- * 本任务只消费按键按下沿，不自动扫描、不启动底盘。
- */
-void Test_ServoBeamCalibration_Update(void)
-{
-    static uint8_t initialized = 0U;
-    uint16_t current_angle_deg;
-    uint16_t requested_angle_deg;
-    BSP_Status_t status;
-
-    if (initialized == 0U) {
-        static const char banner[] =
-            "[ServoCal] WHEELTEC S20F 180deg\r\n"
-            "[ServoCal] pin=PF8 timer=TIM13_CH1 freq=50Hz\r\n"
-            "[ServoCal] range=0..180deg pulse=500..2500us step=10deg\r\n"
-            "[ServoCal] KEY1=0deg KEY2=180deg KEY3=+10deg KEY4=-10deg\r\n"
-            "[ServoCal] KEY5=stop/0deg\r\n"
-            "[ServoCal] remove ball, lift wheels, keep hand near servo power switch\r\n";
-
-        Motor_StopAll();
-        status = Drv_Servo_SetHorizontalAngleDeg(TEST_SERVO_CAL_MIN_ANGLE_DEG);
-        Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
-        Test_ServoCal_PrintState("INIT_0DEG", status);
-        initialized = 1U;
-        return;
-    }
-
-    /* KEY5为最高优先级；同周期有其他按键时只执行立即回0度。 */
-#if BSP_KEY5_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY5)) {
-        Motor_StopAll();
-        status = Drv_Servo_SetHorizontalAngleDeg(TEST_SERVO_CAL_MIN_ANGLE_DEG);
-        Test_ServoCal_PrintState("STOP_TO_0DEG", status);
-        return;
-    }
-#endif
-
-#if BSP_KEY1_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY1)) {
-        status = Drv_Servo_SetHorizontalAngleDeg(TEST_SERVO_CAL_MIN_ANGLE_DEG);
-        Test_ServoCal_PrintState("SET_0DEG", status);
-        return;
-    }
-#endif
-
-#if BSP_KEY2_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY2)) {
-        status = Drv_Servo_SetHorizontalAngleDeg(TEST_SERVO_CAL_MAX_ANGLE_DEG);
-        Test_ServoCal_PrintState("SET_180DEG", status);
-        return;
-    }
-#endif
-
-#if BSP_KEY3_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY3)) {
-        current_angle_deg = Drv_Servo_GetHorizontalAngleDeg();
-        if (current_angle_deg >= TEST_SERVO_CAL_MAX_ANGLE_DEG) {
-            requested_angle_deg = TEST_SERVO_CAL_MAX_ANGLE_DEG;
-        } else {
-            requested_angle_deg =
-                (uint16_t)(current_angle_deg + TEST_SERVO_CAL_STEP_ANGLE_DEG);
-            if (requested_angle_deg > TEST_SERVO_CAL_MAX_ANGLE_DEG) {
-                requested_angle_deg = TEST_SERVO_CAL_MAX_ANGLE_DEG;
-            }
-        }
-
-        status = Drv_Servo_SetHorizontalAngleDeg(requested_angle_deg);
-        Test_ServoCal_PrintState(
-            (requested_angle_deg >= TEST_SERVO_CAL_MAX_ANGLE_DEG) ?
-                "LIMIT_180DEG" : "INCREASE_10DEG",
-            status
-        );
-        return;
-    }
-#endif
-
-#if BSP_KEY4_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY4)) {
-        current_angle_deg = Drv_Servo_GetHorizontalAngleDeg();
-        if (current_angle_deg <= TEST_SERVO_CAL_MIN_ANGLE_DEG) {
-            requested_angle_deg = TEST_SERVO_CAL_MIN_ANGLE_DEG;
-        } else if (current_angle_deg <
-                   (uint16_t)(TEST_SERVO_CAL_MIN_ANGLE_DEG +
-                              TEST_SERVO_CAL_STEP_ANGLE_DEG)) {
-            requested_angle_deg = TEST_SERVO_CAL_MIN_ANGLE_DEG;
-        } else {
-            requested_angle_deg =
-                (uint16_t)(current_angle_deg - TEST_SERVO_CAL_STEP_ANGLE_DEG);
-        }
-
-        status = Drv_Servo_SetHorizontalAngleDeg(requested_angle_deg);
-        Test_ServoCal_PrintState(
-            (requested_angle_deg <= TEST_SERVO_CAL_MIN_ANGLE_DEG) ?
-                "LIMIT_0DEG" : "DECREASE_10DEG",
-            status
-        );
-        return;
-    }
-#endif
-
-}
-
-/*
- * 九按键最小测试任务：
- *   KEY1=PE4、KEY2=PE3、KEY3=PE2、KEY4=PE1、KEY5=PA15；
- *   KEY6=PF0、KEY7=PF1、KEY8=PF2、KEY9=PF3。
+ * 五按键最小测试任务：
+ *   KEY1=PE4、KEY2=PE3、KEY3=PE2、KEY4=PE1、KEY5=PA15。
  * Key_Update() 统一完成按键扫描和消抖，本函数只消费按下/松开事件。
  */
 void Test_Key_Update(void)
@@ -979,8 +848,7 @@ void Test_Key_Update(void)
 
     if (banner_sent == 0U) {
         static const char banner[] =
-            "KEY TEST READY: KEY1=PE4 KEY2=PE3 KEY3=PE2 KEY4=PE1 KEY5=PA15 "
-            "KEY6=PF0 KEY7=PF1 KEY8=PF2 KEY9=PF3\r\n";
+            "KEY TEST READY: KEY1=PE4 KEY2=PE3 KEY3=PE2 KEY4=PE1 KEY5=PA15\r\n";
         Test_Key_Send(banner, (uint16_t)(sizeof(banner) - 1U));
         banner_sent = 1U;
     }
@@ -1032,46 +900,6 @@ void Test_Key_Update(void)
     }
     if (BSP_Key_WasReleased(BSP_KEY5)) {
         static const char message[] = "KEY5 RELEASED (PA15)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-#endif
-#if BSP_KEY6_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY6)) {
-        static const char message[] = "KEY6 PRESSED (PF0)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-    if (BSP_Key_WasReleased(BSP_KEY6)) {
-        static const char message[] = "KEY6 RELEASED (PF0)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-#endif
-#if BSP_KEY7_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY7)) {
-        static const char message[] = "KEY7 PRESSED (PF1)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-    if (BSP_Key_WasReleased(BSP_KEY7)) {
-        static const char message[] = "KEY7 RELEASED (PF1)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-#endif
-#if BSP_KEY8_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY8)) {
-        static const char message[] = "KEY8 PRESSED (PF2)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-    if (BSP_Key_WasReleased(BSP_KEY8)) {
-        static const char message[] = "KEY8 RELEASED (PF2)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-#endif
-#if BSP_KEY9_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY9)) {
-        static const char message[] = "KEY9 PRESSED (PF3)\r\n";
-        Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
-    }
-    if (BSP_Key_WasReleased(BSP_KEY9)) {
-        static const char message[] = "KEY9 RELEASED (PF3)\r\n";
         Test_Key_Send(message, (uint16_t)(sizeof(message) - 1U));
     }
 #endif
@@ -3197,144 +3025,55 @@ void Test_AsyncDisplay_Update(void)
 }
 
 /*
- * K210目标坐标串口通信测试。
- *
- * USART2接收K210数据；
- * USART1将解析结果发送到USB-TTL串口助手。
+ * K210钢球位置通信测试。
+ * USART2接收0x32钢球帧，USART1输出到USB-TTL串口助手。
  */
-void Test_K210_TargetCommUpdate(void)
-{
-    static uint32_t last_status_ms = 0U;
-
-    uint16_t x;
-    uint16_t y;
-    uint8_t valid;
-
-    K210_Comm_Info_t info;
-
-    char buf[192];
-    int length;
-    uint32_t now_ms;
-
-    /*
-     * 读取K210发送的0x02目标坐标帧。
-     */
-    if (K210_Comm_GetNewTarget(
-            &x,
-            &y,
-            &valid
-        ) == BSP_OK) {
-
-        length = snprintf(
-            buf,
-            sizeof(buf),
-            "K210 TARGET x=%u y=%u valid=%u\r\n",
-            (unsigned int)x,
-            (unsigned int)y,
-            (unsigned int)valid
-        );
-
-        if ((length > 0) &&
-            (length < (int)sizeof(buf))) {
-            (void)BSP_UART_WriteFrame(
-                UART_PORT_DEBUG,
-                (const uint8_t *)buf,
-                (uint16_t)length
-            );
-        }
-    }
-
-    /*
-     * 每500ms输出一次通信统计。
-     */
-    now_ms = BSP_GetTickMs();
-
-    if ((uint32_t)(
-            now_ms -
-            last_status_ms
-        ) < 500U) {
-        return;
-    }
-
-    last_status_ms = now_ms;
-
-    if (K210_Comm_GetInfo(&info) != BSP_OK) {
-        return;
-    }
-
-    length = snprintf(
-        buf,
-        sizeof(buf),
-        "K210 STATUS online=%u frames=%lu "
-        "check_err=%lu format_err=%lu "
-        "timeout=%lu last_rx=%lu\r\n",
-        (unsigned int)info.online,
-        (unsigned long)info.valid_frame_count,
-        (unsigned long)info.checksum_error_count,
-        (unsigned long)info.format_error_count,
-        (unsigned long)info.timeout_count,
-        (unsigned long)info.last_rx_ms
-    );
-
-    if ((length > 0) &&
-        (length < (int)sizeof(buf))) {
-        (void)BSP_UART_WriteFrame(
-            UART_PORT_DEBUG,
-            (const uint8_t *)buf,
-            (uint16_t)length
-        );
-    }
-}
-
 void Test_K210_BallCommUpdate(void)
 {
     static uint32_t last_status_ms = 0U;
 
+    K210_Comm_Info_t info;
     int16_t position_tenth_mm;
     uint8_t state;
     uint8_t confidence;
-int32_t position_value;
-uint32_t position_abs;
-const char *state_text;
-    K210_Comm_Info_t info;
-
+    uint32_t now_ms;
     char buf[192];
     int length;
-    uint32_t now_ms;
+    int32_t position_value;
+    uint32_t position_abs;
+    const char *state_text;
 
     if (K210_Comm_GetNewBallPosition(
             &position_tenth_mm,
             &state,
             &confidence
         ) == BSP_OK) {
+        if (state == K210_BALL_STATE_VALID) {
+            state_text = "VALID";
+        } else if (state == K210_BALL_STATE_HOLD) {
+            state_text = "HOLD";
+        } else {
+            state_text = "LOST";
+        }
 
         position_value = position_tenth_mm;
+        if (position_value < 0) {
+            position_abs = (uint32_t)(-position_value);
+        } else {
+            position_abs = (uint32_t)position_value;
+        }
 
-if (position_value < 0) {
-    position_abs = (uint32_t)(-position_value);
-} else {
-    position_abs = (uint32_t)position_value;
-}
-
-if (state == K210_BALL_STATE_VALID) {
-    state_text = "VALID";
-} else if (state == K210_BALL_STATE_HOLD) {
-    state_text = "HOLD";
-} else {
-    state_text = "LOST";
-}
-
-length = snprintf(
-    buf,
-    sizeof(buf),
-    "BALL position=%c%lu.%02lucm "
-    "state=%s confidence=%u\r\n",
-    (position_value < 0) ? '-' : '+',
-    (unsigned long)(position_abs / 100U),
-    (unsigned long)(position_abs % 100U),
-    state_text,
-    (unsigned int)confidence
-);
+        length = snprintf(
+            buf,
+            sizeof(buf),
+            "BALL position=%c%lu.%02lucm "
+            "state=%s confidence=%u\r\n",
+            (position_value < 0) ? '-' : '+',
+            (unsigned long)(position_abs / 100U),
+            (unsigned long)(position_abs % 100U),
+            state_text,
+            (unsigned int)confidence
+        );
 
         if ((length > 0) &&
             (length < (int)sizeof(buf))) {
@@ -3347,14 +3086,9 @@ length = snprintf(
     }
 
     now_ms = BSP_GetTickMs();
-
-    if ((uint32_t)(
-            now_ms -
-            last_status_ms
-        ) < 500U) {
+    if ((uint32_t)(now_ms - last_status_ms) < 500U) {
         return;
     }
-
     last_status_ms = now_ms;
 
     if (K210_Comm_GetInfo(&info) != BSP_OK) {
@@ -3384,7 +3118,6 @@ length = snprintf(
         );
     }
 }
-
 static const char *Test_BallState_StateText(uint8_t state)
 {
     switch (state) {
@@ -3404,11 +3137,13 @@ static int32_t Test_BallState_FloatToX10(float value)
     float scaled;
 
     scaled = value * 10.0f;
+
     if (scaled >= 0.0f) {
         scaled += 0.5f;
     } else {
         scaled -= 0.5f;
     }
+
     return (int32_t)scaled;
 }
 
@@ -3417,11 +3152,13 @@ static int32_t Test_BallState_FloatToX100(float value)
     float scaled;
 
     scaled = value * 100.0f;
+
     if (scaled >= 0.0f) {
         scaled += 0.5f;
     } else {
         scaled -= 0.5f;
     }
+
     return (int32_t)scaled;
 }
 
@@ -3439,12 +3176,15 @@ static void Test_BallState_SendLine(const char *line)
     }
 
     length = 0U;
-    while ((line[length] != '\0') && (length < 500U)) {
+
+    while ((line[length] != '\0') &&
+           (length < 500U)) {
         length++;
     }
+
     if (length > 0U) {
         (void)BSP_UART_WriteFrame(
-            DEBUG_UART_PORT,
+            UART_PORT_DEBUG,
             (const uint8_t *)line,
             length
         );
@@ -3461,27 +3201,35 @@ static void Test_BallState_PrintStatus(const char *reason)
     char line[256];
     int n;
 
-    servo_info_ok = 0U;
-    if (Drv_Servo_GetInfo(&servo_info) == BSP_OK) {
-        servo_info_ok = 1U;
-    }
-
-    if ((K210_Comm_GetInfo(&k210_info) != BSP_OK) ||
-        (BallBalance_App_GetInfo(&app_info) != BSP_OK) ||
-        (BallBalance_K210Adapter_GetInfo(&adapter_info) != BSP_OK)) {
+    if (K210_Comm_GetInfo(&k210_info) != BSP_OK) {
         return;
     }
+
+    if (BallBalance_App_GetInfo(&app_info) != BSP_OK) {
+        return;
+    }
+
+    if (BallBalance_K210Adapter_GetInfo(&adapter_info) != BSP_OK) {
+        return;
+    }
+
+    servo_info_ok =
+        (Drv_Servo_GetInfo(&servo_info) == BSP_OK) ?
+        1U :
+        0U;
 
     n = snprintf(
         line,
         sizeof(line),
-        "[BallState] %s k210_online=%u frames=%lu checksum_err=%lu format_err=%lu\r\n",
+        "[BallState] %s k210_online=%u frames=%lu "
+        "checksum_err=%lu format_err=%lu\r\n",
         (reason == 0) ? "STATUS" : reason,
         (unsigned int)k210_info.online,
         (unsigned long)k210_info.valid_frame_count,
         (unsigned long)k210_info.checksum_error_count,
         (unsigned long)k210_info.format_error_count
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
@@ -3489,15 +3237,19 @@ static void Test_BallState_PrintStatus(const char *reason)
     n = snprintf(
         line,
         sizeof(line),
-        "[BallState] app=%u vision=%s conf=%u seq=%u streak=%u timeout=%u pushed=%lu\r\n",
+        "[BallState] app=%u vision=%s conf=%u "
+        "seq=%u streak=%u timeout=%u pushed=%lu\r\n",
         (unsigned int)app_info.state,
-        Test_BallState_StateText(app_info.last_sample_state),
+        Test_BallState_StateText(
+            app_info.last_sample_state
+        ),
         (unsigned int)app_info.last_sample.confidence,
         (unsigned int)adapter_info.sequence,
         (unsigned int)app_info.valid_streak,
         (unsigned int)app_info.data_timeout,
         (unsigned long)adapter_info.pushed_count
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
@@ -3505,28 +3257,63 @@ static void Test_BallState_PrintStatus(const char *reason)
     n = snprintf(
         line,
         sizeof(line),
-        "[BallState] target=%d.%dmm raw=%d.%dmm est=%ld.%ldmm vel=%ld.%ldmm/s dist=%ld.%ldmm/s2\r\n",
+        "[BallState] target=%d.%dmm raw=%d.%dmm "
+        "est=%ld.%ldmm vel=%ld.%ldmm/s "
+        "dist=%ld.%ldmm/s2\r\n",
         (int)(app_info.target_mm_x10 / 10),
-        (int)((app_info.target_mm_x10 < 0 ?
-               -app_info.target_mm_x10 :
-               app_info.target_mm_x10) % 10),
+        (int)(
+            (
+                app_info.target_mm_x10 < 0 ?
+                -app_info.target_mm_x10 :
+                app_info.target_mm_x10
+            ) % 10
+        ),
         (int)(app_info.last_sample.position_mm_x10 / 10),
-        (int)((app_info.last_sample.position_mm_x10 < 0 ?
-               -app_info.last_sample.position_mm_x10 :
-               app_info.last_sample.position_mm_x10) % 10),
-        (long)(Test_BallState_FloatToX10(
-            app_info.estimator.position_mm) / 10),
-        (long)(Test_BallState_FloatToX10(
-            Test_BallState_AbsF(app_info.estimator.position_mm)) % 10),
-        (long)(Test_BallState_FloatToX10(
-            app_info.estimator.velocity_mm_s) / 10),
-        (long)(Test_BallState_FloatToX10(
-            Test_BallState_AbsF(app_info.estimator.velocity_mm_s)) % 10),
-        (long)(Test_BallState_FloatToX10(
-            app_info.estimator.disturbance_mm_s2) / 10),
-        (long)(Test_BallState_FloatToX10(
-            Test_BallState_AbsF(app_info.estimator.disturbance_mm_s2)) % 10)
+        (int)(
+            (
+                app_info.last_sample.position_mm_x10 < 0 ?
+                -app_info.last_sample.position_mm_x10 :
+                app_info.last_sample.position_mm_x10
+            ) % 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                app_info.estimator.position_mm
+            ) / 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                Test_BallState_AbsF(
+                    app_info.estimator.position_mm
+                )
+            ) % 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                app_info.estimator.velocity_mm_s
+            ) / 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                Test_BallState_AbsF(
+                    app_info.estimator.velocity_mm_s
+                )
+            ) % 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                app_info.estimator.disturbance_mm_s2
+            ) / 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                Test_BallState_AbsF(
+                    app_info.estimator.disturbance_mm_s2
+                )
+            ) % 10
+        )
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
@@ -3534,78 +3321,143 @@ static void Test_BallState_PrintStatus(const char *reason)
     n = snprintf(
         line,
         sizeof(line),
-        "[BallState] ref=%ld.%ldmm dyn=%ld.%02lddeg stiction=%ld.%02lddeg servo=%u.%udeg now=%u.%udeg settled=%u reject=%u fault=%u\r\n",
-        (long)(Test_BallState_FloatToX10(
-            app_info.reference.reference_position_mm) / 10),
-        (long)(Test_BallState_FloatToX10(
-            Test_BallState_AbsF(
-                app_info.reference.reference_position_mm)) % 10),
-        (long)(Test_BallState_FloatToX100(
-            app_info.control.output.limited_dynamic_angle_deg) / 100),
-        (long)(Test_BallState_FloatToX100(
-            Test_BallState_AbsF(
-                app_info.control.output.limited_dynamic_angle_deg)) % 100),
-        (long)(Test_BallState_FloatToX100(
-            app_info.control.output.stiction_angle_deg) / 100),
-        (long)(Test_BallState_FloatToX100(
-            Test_BallState_AbsF(
-                app_info.control.output.stiction_angle_deg)) % 100),
-        (unsigned int)(app_info.control.output.command_angle_x10 / 10U),
-        (unsigned int)(app_info.control.output.command_angle_x10 % 10U),
+        "[BallState] ref=%ld.%ldmm "
+        "dyn=%ld.%02lddeg "
+        "stiction=%ld.%02lddeg "
+        "servo=%u.%udeg now=%u.%udeg "
+        "settled=%u reject=%u fault=%u\r\n",
+        (long)(
+            Test_BallState_FloatToX10(
+                app_info.reference.reference_position_mm
+            ) / 10
+        ),
+        (long)(
+            Test_BallState_FloatToX10(
+                Test_BallState_AbsF(
+                    app_info.reference.reference_position_mm
+                )
+            ) % 10
+        ),
+        (long)(
+            Test_BallState_FloatToX100(
+                app_info.control.output
+                    .limited_dynamic_angle_deg
+            ) / 100
+        ),
+        (long)(
+            Test_BallState_FloatToX100(
+                Test_BallState_AbsF(
+                    app_info.control.output
+                        .limited_dynamic_angle_deg
+                )
+            ) % 100
+        ),
+        (long)(
+            Test_BallState_FloatToX100(
+                app_info.control.output
+                    .stiction_angle_deg
+            ) / 100
+        ),
+        (long)(
+            Test_BallState_FloatToX100(
+                Test_BallState_AbsF(
+                    app_info.control.output
+                        .stiction_angle_deg
+                )
+            ) % 100
+        ),
+        (unsigned int)(
+            app_info.control.output.command_angle_x10 /
+            10U
+        ),
+        (unsigned int)(
+            app_info.control.output.command_angle_x10 %
+            10U
+        ),
         (servo_info_ok != 0U) ?
-            (unsigned int)(servo_info.horizontal_angle_x10 / 10U) : 0U,
+            (unsigned int)(
+                servo_info.horizontal_angle_x10 / 10U
+            ) :
+            0U,
         (servo_info_ok != 0U) ?
-            (unsigned int)(servo_info.horizontal_angle_x10 % 10U) : 0U,
+            (unsigned int)(
+                servo_info.horizontal_angle_x10 % 10U
+            ) :
+            0U,
         (unsigned int)app_info.settled,
-        (unsigned int)app_info.estimator.innovation_rejected,
+        (unsigned int)
+            app_info.estimator.innovation_rejected,
         (unsigned int)app_info.servo_fault
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
 }
 
-static void Test_BallState_PrintCsv(uint32_t now_ms,
-                                    const BallBalance_AppInfo_t *app)
+static void Test_BallState_PrintCsv(
+    uint32_t now_ms,
+    const BallBalance_AppInfo_t *app
+)
 {
     char line[320];
     int n;
 
+    if (app == 0) {
+        return;
+    }
+
     n = snprintf(
         line,
         sizeof(line),
-        "BB,%lu,%u,%u,%u,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%u,%u,%u\r\n",
+        "BB,%lu,%u,%u,%u,%d,"
+        "%ld,%ld,%ld,%ld,%ld,%ld,"
+        "%ld,%ld,%ld,%ld,%ld,"
+        "%u,%u,%u\r\n",
         (unsigned long)now_ms,
         (unsigned int)app->state,
         (unsigned int)app->last_sample_state,
         (unsigned int)app->last_sample.confidence,
         (int)app->last_sample.position_mm_x10,
         (long)Test_BallState_FloatToX10(
-            app->estimator.position_mm),
+            app->estimator.position_mm
+        ),
         (long)Test_BallState_FloatToX10(
-            app->estimator.velocity_mm_s),
+            app->estimator.velocity_mm_s
+        ),
         (long)Test_BallState_FloatToX10(
-            app->estimator.disturbance_mm_s2),
+            app->estimator.disturbance_mm_s2
+        ),
         (long)Test_BallState_FloatToX10(
-            app->reference.reference_position_mm),
+            app->reference.reference_position_mm
+        ),
         (long)Test_BallState_FloatToX10(
-            app->reference.reference_velocity_mm_s),
+            app->reference.reference_velocity_mm_s
+        ),
         (long)Test_BallState_FloatToX10(
-            app->reference.reference_acceleration_mm_s2),
+            app->reference.reference_acceleration_mm_s2
+        ),
         (long)Test_BallState_FloatToX100(
-            app->equilibrium_angle_deg),
+            app->equilibrium_angle_deg
+        ),
         (long)Test_BallState_FloatToX100(
-            app->control.output.limited_dynamic_angle_deg),
+            app->control.output.limited_dynamic_angle_deg
+        ),
         (long)Test_BallState_FloatToX100(
-            app->control.output.stiction_angle_deg),
+            app->control.output.stiction_angle_deg
+        ),
         (long)Test_BallState_FloatToX10(
-            app->vehicle_disturbance_mm_s2),
+            app->vehicle_disturbance_mm_s2
+        ),
         (long)Test_BallState_FloatToX100(
-            app->control.output.servo_angle_deg),
+            app->control.output.servo_angle_deg
+        ),
         (unsigned int)app->data_timeout,
-        (unsigned int)app->estimator.innovation_rejected,
+        (unsigned int)
+            app->estimator.innovation_rejected,
         (unsigned int)app->settled
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
@@ -3617,6 +3469,7 @@ void Test_BallModelIdentify_Update(void)
     static uint16_t servo_angle_x10 =
         BALL_BALANCE_LEVEL_ANGLE_X10;
     static uint32_t last_print_ms = 0U;
+
     BallBalance_K210AdapterInfo_t adapter;
     char line[192];
     int position_abs;
@@ -3626,70 +3479,107 @@ void Test_BallModelIdentify_Update(void)
     if (initialized == 0U) {
         BallBalance_App_Disable();
         BallBalance_App_SetVehicleFeedforwardEnabled(0U);
-        (void)Drv_Servo_SetHorizontalAngleX10(servo_angle_x10);
-        Test_BallState_SendLine(
-            "[BallModel] READY KEY1=LEVEL KEY2=+0.5 KEY3=-0.5 KEY4=+1.0 KEY5=-1.0\r\n"
+
+        (void)Drv_Servo_SetHorizontalAngleX10(
+            servo_angle_x10
         );
+
+        Test_BallState_SendLine(
+            "[BallModel] READY "
+            "KEY1=LEVEL KEY2=+0.5 KEY3=-0.5 "
+            "KEY4=+1.0 KEY5=-1.0\r\n"
+        );
+
         initialized = 1U;
     }
 
 #if BSP_KEY1_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY1)) {
-        servo_angle_x10 = BALL_BALANCE_LEVEL_ANGLE_X10;
+    if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
+        servo_angle_x10 =
+            BALL_BALANCE_LEVEL_ANGLE_X10;
     }
 #endif
+
 #if BSP_KEY2_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY2)) {
+    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
         servo_angle_x10 =
-            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 + 5U);
+            (uint16_t)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 + 5U
+            );
     }
 #endif
+
 #if BSP_KEY3_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY3)) {
+    if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
         servo_angle_x10 =
-            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 - 5U);
+            (uint16_t)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 - 5U
+            );
     }
 #endif
+
 #if BSP_KEY4_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY4)) {
+    if (BSP_Key_WasPressed(BSP_KEY4) != 0U) {
         servo_angle_x10 =
-            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 + 10U);
+            (uint16_t)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 + 10U
+            );
     }
 #endif
+
 #if BSP_KEY5_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY5)) {
+    if (BSP_Key_WasPressed(BSP_KEY5) != 0U) {
         servo_angle_x10 =
-            (uint16_t)(BALL_BALANCE_LEVEL_ANGLE_X10 - 10U);
+            (uint16_t)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 - 10U
+            );
     }
 #endif
-    (void)Drv_Servo_SetHorizontalAngleX10(servo_angle_x10);
+
+    (void)Drv_Servo_SetHorizontalAngleX10(
+        servo_angle_x10
+    );
 
     now_ms = BSP_GetTickMs();
-    if ((uint32_t)(now_ms - last_print_ms) < 50U) {
+
+    if ((uint32_t)(
+            now_ms - last_print_ms
+        ) < 50U) {
         return;
     }
+
     last_print_ms = now_ms;
-    if (BallBalance_K210Adapter_GetInfo(&adapter) != BSP_OK) {
+
+    if (BallBalance_K210Adapter_GetInfo(
+            &adapter
+        ) != BSP_OK) {
         return;
     }
 
     position_abs = adapter.last_position_mm_x10;
+
     if (position_abs < 0) {
         position_abs = -position_abs;
     }
+
     n = snprintf(
         line,
         sizeof(line),
         "BMODEL,%lu,%s,%u,%c%d.%d,%u.%u\r\n",
         (unsigned long)now_ms,
-        Test_BallState_StateText(adapter.last_app_state),
+        Test_BallState_StateText(
+            adapter.last_app_state
+        ),
         (unsigned int)adapter.last_confidence,
-        (adapter.last_position_mm_x10 < 0) ? '-' : '+',
+        (adapter.last_position_mm_x10 < 0) ?
+            '-' :
+            '+',
         position_abs / 10,
         position_abs % 10,
         (unsigned int)(servo_angle_x10 / 10U),
         (unsigned int)(servo_angle_x10 % 10U)
     );
+
     if ((n > 0) && (n < (int)sizeof(line))) {
         Test_BallState_SendLine(line);
     }
@@ -3702,6 +3592,7 @@ void Test_BallBalanceControl_Update(void)
     static uint8_t last_timeout = 0U;
     static uint32_t last_debug_ms = 0U;
     static const char *pending_status_reason = 0;
+
     BallBalance_AppInfo_t app_info;
     char banner_line[160];
     int banner_len;
@@ -3710,84 +3601,311 @@ void Test_BallBalanceControl_Update(void)
         banner_len = snprintf(
             banner_line,
             sizeof(banner_line),
-            "[BallState] READY level=%u.%udeg KEY1=O KEY2=+50.0mm KEY3=-50.0mm KEY4=STOP KEY5=STATUS\r\n",
-            (unsigned int)(BALL_BALANCE_LEVEL_ANGLE_X10 / 10U),
-            (unsigned int)(BALL_BALANCE_LEVEL_ANGLE_X10 % 10U)
+            "[BallState] READY level=%u.%udeg "
+            "KEY1=O KEY2=+50.0mm KEY3=-50.0mm "
+            "KEY4=STOP KEY5=STATUS\r\n",
+            (unsigned int)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 / 10U
+            ),
+            (unsigned int)(
+                BALL_BALANCE_LEVEL_ANGLE_X10 % 10U
+            )
         );
-        if ((banner_len > 0) && (banner_len < (int)sizeof(banner_line))) {
+
+        if ((banner_len > 0) &&
+            (banner_len < (int)sizeof(banner_line))) {
             Test_BallState_SendLine(banner_line);
         }
+
         banner_sent = 1U;
     }
 
     /*
-     * 本任务运行在BallBalance_App_Update之前。按键修改目标后延后一拍打印，
-     * 让串口状态反映APP已经计算并输出过一次舵机命令后的结果。
+     * 本测试任务运行在BallBalance_App_Update之前。
+     * 按键修改目标后延后一拍打印，使日志反映APP
+     * 已经完成一次计算后的状态。
      */
     if (pending_status_reason != 0) {
-        Test_BallState_PrintStatus(pending_status_reason);
+        Test_BallState_PrintStatus(
+            pending_status_reason
+        );
+
         pending_status_reason = 0;
         return;
     }
 
 #if BSP_KEY1_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY1)) {
+    if (BSP_Key_WasPressed(BSP_KEY1) != 0U) {
         BallBalance_App_SetTargetMmX10(0);
         BallBalance_App_Enable();
-        pending_status_reason = "KEY1_O";
+
+        pending_status_reason = "KEY1_CENTER";
         return;
     }
 #endif
 
 #if BSP_KEY2_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY2)) {
+    if (BSP_Key_WasPressed(BSP_KEY2) != 0U) {
         BallBalance_App_SetTargetMmX10(500);
         BallBalance_App_Enable();
-        pending_status_reason = "KEY2_PLUS_50MM";
+
+        pending_status_reason = "KEY2_PLUS_50";
         return;
     }
 #endif
 
 #if BSP_KEY3_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY3)) {
+    if (BSP_Key_WasPressed(BSP_KEY3) != 0U) {
         BallBalance_App_SetTargetMmX10(-500);
         BallBalance_App_Enable();
-        pending_status_reason = "KEY3_MINUS_50MM";
+
+        pending_status_reason = "KEY3_MINUS_50";
         return;
     }
 #endif
 
 #if BSP_KEY4_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY4)) {
+    if (BSP_Key_WasPressed(BSP_KEY4) != 0U) {
         BallBalance_App_Disable();
-        Test_BallState_PrintStatus("KEY4_STOP");
+
+        Test_BallState_PrintStatus(
+            "KEY4_STOP"
+        );
         return;
     }
 #endif
 
 #if BSP_KEY5_ENABLE
-    if (BSP_Key_WasPressed(BSP_KEY5)) {
-        Test_BallState_PrintStatus("KEY5_STATUS");
+    if (BSP_Key_WasPressed(BSP_KEY5) != 0U) {
+        Test_BallState_PrintStatus(
+            "KEY5_STATUS"
+        );
         return;
     }
 #endif
 
-    if (BallBalance_App_GetInfo(&app_info) != BSP_OK) {
+    if (BallBalance_App_GetInfo(
+            &app_info
+        ) != BSP_OK) {
         return;
     }
+
     if (app_info.servo_fault != last_servo_fault) {
         last_servo_fault = app_info.servo_fault;
-        Test_BallState_PrintStatus("SERVO_FAULT_CHANGE");
+
+        Test_BallState_PrintStatus(
+            "SERVO_FAULT_CHANGE"
+        );
     } else if (app_info.data_timeout != last_timeout) {
         last_timeout = app_info.data_timeout;
-        Test_BallState_PrintStatus("TIMEOUT_CHANGE");
+
+        Test_BallState_PrintStatus(
+            "TIMEOUT_CHANGE"
+        );
     }
 
 #if (BALL_BALANCE_DEBUG_STREAM_ENABLE != 0U)
-    if ((uint32_t)(BSP_GetTickMs() - last_debug_ms) >=
-        BALL_BALANCE_DEBUG_STREAM_PERIOD_MS) {
+    if ((uint32_t)(
+            BSP_GetTickMs() - last_debug_ms
+        ) >= BALL_BALANCE_DEBUG_STREAM_PERIOD_MS) {
         last_debug_ms = BSP_GetTickMs();
-        Test_BallState_PrintCsv(last_debug_ms, &app_info);
+
+        Test_BallState_PrintCsv(
+            last_debug_ms,
+            &app_info
+        );
+    }
+#endif
+}
+
+static void Test_K210_GrayTuneSendText(
+    const char *text
+)
+{
+    uint16_t length;
+
+    if (text == 0) {
+        return;
+    }
+
+    length = 0U;
+
+    while ((text[length] != '\0') &&
+           (length < 255U)) {
+        length++;
+    }
+
+    if (length > 0U) {
+        (void)BSP_UART_WriteFrame(
+            UART_PORT_DEBUG,
+            (const uint8_t *)text,
+            length
+        );
+    }
+}
+
+/*
+ * K210灰度钢球四按键现场调参：
+ *
+ * KEY6：正常画面/二值调参画面切换；
+ * KEY7：循环选择BALL_MIN、BALL_MAX、
+ *       PIPE_MIN、PIPE_MAX；
+ * KEY8：当前参数增加5；
+ * KEY9：当前参数减少5。
+ */
+void Test_K210_GrayTuneUpdate(void)
+{
+    static uint8_t initialized = 0U;
+    static uint8_t tune_enabled = 0U;
+    static uint8_t selected_param =
+        K210_GRAY_PARAM_BALL_MIN;
+
+    static const char *const param_name[
+        K210_GRAY_PARAM_COUNT
+    ] = {
+        "BALL_MIN",
+        "BALL_MAX",
+        "PIPE_MIN",
+        "PIPE_MAX"
+    };
+
+    BSP_Status_t status;
+    char message[64];
+    int length;
+
+    if (initialized == 0U) {
+        Test_K210_GrayTuneSendText(
+            "\r\n"
+            "===== K210 GRAY KEY TUNE =====\r\n"
+            "KEY6 : NORMAL / BINARY\r\n"
+            "KEY7 : NEXT PARAM\r\n"
+            "KEY8 : +5\r\n"
+            "KEY9 : -5\r\n"
+            "================================\r\n"
+        );
+
+        initialized = 1U;
+    }
+
+#if BSP_KEY6_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY6) != 0U) {
+        tune_enabled =
+            (tune_enabled == 0U) ?
+            1U :
+            0U;
+
+        status = K210_Comm_SetLabTuneMode(
+            (tune_enabled != 0U) ?
+                K210_GRAY_TUNE_ON :
+                K210_GRAY_TUNE_OFF
+        );
+
+        if ((status == BSP_OK) &&
+            (tune_enabled != 0U)) {
+            (void)K210_Comm_SelectLabParam(
+                selected_param
+            );
+        }
+
+        Test_K210_GrayTuneSendText(
+            (tune_enabled != 0U) ?
+                "GRAY TUNE -> BINARY\r\n" :
+                "GRAY TUNE -> NORMAL\r\n"
+        );
+
+        return;
+    }
+#endif
+
+    if (tune_enabled == 0U) {
+        return;
+    }
+
+#if BSP_KEY7_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY7) != 0U) {
+        selected_param++;
+
+        if (selected_param >=
+            K210_GRAY_PARAM_COUNT) {
+            selected_param =
+                K210_GRAY_PARAM_BALL_MIN;
+        }
+
+        status = K210_Comm_SelectLabParam(
+            selected_param
+        );
+
+        if (status == BSP_OK) {
+            length = snprintf(
+                message,
+                sizeof(message),
+                "GRAY SELECT -> %s\r\n",
+                param_name[selected_param]
+            );
+
+            if ((length > 0) &&
+                (length < (int)sizeof(message))) {
+                Test_K210_GrayTuneSendText(
+                    message
+                );
+            }
+        }
+
+        return;
+    }
+#endif
+
+#if BSP_KEY8_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY8) != 0U) {
+        status = K210_Comm_AdjustLabParam(
+            selected_param,
+            +5
+        );
+
+        if (status == BSP_OK) {
+            length = snprintf(
+                message,
+                sizeof(message),
+                "GRAY %s +5\r\n",
+                param_name[selected_param]
+            );
+
+            if ((length > 0) &&
+                (length < (int)sizeof(message))) {
+                Test_K210_GrayTuneSendText(
+                    message
+                );
+            }
+        }
+
+        return;
+    }
+#endif
+
+#if BSP_KEY9_ENABLE
+    if (BSP_Key_WasPressed(BSP_KEY9) != 0U) {
+        status = K210_Comm_AdjustLabParam(
+            selected_param,
+            -5
+        );
+
+        if (status == BSP_OK) {
+            length = snprintf(
+                message,
+                sizeof(message),
+                "GRAY %s -5\r\n",
+                param_name[selected_param]
+            );
+
+            if ((length > 0) &&
+                (length < (int)sizeof(message))) {
+                Test_K210_GrayTuneSendText(
+                    message
+                );
+            }
+        }
+
+        return;
     }
 #endif
 }
