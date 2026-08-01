@@ -66,10 +66,10 @@
 /*
  * 到点保持在满足条件后记录当前实际舵机命令角，并冻结该角度直到退出条件成立。
  */
-#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         15.0f     /* 进入到点状态允许的最大位置误差 */
-#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          17.0f     /* 超过该位置误差后退出到点状态 */
-#define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             20.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
-#define BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S      20.0f     /* 进入到点状态允许的最大舵机命令速度 */
+#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         8.0f     /* 进入到点状态允许的最大位置误差 */
+#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          10.0f     /* 超过该位置误差后退出到点状态 */
+#define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             15.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
+#define BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S      10.0f     /* 进入到点状态允许的最大舵机命令速度 */
 #define BALL_BALANCE_TARGET_LOCK_TIME_MS                100U     /* 满足到点条件所需的连续保持时间 */
 #define BALL_BALANCE_TARGET_CHANGE_EPSILON_MM           0.05f    /* 判定目标位置发生变化的最小差值 */
 

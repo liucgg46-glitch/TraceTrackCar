@@ -1052,8 +1052,9 @@ static void Mission_HandleRunning(void)
     s_mission.route_events = RouteManager_GetEvents();
     need_route = (s_mission.mode == MISSION_MODE_3_BALL_TRANSFER) ?
         0U : 1U;
-    need_ball = (s_mission.mode == MISSION_MODE_2_LINE_LAP) ?
-        0U : 1U;
+    /* 只有任务3依赖滚球状态推进；任务4/5/6丢球后仍须走完路线。 */
+    need_ball = (s_mission.mode == MISSION_MODE_3_BALL_TRANSFER) ?
+        1U : 0U;
     Mission_CheckRunningFaults(need_route, need_ball);
     if (s_mission.state != MISSION_STATE_RUNNING) {
         return;
