@@ -38,11 +38,11 @@
  * TARGET_ACCEL_MAX控制目标速度变化快慢。
  */
 //#define BALL_BALANCE_POSITION_KP                        1.95f     /* 保留给兼容和对比调参，当前制动距离外环不使用 */
-#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  80.0f     /* 制动距离速度曲线使用的等效减速度 */
-#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           80.0f    /* 外环目标速度绝对限幅 */
+#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  90.0f     /* 制动距离速度曲线使用的等效减速度 */
+#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           90.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             800.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
-#define BALL_BALANCE_VELOCITY_KP                        0.60f    /* 速度PI比例角增益 */
+#define BALL_BALANCE_VELOCITY_KP                        0.64f    /* 速度PI比例角增益 */
 #define BALL_BALANCE_VELOCITY_KI                        1.2f    /* 速度PI积分角增益 */
 #define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
 

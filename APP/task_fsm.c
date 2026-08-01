@@ -5,10 +5,12 @@
 #include "bsp_systick.h"
 #include "chassis.h"
 #include "drv_gray_sensor.h"
+#include "drv_encoder.h"
 #include "k210_comm.h"
 #include "line_follow_app.h"
 #include "motion_action.h"
 #include "route_manager.h"
+#include "route_profile_h_oval.h"
 #include "task_profile_h2_round_stop.h"
 
 #define MISSION_CUSTOM_STEP_MM_X10             50
@@ -24,6 +26,13 @@
 #define MISSION_M3_PLUS_MIN_VELOCITY_MM_S      (-5.0f)
 #define MISSION_M3_PLUS_CONFIRM_FRAME_COUNT    2U
 
+/* MODE2 finish approach and active reverse-brake parameters. */
+#define MISSION_M2_FINISH_APPROACH_SPEED_CPS        2000
+#define MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS    1600
+#define MISSION_M2_REVERSE_BRAKE_SPEED_CPS           900
+#define MISSION_M2_BRAKE_STOP_THRESHOLD_CPS          250
+#define MISSION_M2_REVERSE_BRAKE_MAX_TIME_MS         180U
+
 static Mission_Info_t s_mission;
 static uint32_t s_state_enter_ms;
 static uint32_t s_substate_enter_ms;
@@ -31,6 +40,9 @@ static uint8_t s_last_key_ready;
 static uint8_t s_m3_plus_confirm_count;
 static uint32_t s_m3_last_processed_sample_ms;
 static uint8_t s_m3_sample_tracking_valid;
+static uint8_t s_m2_finish_approach_applied;
+static uint8_t s_m2_brake_active;
+static uint32_t s_m2_brake_start_ms;
 
 static int16_t Mission_Abs16(int16_t value)
 {
@@ -55,14 +67,106 @@ static void Mission_StopVehicleSafely(void)
     Chassis_EmergencyStop();
 }
 
-/*
- * MODE2 normal-finish stop:
- * stop line following, motion actions and chassis output in the same
- * TaskFSM cycle that observes ROUTE_EVENT_LAP_COMPLETE.
- */
-static void Mission_Mode2EmergencyStop(void)
-{
-    Mission_StopVehicleSafely();
+static int32_t Mission_Abs32(int32_t value)
+{
+    return (value < 0) ? -value : value;
+}
+
+static void Mission_ClearMode2BrakeState(void)
+{
+    s_m2_finish_approach_applied = 0U;
+    s_m2_brake_active = 0U;
+    s_m2_brake_start_ms = 0U;
+}
+
+static void Mission_Mode2UpdateFinishApproach(void)
+{
+    HOvalRoute_Info_t route;
+
+    if (s_m2_finish_approach_applied != 0U) {
+        return;
+    }
+    if (HRoute_GetH2Info(&route) != PROJECT_OK) {
+        return;
+    }
+    if (route.finish_armed == 0U) {
+        return;
+    }
+
+    /* Only MODE2 changes to this lower finish-approach speed. */
+    if (LineFollow_SetSpeedProfile(
+            MISSION_M2_FINISH_APPROACH_SPEED_CPS,
+            MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS,
+            MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS) == BSP_OK) {
+        s_m2_finish_approach_applied = 1U;
+    }
+}
+
+static uint8_t Mission_Mode2StartActiveBrake(void)
+{
+    /*
+     * Release line-follow control first, then let MODE2 temporarily use
+     * the MOTION owner to apply a limited reverse speed command.
+     */
+    Mission_StopVehicleSafely();
+    if (Chassis_AcquireControl(CHASSIS_OWNER_MOTION) != BSP_OK) {
+        return 0U;
+    }
+    if (Chassis_SetSpeed(CHASSIS_OWNER_MOTION,
+                         (int16_t)(-MISSION_M2_REVERSE_BRAKE_SPEED_CPS),
+                         0) != BSP_OK) {
+        Chassis_EmergencyStop();
+        return 0U;
+    }
+
+    s_m2_brake_active = 1U;
+    s_m2_brake_start_ms = BSP_GetTickMs();
+    return 1U;
+}
+
+static int8_t Mission_Mode2UpdateActiveBrake(void)
+{
+    uint32_t elapsed_ms;
+    int32_t left_speed_cps;
+    int32_t right_speed_cps;
+    int32_t average_speed_cps;
+
+    if (s_m2_brake_active == 0U) {
+        return -1;
+    }
+
+    elapsed_ms =
+        (uint32_t)(BSP_GetTickMs() - s_m2_brake_start_ms);
+    left_speed_cps = Drv_Encoder_GetLeftSpeedCps();
+    right_speed_cps = Drv_Encoder_GetRightSpeedCps();
+    average_speed_cps =
+        (left_speed_cps + right_speed_cps) / 2;
+
+    /*
+     * Stop reverse torque before the vehicle begins moving backward.
+     * The maximum time is a safety fallback when encoder data is noisy.
+     */
+    if (((Mission_Abs32(left_speed_cps) <=
+          MISSION_M2_BRAKE_STOP_THRESHOLD_CPS) &&
+         (Mission_Abs32(right_speed_cps) <=
+          MISSION_M2_BRAKE_STOP_THRESHOLD_CPS)) ||
+        (average_speed_cps <= 0) ||
+        (elapsed_ms >= MISSION_M2_REVERSE_BRAKE_MAX_TIME_MS)) {
+        Chassis_EmergencyStop();
+        s_m2_brake_active = 0U;
+        return 1;
+    }
+
+    /* Refresh the command before the chassis command watchdog expires. */
+    if (Chassis_SetSpeed(CHASSIS_OWNER_MOTION,
+                         (int16_t)(-MISSION_M2_REVERSE_BRAKE_SPEED_CPS),
+                         0) != BSP_OK) {
+        Chassis_EmergencyStop();
+        s_m2_brake_active = 0U;
+        return -1;
+    }
+
+    return 0;
 }
 
 static void Mission_SetSubstate(Mission_SubState_t substate)
@@ -160,6 +264,7 @@ static void Mission_ResetRuntime(void)
     s_mission.elapsed_ms = 0U;
     s_mission.route_events = 0U;
     s_mission.fault_code = MISSION_FAULT_NONE;
+    Mission_ClearMode2BrakeState();
     Mission_ClearMode3PlusConfirm();
     Mission_UpdateLimits();
 }
@@ -548,8 +653,12 @@ static void Mission_HandleArmed(void)
 
 static void Mission_HandleMode2(void)
 {
+    int8_t brake_result;
+
+    brake_result = 0;
     switch ((Mission_SubState_t)s_mission.substate) {
     case MISSION_SUB_M2_START:
+        Mission_ClearMode2BrakeState();
         Mission_SetBallTarget(MISSION_TARGET_O_MM_X10, 0U);
         if (Mission_StartLineFollow() != 0U) {
             Mission_SetSubstate(MISSION_SUB_M2_WAIT_LEAVE_A);
@@ -558,28 +667,39 @@ static void Mission_HandleMode2(void)
                                MISSION_FAULT_ROUTE);
         }
         break;
+
     case MISSION_SUB_M2_WAIT_LEAVE_A:
         if ((s_mission.route_events & ROUTE_EVENT_LEFT_A) != 0U) {
             Mission_SetSubstate(MISSION_SUB_M2_RUNNING_LAP);
         }
         break;
+
     case MISSION_SUB_M2_RUNNING_LAP:
+        Mission_Mode2UpdateFinishApproach();
         if ((s_mission.route_events & ROUTE_EVENT_LAP_COMPLETE) != 0U) {
-            /*
-             * MODE2 must stop immediately at the finish event.
-             * Clear chassis targets, controller outputs and motor PWM now,
-             * then enter DONE without waiting for another BRAKE cycle.
-             */
-            Mission_Mode2EmergencyStop();
-            Mission_SetSubstate(MISSION_SUB_M2_DONE);
+            if (Mission_Mode2StartActiveBrake() != 0U) {
+                Mission_SetSubstate(MISSION_SUB_M2_BRAKE);
+            } else {
+                Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
+                                   MISSION_FAULT_CHASSIS);
+            }
         }
         break;
+
     case MISSION_SUB_M2_BRAKE:
-        Mission_SetSubstate(MISSION_SUB_M2_DONE);
+        brake_result = Mission_Mode2UpdateActiveBrake();
+        if (brake_result > 0) {
+            Mission_SetSubstate(MISSION_SUB_M2_DONE);
+        } else if (brake_result < 0) {
+            Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
+                               MISSION_FAULT_CHASSIS);
+        }
         break;
+
     case MISSION_SUB_M2_DONE:
         Mission_Finish(Mission_ResultByScore());
         break;
+
     default:
         Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
                            MISSION_FAULT_INTERNAL);
