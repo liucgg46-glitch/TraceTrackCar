@@ -230,6 +230,7 @@ static void BallBalance_Control_UpdateTargetVelocity(
     float abs_error_mm;
     float remaining_distance_mm;
     float target_speed_mm_s;
+    float final_approach_speed_mm_s;
     float maximum_step_mm_s;
 
     abs_error_mm = BallBalance_Control_AbsF(
@@ -245,6 +246,16 @@ static void BallBalance_Control_UpdateTargetVelocity(
             BALL_BALANCE_BRAKE_ACCEL_MM_S2 *
             remaining_distance_mm
         );
+        final_approach_speed_mm_s =
+            BALL_BALANCE_FINAL_APPROACH_KP_S *
+            remaining_distance_mm;
+        /*
+         * 平方根制动曲线在死区边缘斜率过大，静摩擦下容易积累过多倾角后冲过目标。
+         * 线性上限只压低近目标速度，远距离仍保持原制动曲线。
+         */
+        if (target_speed_mm_s > final_approach_speed_mm_s) {
+            target_speed_mm_s = final_approach_speed_mm_s;
+        }
         raw_target_velocity_mm_s =
             (result->position_error_mm >= 0.0f) ?
             target_speed_mm_s :

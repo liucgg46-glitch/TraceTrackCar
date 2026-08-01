@@ -81,6 +81,18 @@ static void TestCascadeControl(void)
               output.target_velocity_mm_s == 0.0f);
 
     BallBalance_Control_Reset();
+    input.target_position_mm = 5.0f;
+    input.estimated_position_mm = 0.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("final approach limits near-target velocity",
+              fabsf(output.target_velocity_mm_s -
+                    (BALL_BALANCE_FINAL_APPROACH_KP_S *
+                     (5.0f - BALL_BALANCE_POSITION_DEADBAND_MM))) <
+              0.001f);
+
+    BallBalance_Control_Reset();
     input.target_position_mm = 200.0f;
     for (index = 0U; index < 200U; index++) {
         input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;

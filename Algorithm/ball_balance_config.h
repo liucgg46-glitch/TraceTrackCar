@@ -20,9 +20,9 @@
 #define BALL_BALANCE_CONTROL_PERIOD_MS                  10U      /* 平衡控制任务周期，单位ms */
 #define BALL_BALANCE_CONTROL_PERIOD_S                   0.010f   /* 平衡控制任务周期，单位s */
 
-#define BALL_BALANCE_VALID_TIMEOUT_MS                   600U     /* 连续无VALID位置后判定数据超时的时间 */
+#define BALL_BALANCE_VALID_TIMEOUT_MS                   200U     /* 连续无VALID位置后判定数据超时的时间 */
 #define BALL_BALANCE_REACQUIRE_VALID_COUNT              2U       /* 超时后恢复控制所需的连续VALID帧数 */
-#define BALL_BALANCE_MIN_CONFIDENCE                     60U      /* K210位置数据允许参与控制的最低置信度 */
+#define BALL_BALANCE_MIN_CONFIDENCE                     40U      /* K210位置数据允许参与控制的最低置信度 */
 #define BALL_BALANCE_POSITION_ABS_MAX_MM_X10            1200     /* 钢球位置允许的最大绝对值，单位0.1mm */
 
 /*
@@ -38,12 +38,13 @@
  * TARGET_ACCEL_MAX控制目标速度变化快慢。
  */
 //#define BALL_BALANCE_POSITION_KP                        1.95f     /* 保留给兼容和对比调参，当前制动距离外环不使用 */
-#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  85.0f     /* 制动距离速度曲线使用的等效减速度 */
-#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           85.0f    /* 外环目标速度绝对限幅 */
+#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  60.0f     /* 制动距离速度曲线使用的等效减速度 */
+#define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           70.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             800.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
+#define BALL_BALANCE_FINAL_APPROACH_KP_S                 2.0f     /* 近目标区剩余距离到目标速度的线性增益 */
 #define BALL_BALANCE_VELOCITY_KP                        0.66f    /* 速度PI比例角增益 */
-#define BALL_BALANCE_VELOCITY_KI                        1.2f    /* 速度PI积分角增益 */
+#define BALL_BALANCE_VELOCITY_KI                        1.05f   /* 速度PI积分角增益 */
 #define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
 
 /*
@@ -51,9 +52,9 @@
  * 积分角按固定角速度连续爬升/下降，避免微小积分量被舵机0.1度命令分辨率攒成台阶。
  * RAMP_DEG_S增大：静止起动更快，但更容易冲过目标速度；减小则更柔和。
  */
-#define BALL_BALANCE_STICTION_TARGET_MIN_SPEED_MM_S     5.0f     /* 目标速度超过该值才启用静止追速爬坡 */
+#define BALL_BALANCE_STICTION_TARGET_MIN_SPEED_MM_S     8.0f     /* 目标速度超过该值才启用静止追速爬坡 */
 #define BALL_BALANCE_STICTION_VELOCITY_MARGIN_MM_S      3.0f     /* 实际速度距离目标速度至少差该值时继续爬坡 */
-#define BALL_BALANCE_STICTION_RAMP_DEG_S                20.0f    /* 静止追速时积分角的最小连续爬坡速度 */
+#define BALL_BALANCE_STICTION_RAMP_DEG_S                17.0f    /* 静止追速时积分角的最小连续爬坡速度 */
 
 /*
  * 舵机客观存在的全行程边界。滚球业务层最终也只使用该绝对安全范围。

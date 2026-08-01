@@ -433,7 +433,9 @@ void BallBalance_App_Update(void)
 
     control_input.control_enabled =
         (s_state == BALL_BALANCE_APP_ACTIVE) ? 1U : 0U;
-    control_input.data_valid = s_tracking_ready;
+    control_input.data_valid =
+        ((s_tracking_ready != 0U) &&
+         (s_last_sample_valid != 0U)) ? 1U : 0U;
     control_input.now_ms = now_ms;
     control_input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
     control_input.target_position_mm =
