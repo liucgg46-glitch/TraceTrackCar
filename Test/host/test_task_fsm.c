@@ -437,6 +437,16 @@ static void TestMode3PlusTurnaround(void)
     CheckTrue("plus confirmation switches target to minus 50 mm",
               (info.substate == MISSION_SUB_M3_WAIT_MINUS_50) &&
               (s_last_ball_target_mm_x10 == -500));
+    CheckTrue("minus phase applies independent return profile",
+              (s_ball_profile_active != 0U) &&
+              (fabsf(s_last_ball_profile.brake_accel_mm_s2 -
+                     100.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.target_velocity_max_mm_s -
+                     100.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.target_accel_max_mm_s2 -
+                     1500.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.final_approach_kp_s -
+                     4.0f) < 0.001f));
 
     printf(s_failed ? "  FAIL\n" : "  PASS\n");
 }
@@ -467,10 +477,36 @@ static void TestMode3ConfirmResetAndFinalHold(void)
     StepMission(10U);
     (void)TaskFSM_GetInfo(&info);
     CheckTrue("mode 3 enters minus wait after plus confirmation",
-              info.substate == MISSION_SUB_M3_WAIT_MINUS_50);
+              (info.substate == MISSION_SUB_M3_WAIT_MINUS_50) &&
+              (s_last_ball_target_mm_x10 == -500));
+
+    SetBallSample(-20.0f, -30.0f, 235U, 0U);
+    StepMission(10U);
+    CheckTrue("minus blend starts with fast profile",
+              (fabsf(s_last_ball_profile.brake_accel_mm_s2 -
+                     100.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.final_approach_kp_s -
+                     4.0f) < 0.001f));
+
+    SetBallSample(-35.0f, -20.0f, 238U, 0U);
+    StepMission(10U);
+    CheckTrue("minus profile changes continuously at blend midpoint",
+              (fabsf(s_last_ball_profile.brake_accel_mm_s2 -
+                     80.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.target_velocity_max_mm_s -
+                     85.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.target_accel_max_mm_s2 -
+                     1150.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.final_approach_kp_s -
+                     2.6f) < 0.001f));
 
     SetBallSample(-50.0f, 0.0f, 240U, 0U);
     StepMission(10U);
+    CheckTrue("minus target uses stable profile at endpoint",
+              (fabsf(s_last_ball_profile.brake_accel_mm_s2 -
+                     BALL_BALANCE_BRAKE_ACCEL_MM_S2) < 0.001f) &&
+              (fabsf(s_last_ball_profile.final_approach_kp_s -
+                     BALL_BALANCE_FINAL_APPROACH_KP_S) < 0.001f));
     StepMission(10U);
     (void)TaskFSM_GetInfo(&info);
     CheckTrue("minus 50 phase does not finish before hold",

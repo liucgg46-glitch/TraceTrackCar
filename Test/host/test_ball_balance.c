@@ -425,6 +425,17 @@ static void TestEstimatorAndEquilibriumMap(void)
               estimator.innovation_rejected != 0U);
 
     BallEquilibriumMap_Init();
+    angle = BallEquilibriumMap_GetAngleDeg(-50.0f);
+    CheckTrue("map applies negative 50 mm deformation compensation",
+              fabsf(angle -
+                    (BALL_BALANCE_LEVEL_ANGLE_DEG + 0.5f)) < 0.001f);
+    angle = BallEquilibriumMap_GetAngleDeg(-25.0f);
+    CheckTrue("map smoothly interpolates negative compensation",
+              fabsf(angle -
+                    (BALL_BALANCE_LEVEL_ANGLE_DEG + 0.25f)) < 0.001f);
+    angle = BallEquilibriumMap_GetAngleDeg(50.0f);
+    CheckTrue("map keeps positive side unchanged",
+              fabsf(angle - BALL_BALANCE_LEVEL_ANGLE_DEG) < 0.001f);
     CheckTrue("map accepts calibrated center",
               BallEquilibriumMap_SetPoint(
                   3U,

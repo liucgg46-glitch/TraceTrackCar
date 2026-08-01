@@ -112,6 +112,18 @@
 #define BALL_EQUILIBRIUM_POS_5_MM                       80.0f     /* 局部平衡角表第5个位置点 */
 #define BALL_EQUILIBRIUM_POS_6_MM                       120.0f    /* 局部平衡角表第6个位置点 */
 
+/*
+ * 负侧水管局部形变补偿。舵机角增大时钢球获得负向加速度，
+ * 因此在-50mm附近增加少量静态平衡角，避免速度积分长期顶住局部坡度。
+ */
+#define BALL_EQUILIBRIUM_OFFSET_0_DEG                    0.0f     /* -120mm处平衡角补偿 */
+#define BALL_EQUILIBRIUM_OFFSET_1_DEG                    0.3f     /* -80mm处平衡角补偿 */
+#define BALL_EQUILIBRIUM_OFFSET_2_DEG                    0.5f     /* -50mm处平衡角补偿 */
+#define BALL_EQUILIBRIUM_OFFSET_3_DEG                    0.0f     /* 0mm处保持原水平角 */
+#define BALL_EQUILIBRIUM_OFFSET_4_DEG                    0.0f     /* +50mm处不补偿 */
+#define BALL_EQUILIBRIUM_OFFSET_5_DEG                    0.0f     /* +80mm处不补偿 */
+#define BALL_EQUILIBRIUM_OFFSET_6_DEG                    0.0f     /* +120mm处不补偿 */
+
 /* 底盘线性加速度前馈当前未接通，以下参数供接入去重力缓存后统一使用。 */
 #define BALL_VEHICLE_IMU_FORWARD_AXIS                   0U       /* 底盘IMU中沿水管方向使用的加速度轴 */
 #define BALL_VEHICLE_IMU_FORWARD_SIGN                   1.0f     /* IMU加速度方向与钢球坐标方向的符号关系 */

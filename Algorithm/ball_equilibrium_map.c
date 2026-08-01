@@ -21,14 +21,26 @@ void BallEquilibriumMap_Init(void)
         BALL_EQUILIBRIUM_POS_5_MM,
         BALL_EQUILIBRIUM_POS_6_MM
     };
+    static const float default_offset_deg[
+        BALL_EQUILIBRIUM_MAP_POINT_COUNT
+    ] = {
+        BALL_EQUILIBRIUM_OFFSET_0_DEG,
+        BALL_EQUILIBRIUM_OFFSET_1_DEG,
+        BALL_EQUILIBRIUM_OFFSET_2_DEG,
+        BALL_EQUILIBRIUM_OFFSET_3_DEG,
+        BALL_EQUILIBRIUM_OFFSET_4_DEG,
+        BALL_EQUILIBRIUM_OFFSET_5_DEG,
+        BALL_EQUILIBRIUM_OFFSET_6_DEG
+    };
     uint8_t index;
 
     s_map.point_count = BALL_EQUILIBRIUM_MAP_POINT_COUNT;
     for (index = 0U;
          index < BALL_EQUILIBRIUM_MAP_POINT_COUNT;
-         index++) {
+        index++) {
         s_map.position_mm[index] = default_position_mm[index];
-        s_map.angle_deg[index] = BALL_BALANCE_LEVEL_ANGLE_DEG;
+        s_map.angle_deg[index] =
+            BALL_BALANCE_LEVEL_ANGLE_DEG + default_offset_deg[index];
     }
 }
 

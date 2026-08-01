@@ -32,6 +32,14 @@
 #define MISSION_M3_BALL_TARGET_ACCEL_MM_S2    1000.0f
 #define MISSION_M3_BALL_FINAL_APPROACH_KP_S      3.0f
 
+/* 任务3从+50mm返回-50mm时使用独立档位，加快反向并避免在-30mm附近过早减速。 */
+#define MISSION_M3_MINUS_BALL_BRAKE_ACCEL_MM_S2    100.0f
+#define MISSION_M3_MINUS_BALL_TARGET_MAX_MM_S      100.0f
+#define MISSION_M3_MINUS_BALL_TARGET_ACCEL_MM_S2  1500.0f
+#define MISSION_M3_MINUS_BALL_FINAL_APPROACH_KP_S    4.0f
+#define MISSION_M3_MINUS_BLEND_START_MM_X10          (-200)
+#define MISSION_M3_MINUS_BLEND_END_MM_X10            (-500)
+
 /* 任务2终点接近与主动反向制动参数。 */
 #define MISSION_M2_FINISH_APPROACH_SPEED_CPS        2000
 #define MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS    1600
@@ -148,6 +156,49 @@ static uint8_t Mission_ApplyMode3BallProfile(void)
         MISSION_M3_BALL_TARGET_ACCEL_MM_S2;
     profile.final_approach_kp_s =
         MISSION_M3_BALL_FINAL_APPROACH_KP_S;
+    return (BallBalance_App_SetControlProfile(&profile) == BSP_OK) ?
+           1U : 0U;
+}
+
+static uint8_t Mission_ApplyMode3MinusBallProfile(
+    int16_t position_mm_x10
+)
+{
+    BallBalance_ControlProfile_t profile;
+    float stable_ratio;
+
+    if (position_mm_x10 >= MISSION_M3_MINUS_BLEND_START_MM_X10) {
+        stable_ratio = 0.0f;
+    } else if (position_mm_x10 <= MISSION_M3_MINUS_BLEND_END_MM_X10) {
+        stable_ratio = 1.0f;
+    } else {
+        stable_ratio =
+            (float)(MISSION_M3_MINUS_BLEND_START_MM_X10 -
+                    position_mm_x10) /
+            (float)(MISSION_M3_MINUS_BLEND_START_MM_X10 -
+                    MISSION_M3_MINUS_BLEND_END_MM_X10);
+    }
+
+    profile.brake_accel_mm_s2 =
+        MISSION_M3_MINUS_BALL_BRAKE_ACCEL_MM_S2 +
+        stable_ratio *
+        (BALL_BALANCE_BRAKE_ACCEL_MM_S2 -
+         MISSION_M3_MINUS_BALL_BRAKE_ACCEL_MM_S2);
+    profile.target_velocity_max_mm_s =
+        MISSION_M3_MINUS_BALL_TARGET_MAX_MM_S +
+        stable_ratio *
+        (BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S -
+         MISSION_M3_MINUS_BALL_TARGET_MAX_MM_S);
+    profile.target_accel_max_mm_s2 =
+        MISSION_M3_MINUS_BALL_TARGET_ACCEL_MM_S2 +
+        stable_ratio *
+        (BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2 -
+         MISSION_M3_MINUS_BALL_TARGET_ACCEL_MM_S2);
+    profile.final_approach_kp_s =
+        MISSION_M3_MINUS_BALL_FINAL_APPROACH_KP_S +
+        stable_ratio *
+        (BALL_BALANCE_FINAL_APPROACH_KP_S -
+         MISSION_M3_MINUS_BALL_FINAL_APPROACH_KP_S);
     return (BallBalance_App_SetControlProfile(&profile) == BSP_OK) ?
            1U : 0U;
 }
@@ -963,10 +1014,22 @@ static void Mission_HandleMode3(void)
         }
         break;
     case MISSION_SUB_M3_SET_MINUS_50:
+        if (Mission_ApplyMode3MinusBallProfile(
+                s_mission.current_ball_position_mm_x10) == 0U) {
+            Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
+                               MISSION_FAULT_INTERNAL);
+            break;
+        }
         Mission_SetBallTarget(MISSION_TARGET_MINUS_50_MM_X10, 1U);
         Mission_SetSubstate(MISSION_SUB_M3_WAIT_MINUS_50);
         break;
     case MISSION_SUB_M3_WAIT_MINUS_50:
+        if (Mission_ApplyMode3MinusBallProfile(
+                s_mission.current_ball_position_mm_x10) == 0U) {
+            Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
+                               MISSION_FAULT_INTERNAL);
+            break;
+        }
         if ((s_mission.active_ball_target_mm_x10 ==
              MISSION_TARGET_MINUS_50_MM_X10) &&
             (BallBalance_App_IsSettled() != 0U)) {
