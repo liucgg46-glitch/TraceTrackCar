@@ -21,6 +21,13 @@ typedef struct {
 } BallBalance_ControlInput_t;
 
 typedef struct {
+    float brake_accel_mm_s2;
+    float target_velocity_max_mm_s;
+    float target_accel_max_mm_s2;
+    float final_approach_kp_s;
+} BallBalance_ControlProfile_t;
+
+typedef struct {
     float target_position_mm;
     float estimated_position_mm;
     float position_error_mm;
@@ -46,6 +53,7 @@ typedef struct {
 
 typedef struct {
     uint8_t initialized;
+    BallBalance_ControlProfile_t profile;
     BallBalance_ControlInput_t input;
     BallBalance_ControlOutput_t output;
     uint32_t update_count;
@@ -54,6 +62,10 @@ typedef struct {
 
 void BallBalance_Control_Init(void);
 void BallBalance_Control_Reset(void);
+Project_Status_t BallBalance_Control_SetProfile(
+    const BallBalance_ControlProfile_t *profile
+);
+void BallBalance_Control_ResetProfile(void);
 Project_Status_t BallBalance_Control_Update(
     const BallBalance_ControlInput_t *input,
     BallBalance_ControlOutput_t *output

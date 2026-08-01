@@ -26,6 +26,12 @@
 #define MISSION_M3_PLUS_MIN_VELOCITY_MM_S      (-5.0f)
 #define MISSION_M3_PLUS_CONFIRM_FRAME_COUNT    2U
 
+/* 任务3在5秒内完成0→+50mm→-50mm，使用独立的快速外环档位。 */
+#define MISSION_M3_BALL_BRAKE_ACCEL_MM_S2       85.0f
+#define MISSION_M3_BALL_TARGET_MAX_MM_S         90.0f
+#define MISSION_M3_BALL_TARGET_ACCEL_MM_S2    1000.0f
+#define MISSION_M3_BALL_FINAL_APPROACH_KP_S      3.0f
+
 /* 任务2终点接近与主动反向制动参数。 */
 #define MISSION_M2_FINISH_APPROACH_SPEED_CPS        2000
 #define MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS    1600
@@ -128,6 +134,22 @@ static uint8_t Mission_ApplyH456LineProfile(void)
     profile.speed_min_error = MISSION_H456_LINE_SPEED_MIN_ERROR;
 
     return (LineFollow_SetControlProfile(&profile) == BSP_OK) ? 1U : 0U;
+}
+
+static uint8_t Mission_ApplyMode3BallProfile(void)
+{
+    BallBalance_ControlProfile_t profile;
+
+    profile.brake_accel_mm_s2 =
+        MISSION_M3_BALL_BRAKE_ACCEL_MM_S2;
+    profile.target_velocity_max_mm_s =
+        MISSION_M3_BALL_TARGET_MAX_MM_S;
+    profile.target_accel_max_mm_s2 =
+        MISSION_M3_BALL_TARGET_ACCEL_MM_S2;
+    profile.final_approach_kp_s =
+        MISSION_M3_BALL_FINAL_APPROACH_KP_S;
+    return (BallBalance_App_SetControlProfile(&profile) == BSP_OK) ?
+           1U : 0U;
 }
 
 static void Mission_ApplyDynamicSpeed(void)
@@ -382,6 +404,9 @@ static void Mission_EnterState(Mission_State_t state,
         ((state == MISSION_STATE_FINISH) ||
          (state == MISSION_STATE_ABORT) ||
          (state == MISSION_STATE_FAULT)) ? 1U : 0U;
+    if (s_mission.finished != 0U) {
+        BallBalance_App_ResetControlProfile();
+    }
 }
 
 static void Mission_UpdateLimits(void)
@@ -426,6 +451,7 @@ static void Mission_SetBallTarget(int16_t target_mm_x10,
 
 static void Mission_ResetRuntime(void)
 {
+    BallBalance_App_ResetControlProfile();
     s_mission.armed_ready = 0U;
     s_mission.route_ready = 0U;
     s_mission.ball_ready = 0U;
@@ -653,15 +679,15 @@ static void Mission_StartRunning(Mission_SubState_t substate)
                        MISSION_FAULT_NONE);
 }
 
-static void Mission_CheckRunningFaults(uint8_t need_route,
-                                       uint8_t need_ball)
+static uint8_t Mission_CheckRunningFaults(uint8_t need_route,
+                                          uint8_t need_ball)
 {
     BallBalance_AppInfo_t ball;
 
     if (s_mission.elapsed_ms > s_mission.safety_timeout_ms) {
         Mission_EnterFault(MISSION_RESULT_TIMEOUT,
                            MISSION_FAULT_TIMEOUT);
-        return;
+        return 0U;
     }
     if (need_route != 0U) {
         if ((s_mission.route_events &
@@ -670,7 +696,7 @@ static void Mission_CheckRunningFaults(uint8_t need_route,
               ROUTE_EVENT_ACTION_ERROR)) != 0U) {
             Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
                                MISSION_FAULT_ROUTE);
-            return;
+            return 0U;
         }
         if ((LineFollow_GetState() != LINE_FOLLOW_RUN) &&
             ((s_mission.substate == MISSION_SUB_M2_WAIT_LEAVE_A) ||
@@ -682,29 +708,43 @@ static void Mission_CheckRunningFaults(uint8_t need_route,
              (s_mission.substate == MISSION_SUB_M6_RUNNING_LAP))) {
             Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
                                MISSION_FAULT_ROUTE);
-            return;
+            return 0U;
         }
         if (Chassis_GetFault() != CHASSIS_FAULT_NONE) {
             Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
                                MISSION_FAULT_CHASSIS);
-            return;
+            return 0U;
         }
     }
     if (need_ball != 0U) {
         if (BallBalance_App_GetInfo(&ball) != BSP_OK) {
             Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
                                MISSION_FAULT_BALL);
+            return 0U;
         } else if (ball.servo_fault != 0U) {
             Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
                                MISSION_FAULT_SERVO);
-        } else if (ball.data_timeout != 0U) {
+            return 0U;
+        } else if (ball.enabled == 0U) {
             Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
-                               MISSION_FAULT_K210_TIMEOUT);
+                               MISSION_FAULT_BALL);
+            return 0U;
+        } else if ((ball.data_timeout != 0U) ||
+                   (ball.tracking_ready == 0U) ||
+                   (ball.state == BALL_BALANCE_APP_DEGRADED) ||
+                   (ball.state == BALL_BALANCE_APP_WAIT_VALID)) {
+            /*
+             * 任务3允许K210短时丢帧后自动重获。APP会先回水平，连续2帧VALID后
+             * 自动恢复闭环；状态机暂停推进，但不禁用滚球控制或丢失快速档。
+             */
+            return 0U;
         } else if (Mission_IsBallUsable(&ball) == 0U) {
             Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
                                MISSION_FAULT_BALL);
+            return 0U;
         }
     }
+    return 1U;
 }
 
 static Mission_Result_t Mission_ResultByScore(void)
@@ -907,6 +947,11 @@ static void Mission_HandleMode3(void)
     case MISSION_SUB_M3_SET_PLUS_50:
         Mission_StopVehicleSafely();
         Mission_ClearMode3PlusConfirm();
+        if (Mission_ApplyMode3BallProfile() == 0U) {
+            Mission_EnterFault(MISSION_RESULT_BALL_FAULT,
+                               MISSION_FAULT_INTERNAL);
+            break;
+        }
         Mission_SetBallTarget(MISSION_TARGET_PLUS_50_MM_X10, 1U);
         Mission_SetSubstate(MISSION_SUB_M3_WAIT_PLUS_50);
         break;
@@ -1117,8 +1162,7 @@ static void Mission_HandleRunning(void)
     /* 只有任务3依赖滚球状态推进；任务4/5/6丢球后仍须走完路线。 */
     need_ball = (s_mission.mode == MISSION_MODE_3_BALL_TRANSFER) ?
         1U : 0U;
-    Mission_CheckRunningFaults(need_route, need_ball);
-    if (s_mission.state != MISSION_STATE_RUNNING) {
+    if (Mission_CheckRunningFaults(need_route, need_ball) == 0U) {
         return;
     }
 

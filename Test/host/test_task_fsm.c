@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include "drv_gray_sensor.h"
 #include "line_follow_app.h"
 #include "motion_action.h"
+#include "route_profile_h_oval.h"
 #include "route_manager.h"
 #include "task_fsm.h"
 
@@ -19,6 +21,8 @@ static BallBalance_AppInfo_t s_ball;
 static int16_t s_last_ball_target_mm_x10;
 static uint8_t s_ball_enable_count;
 static uint8_t s_ball_disable_count;
+static uint8_t s_ball_profile_active;
+static BallBalance_ControlProfile_t s_last_ball_profile;
 static uint8_t s_line_follow_start_count;
 static LineFollow_State_t s_line_follow_state;
 static uint32_t s_route_events;
@@ -79,6 +83,42 @@ Chassis_Fault_t Chassis_GetFault(void)
     return CHASSIS_FAULT_NONE;
 }
 
+BSP_Status_t Chassis_AcquireControl(int owner)
+{
+    (void)owner;
+    return BSP_OK;
+}
+
+BSP_Status_t Chassis_SetSpeed(int owner,
+                              int16_t linear_speed_cps,
+                              int16_t turn_speed_cps)
+{
+    (void)owner;
+    (void)linear_speed_cps;
+    (void)turn_speed_cps;
+    return BSP_OK;
+}
+
+int32_t Drv_Encoder_GetLeftSpeedCps(void)
+{
+    return 0;
+}
+
+int32_t Drv_Encoder_GetRightSpeedCps(void)
+{
+    return 0;
+}
+
+int32_t Drv_Encoder_GetLeftTotalMm(void)
+{
+    return 0;
+}
+
+int32_t Drv_Encoder_GetRightTotalMm(void)
+{
+    return 0;
+}
+
 uint8_t Drv_GraySensor_IsOnline(void)
 {
     return 1U;
@@ -135,6 +175,15 @@ void RouteManager_ClearEvents(uint32_t events)
     s_route_events &= ~events;
 }
 
+Project_Status_t HRoute_GetH2Info(HOvalRoute_Info_t *info)
+{
+    if (info == 0) {
+        return PROJECT_PARAM;
+    }
+    memset(info, 0, sizeof(*info));
+    return PROJECT_OK;
+}
+
 void BallBalance_App_Init(void)
 {
 }
@@ -161,6 +210,22 @@ void BallBalance_App_SetTargetMmX10(int16_t target_mm_x10)
     s_last_ball_target_mm_x10 = target_mm_x10;
     s_ball.target_mm_x10 = target_mm_x10;
     s_ball.settled = 0U;
+}
+
+BSP_Status_t BallBalance_App_SetControlProfile(
+    const BallBalance_ControlProfile_t *profile)
+{
+    if (profile == 0) {
+        return BSP_PARAM;
+    }
+    s_last_ball_profile = *profile;
+    s_ball_profile_active = 1U;
+    return BSP_OK;
+}
+
+void BallBalance_App_ResetControlProfile(void)
+{
+    s_ball_profile_active = 0U;
 }
 
 void BallBalance_App_PushVisionSample(
@@ -215,6 +280,8 @@ static void ResetHarness(void)
     s_last_ball_target_mm_x10 = 0;
     s_ball_enable_count = 0U;
     s_ball_disable_count = 0U;
+    s_ball_profile_active = 0U;
+    memset(&s_last_ball_profile, 0, sizeof(s_last_ball_profile));
     s_line_follow_start_count = 0U;
     s_line_follow_state = LINE_FOLLOW_STOP;
     s_route_events = 0U;
@@ -295,6 +362,41 @@ static void StartMode3AndEnterWaitPlus(void)
               (info.state == MISSION_STATE_RUNNING) &&
               (info.substate == MISSION_SUB_M3_WAIT_PLUS_50) &&
               (s_last_ball_target_mm_x10 == 500));
+    CheckTrue("mode 3 applies independent fast ball profile",
+              (s_ball_profile_active != 0U) &&
+              (fabsf(s_last_ball_profile.target_velocity_max_mm_s -
+                     90.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.brake_accel_mm_s2 -
+                     85.0f) < 0.001f) &&
+              (fabsf(s_last_ball_profile.final_approach_kp_s -
+                     3.0f) < 0.001f));
+}
+
+static void TestMode3VisionTimeoutRecovery(void)
+{
+    Mission_Info_t info;
+
+    printf("[TEST] task fsm mode 3 vision timeout recovery\n");
+    StartMode3AndEnterWaitPlus();
+
+    s_ball.data_timeout = 1U;
+    s_ball.tracking_ready = 0U;
+    s_ball.state = BALL_BALANCE_APP_DEGRADED;
+    StepMission(10U);
+    (void)TaskFSM_GetInfo(&info);
+    CheckTrue("temporary vision timeout pauses without fault",
+              (info.state == MISSION_STATE_RUNNING) &&
+              (info.substate == MISSION_SUB_M3_WAIT_PLUS_50) &&
+              (s_ball.enabled != 0U) &&
+              (s_ball_profile_active != 0U));
+
+    SetBallSample(0.0f, 0.0f, 100U, 0U);
+    StepMission(10U);
+    (void)TaskFSM_GetInfo(&info);
+    CheckTrue("valid vision resumes mode 3 state processing",
+              (info.state == MISSION_STATE_RUNNING) &&
+              (info.substate == MISSION_SUB_M3_WAIT_PLUS_50));
+    printf(s_failed ? "  FAIL\n" : "  PASS\n");
 }
 
 static void TestMode3PlusTurnaround(void)
@@ -386,6 +488,8 @@ static void TestMode3ConfirmResetAndFinalHold(void)
     CheckTrue("minus 50 hold completes mode 3 task",
               (info.state == MISSION_STATE_FINISH) &&
               (info.result == MISSION_RESULT_PASS));
+    CheckTrue("mode 3 completion restores normal ball profile",
+              s_ball_profile_active == 0U);
 
     printf(s_failed ? "  FAIL\n" : "  PASS\n");
 }
@@ -424,6 +528,7 @@ static void TestMode2StillStartsWithoutBall(void)
 int main(void)
 {
     TestMode3PlusTurnaround();
+    TestMode3VisionTimeoutRecovery();
     TestMode3ConfirmResetAndFinalHold();
     TestMode2StillStartsWithoutBall();
     return s_failed ? 1 : 0;

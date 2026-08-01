@@ -3,6 +3,7 @@
 #include <math.h>
 
 static BallBalance_ControlInfo_t s_control;
+static BallBalance_ControlProfile_t s_profile;
 static float s_command_angle_deg;
 static float s_command_speed_deg_s;
 static float s_target_velocity_mm_s;
@@ -15,6 +16,19 @@ static uint8_t s_target_tracking_valid;
 static uint8_t s_hold_active;
 static uint8_t s_lock_tracking;
 static uint32_t s_lock_start_ms;
+
+static uint8_t BallBalance_Control_ProfileValid(
+    const BallBalance_ControlProfile_t *profile
+)
+{
+    if (profile == 0) {
+        return 0U;
+    }
+    return ((profile->brake_accel_mm_s2 > 0.0f) &&
+            (profile->target_velocity_max_mm_s > 0.0f) &&
+            (profile->target_accel_max_mm_s2 > 0.0f) &&
+            (profile->final_approach_kp_s > 0.0f)) ? 1U : 0U;
+}
 
 static float BallBalance_Control_AbsF(float value)
 {
@@ -247,11 +261,11 @@ static uint8_t BallBalance_Control_UpdateTargetVelocity(
             abs_error_mm - BALL_BALANCE_POSITION_DEADBAND_MM;
         target_speed_mm_s = sqrtf(
             2.0f *
-            BALL_BALANCE_BRAKE_ACCEL_MM_S2 *
+            s_profile.brake_accel_mm_s2 *
             remaining_distance_mm
         );
         final_approach_speed_mm_s =
-            BALL_BALANCE_FINAL_APPROACH_KP_S *
+            s_profile.final_approach_kp_s *
             remaining_distance_mm;
         /*
          * 平方根制动曲线在死区边缘斜率过大，静摩擦下容易积累过多倾角后冲过目标。
@@ -267,8 +281,8 @@ static uint8_t BallBalance_Control_UpdateTargetVelocity(
     }
     raw_target_velocity_mm_s = BallBalance_Control_LimitF(
         raw_target_velocity_mm_s,
-        -BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S,
-        BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S
+        -s_profile.target_velocity_max_mm_s,
+        s_profile.target_velocity_max_mm_s
     );
 
     raw_target_direction =
@@ -289,7 +303,7 @@ static uint8_t BallBalance_Control_UpdateTargetVelocity(
     }
 
     maximum_step_mm_s =
-        BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2 * dt_s;
+        s_profile.target_accel_max_mm_s2 * dt_s;
     s_target_velocity_mm_s = BallBalance_Control_MoveToward(
         s_target_velocity_mm_s,
         raw_target_velocity_mm_s,
@@ -410,7 +424,33 @@ void BallBalance_Control_Init(void)
     s_control.initialized = 1U;
     s_control.update_count = 0U;
     s_control.output_limit_count = 0U;
+    BallBalance_Control_ResetProfile();
     BallBalance_Control_Reset();
+}
+
+Project_Status_t BallBalance_Control_SetProfile(
+    const BallBalance_ControlProfile_t *profile
+)
+{
+    if (BallBalance_Control_ProfileValid(profile) == 0U) {
+        return PROJECT_PARAM;
+    }
+    s_profile = *profile;
+    s_control.profile = s_profile;
+    return PROJECT_OK;
+}
+
+void BallBalance_Control_ResetProfile(void)
+{
+    s_profile.brake_accel_mm_s2 =
+        BALL_BALANCE_BRAKE_ACCEL_MM_S2;
+    s_profile.target_velocity_max_mm_s =
+        BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S;
+    s_profile.target_accel_max_mm_s2 =
+        BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2;
+    s_profile.final_approach_kp_s =
+        BALL_BALANCE_FINAL_APPROACH_KP_S;
+    s_control.profile = s_profile;
 }
 
 void BallBalance_Control_Reset(void)

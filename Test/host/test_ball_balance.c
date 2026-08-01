@@ -351,6 +351,53 @@ static void TestReferenceTrajectory(void)
     printf(s_failed ? "  FAIL\n" : "  PASS\n");
 }
 
+static void TestControlProfile(void)
+{
+    BallBalance_ControlInput_t input = {0};
+    BallBalance_ControlOutput_t output;
+    BallBalance_ControlInfo_t info;
+    BallBalance_ControlProfile_t fast_profile;
+
+    printf("[TEST] ball runtime control profile\n");
+    fast_profile.brake_accel_mm_s2 = 85.0f;
+    fast_profile.target_velocity_max_mm_s = 90.0f;
+    fast_profile.target_accel_max_mm_s2 = 1000.0f;
+    fast_profile.final_approach_kp_s = 1.8f;
+
+    BallBalance_Control_Init();
+    CheckTrue("runtime profile accepts valid values",
+              BallBalance_Control_SetProfile(&fast_profile) ==
+              PROJECT_OK);
+    (void)BallBalance_Control_GetInfo(&info);
+    CheckTrue("runtime profile is visible in diagnostics",
+              fabsf(info.profile.target_velocity_max_mm_s - 90.0f) <
+              0.001f);
+
+    input.control_enabled = 1U;
+    input.data_valid = 1U;
+    input.dt_s = BALL_BALANCE_CONTROL_PERIOD_S;
+    input.target_position_mm = 50.0f;
+    input.estimated_position_mm = 0.0f;
+    input.equilibrium_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
+    input.now_ms = BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("fast profile uses its target acceleration",
+              fabsf(output.target_velocity_mm_s -
+                    (fast_profile.target_accel_max_mm_s2 *
+                     BALL_BALANCE_CONTROL_PERIOD_S)) < 0.001f);
+
+    fast_profile.target_velocity_max_mm_s = 0.0f;
+    CheckTrue("runtime profile rejects invalid values",
+              BallBalance_Control_SetProfile(&fast_profile) ==
+              PROJECT_PARAM);
+    BallBalance_Control_ResetProfile();
+    (void)BallBalance_Control_GetInfo(&info);
+    CheckTrue("profile reset restores normal target speed",
+              fabsf(info.profile.target_velocity_max_mm_s -
+                    BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S) < 0.001f);
+    printf(s_failed ? "  FAIL\n" : "  PASS\n");
+}
+
 static void TestEstimatorAndEquilibriumMap(void)
 {
     BallStateEstimator_Info_t estimator;
@@ -399,6 +446,7 @@ int main(void)
 {
     TestCascadeControl();
     TestReferenceTrajectory();
+    TestControlProfile();
     TestEstimatorAndEquilibriumMap();
     return s_failed ? 1 : 0;
 }

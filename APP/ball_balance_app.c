@@ -234,6 +234,19 @@ void BallBalance_App_SetTargetMmX10(int16_t target_mm_x10)
     s_settled = 0U;
 }
 
+BSP_Status_t BallBalance_App_SetControlProfile(
+    const BallBalance_ControlProfile_t *profile
+)
+{
+    return (BallBalance_Control_SetProfile(profile) == PROJECT_OK) ?
+           BSP_OK : BSP_PARAM;
+}
+
+void BallBalance_App_ResetControlProfile(void)
+{
+    BallBalance_Control_ResetProfile();
+}
+
 void BallBalance_App_PushVisionSample(
     const BallBalance_VisionSample_t *sample
 )

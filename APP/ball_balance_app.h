@@ -74,6 +74,10 @@ void BallBalance_App_Enable(void);
 void BallBalance_App_Disable(void);
 uint8_t BallBalance_App_IsEnabled(void);
 void BallBalance_App_SetTargetMmX10(int16_t target_mm_x10);
+BSP_Status_t BallBalance_App_SetControlProfile(
+    const BallBalance_ControlProfile_t *profile
+);
+void BallBalance_App_ResetControlProfile(void);
 void BallBalance_App_PushVisionSample(
     const BallBalance_VisionSample_t *sample
 );
