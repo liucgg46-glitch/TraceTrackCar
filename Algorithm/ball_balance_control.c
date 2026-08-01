@@ -20,6 +20,17 @@ static float BallBalance_Control_AbsF(float value)
     return (value >= 0.0f) ? value : -value;
 }
 
+static float BallBalance_Control_SignF(float value)
+{
+    if (value > 0.0f) {
+        return 1.0f;
+    }
+    if (value < 0.0f) {
+        return -1.0f;
+    }
+    return 0.0f;
+}
+
 static float BallBalance_Control_LimitF(float value,
                                         float minimum,
                                         float maximum)
@@ -262,10 +273,14 @@ static void BallBalance_Control_UpdateVelocityPi(
 {
     float proportional_angle_deg;
     float integral_delta_angle_deg;
+    float stiction_delta_angle_deg;
     float candidate_integral_angle_deg;
     float current_servo_request_deg;
     float candidate_servo_request_deg;
     float servo_direction;
+    float target_speed_abs_mm_s;
+    float velocity_along_target_mm_s;
+    float target_direction;
 
     result->velocity_error_mm_s =
         result->target_velocity_mm_s -
@@ -276,6 +291,33 @@ static void BallBalance_Control_UpdateVelocityPi(
         BALL_BALANCE_VELOCITY_KI *
         result->velocity_error_mm_s *
         input->dt_s;
+    target_direction =
+        BallBalance_Control_SignF(result->target_velocity_mm_s);
+    target_speed_abs_mm_s =
+        BallBalance_Control_AbsF(result->target_velocity_mm_s);
+    velocity_along_target_mm_s =
+        target_direction * result->filtered_velocity_mm_s;
+    stiction_delta_angle_deg =
+        target_direction *
+        BALL_BALANCE_STICTION_RAMP_DEG_S *
+        input->dt_s;
+
+    /*
+     * 小球因静摩擦或局部卡滞没有跟上目标速度时，积分角至少按固定斜率连续推进。
+     * 这样舵机命令每个周期都有可见的小步变化，而不是等普通KI积分攒够0.1度后跳变。
+     */
+    if ((target_speed_abs_mm_s >=
+         BALL_BALANCE_STICTION_TARGET_MIN_SPEED_MM_S) &&
+        (velocity_along_target_mm_s <=
+         (target_speed_abs_mm_s -
+          BALL_BALANCE_STICTION_VELOCITY_MARGIN_MM_S)) &&
+        (BallBalance_Control_SignF(integral_delta_angle_deg) ==
+         target_direction) &&
+        (BallBalance_Control_AbsF(integral_delta_angle_deg) <
+         BallBalance_Control_AbsF(stiction_delta_angle_deg))) {
+        integral_delta_angle_deg = stiction_delta_angle_deg;
+    }
+
     candidate_integral_angle_deg =
         s_velocity_integral_angle_deg + integral_delta_angle_deg;
     current_servo_request_deg =
