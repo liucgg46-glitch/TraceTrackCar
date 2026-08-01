@@ -33,6 +33,11 @@ typedef struct {
     uint16_t line_search_phase;
     int8_t line_search_direction;
     uint32_t line_lost_ms;
+    int32_t relative_distance_mm;
+    int16_t turn_output;
+    uint8_t b_armed;
+    uint8_t b_curve_confirm_count;
+    uint8_t passed_b;
 } RouteManager_Info_t;
 
 typedef enum {

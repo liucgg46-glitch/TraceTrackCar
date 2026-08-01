@@ -9,6 +9,7 @@ static Route_ControlMode_t s_control_mode = ROUTE_CONTROL_STOP;
 static Route_ActionState_t s_action_state = ROUTE_ACTION_STATE_IDLE;
 static uint32_t s_route_events;
 static uint8_t s_last_left_a;
+static uint8_t s_last_passed_b;
 static uint8_t s_last_arrived;
 static uint8_t s_last_error;
 
@@ -20,6 +21,7 @@ void RouteManager_Init(uint32_t now_ms)
     s_action_state = ROUTE_ACTION_STATE_IDLE;
     s_route_events = ROUTE_EVENT_NONE;
     s_last_left_a = 0U;
+    s_last_passed_b = 0U;
     s_last_arrived = 0U;
     s_last_error = 0U;
 }
@@ -32,6 +34,7 @@ void RouteManager_Reset(uint32_t now_ms)
     s_action_state = ROUTE_ACTION_STATE_IDLE;
     s_route_events = ROUTE_EVENT_NONE;
     s_last_left_a = 0U;
+    s_last_passed_b = 0U;
     s_last_arrived = 0U;
     s_last_error = 0U;
 }
@@ -50,10 +53,6 @@ static void RouteManager_UpdateEvents(void)
         s_route_events |= ROUTE_EVENT_FAILED;
     }
 
-    /*
-     * 当前H椭圆赛道profile已经能真实区分“离开A”和“一圈完成”。
-     * B点尚无独立现场识别条件，因此不在这里伪造PASSED_B事件。
-     */
     if ((profile_info.state != 0U) &&
         (profile_info.arrived != 0U) &&
         (s_last_arrived == 0U)) {
@@ -68,6 +67,10 @@ static void RouteManager_UpdateEvents(void)
             if ((h_info.left_a != 0U) && (s_last_left_a == 0U)) {
                 s_route_events |= ROUTE_EVENT_LEFT_A;
             }
+            if ((h_info.passed_b != 0U) &&
+                (s_last_passed_b == 0U)) {
+                s_route_events |= ROUTE_EVENT_PASSED_B;
+            }
             if (h_info.fault == H_OVAL_ROUTE_FAULT_LINE_LOST) {
                 s_route_events |= ROUTE_EVENT_LINE_LOST;
             } else if ((h_info.fault != H_OVAL_ROUTE_FAULT_NONE) &&
@@ -75,6 +78,7 @@ static void RouteManager_UpdateEvents(void)
                 s_route_events |= ROUTE_EVENT_FAILED;
             }
             s_last_left_a = h_info.left_a;
+            s_last_passed_b = h_info.passed_b;
         }
     }
 #endif
@@ -171,6 +175,25 @@ Project_Status_t RouteManager_GetInfo(RouteManager_Info_t *info)
     info->line_search_phase = line_info.search_phase;
     info->line_search_direction = line_info.search_direction;
     info->line_lost_ms = line_info.lost_ms;
+    info->relative_distance_mm = 0;
+    info->turn_output = 0;
+    info->b_armed = 0U;
+    info->b_curve_confirm_count = 0U;
+    info->passed_b = 0U;
+
+#if (ROUTE_PROFILE_SELECT == ROUTE_PROFILE_H_OVAL)
+    {
+        HOvalRoute_Info_t h_info;
+
+        if (HRoute_GetH2Info(&h_info) == PROJECT_OK) {
+            info->relative_distance_mm = h_info.relative_distance_mm;
+            info->turn_output = h_info.turn_output;
+            info->b_armed = h_info.b_armed;
+            info->b_curve_confirm_count = h_info.b_curve_confirm_count;
+            info->passed_b = h_info.passed_b;
+        }
+    }
+#endif
 
     return PROJECT_OK;
 }

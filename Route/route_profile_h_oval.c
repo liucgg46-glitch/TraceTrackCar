@@ -7,6 +7,13 @@ static uint8_t s_leave_clear_samples;
 static uint8_t s_finish_clear_seen;
 static uint8_t s_finish_confirm_samples;
 static uint8_t s_last_start_line_candidate;
+static uint8_t s_start_distance_valid;
+static int32_t s_start_encoder_distance_mm;
+
+static int32_t HRoute_Abs32(int32_t value)
+{
+    return (value < 0) ? -value : value;
+}
 
 static uint8_t HRoute_GetBlackSpan(uint8_t mask)
 {
@@ -81,6 +88,9 @@ static void HRoute_ResetRuntime(uint32_t now_ms,
     s_route.finish_armed = 0U;
     s_route.finish_candidate = 0U;
     s_route.arrived = 0U;
+    s_route.b_armed = 0U;
+    s_route.passed_b = 0U;
+    s_route.b_curve_confirm_count = 0U;
     s_route.gray_mask = 0U;
     s_route.black_count = 0U;
     s_route.black_span = 0U;
@@ -91,6 +101,7 @@ static void HRoute_ResetRuntime(uint32_t now_ms,
     s_route.running_ms = 0U;
     s_route.state_elapsed_ms = 0U;
     s_route.encoder_distance_mm = 0;
+    s_route.relative_distance_mm = 0;
     s_route.transition_count = 0U;
 
     s_start_ms = now_ms;
@@ -99,6 +110,8 @@ static void HRoute_ResetRuntime(uint32_t now_ms,
     s_finish_clear_seen = 0U;
     s_finish_confirm_samples = 0U;
     s_last_start_line_candidate = 0U;
+    s_start_distance_valid = 0U;
+    s_start_encoder_distance_mm = 0;
 }
 
 void HRoute_Init(uint32_t now_ms)
@@ -154,6 +167,12 @@ Route_ControlMode_t HRoute_Update(
     s_route.running_ms = (uint32_t)(now_ms - s_start_ms);
     s_route.state_elapsed_ms = (uint32_t)(now_ms - s_state_enter_ms);
     s_route.encoder_distance_mm = feedback->distance_mm;
+    if (s_start_distance_valid == 0U) {
+        s_start_encoder_distance_mm = feedback->distance_mm;
+        s_start_distance_valid = 1U;
+    }
+    s_route.relative_distance_mm =
+        feedback->distance_mm - s_start_encoder_distance_mm;
     s_route.gray_mask = line->black_mask;
     s_route.black_count = line->black_count;
     s_route.black_span = HRoute_GetBlackSpan(line->black_mask);
@@ -245,14 +264,29 @@ Route_ControlMode_t HRoute_Update(
                                  now_ms);
     }
 
-    s_last_start_line_candidate = start_line_candidate;
-    if (s_route.arrived != 0U) {
-        out->linear_cps = 0;
-        out->turn_cps = 0;
-        out->valid = 0U;
-        return ROUTE_CONTROL_STOP;
+    if ((s_route.left_a != 0U) &&
+        (s_route.relative_distance_mm >= H4_B_ARM_DISTANCE_MM)) {
+        s_route.b_armed = 1U;
     }
 
+    if ((s_route.b_armed != 0U) && (s_route.passed_b == 0U)) {
+        if (HRoute_Abs32((int32_t)s_route.turn_output) >=
+            H4_B_TURN_THRESHOLD_CPS) {
+            if (s_route.b_curve_confirm_count <
+                H4_B_CURVE_CONFIRM_COUNT) {
+                s_route.b_curve_confirm_count++;
+            }
+        } else {
+            s_route.b_curve_confirm_count = 0U;
+        }
+
+        if (s_route.b_curve_confirm_count >=
+            H4_B_CURVE_CONFIRM_COUNT) {
+            s_route.passed_b = 1U;
+        }
+    }
+
+    s_last_start_line_candidate = start_line_candidate;
     return (out->valid != 0U) ? ROUTE_CONTROL_LINE_TRACK
                               : ROUTE_CONTROL_ERROR;
 }

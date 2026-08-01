@@ -26,12 +26,24 @@
 #define MISSION_M3_PLUS_MIN_VELOCITY_MM_S      (-5.0f)
 #define MISSION_M3_PLUS_CONFIRM_FRAME_COUNT    2U
 
-/* MODE2 finish approach and active reverse-brake parameters. */
+/* 任务2终点接近与主动反向制动参数。 */
 #define MISSION_M2_FINISH_APPROACH_SPEED_CPS        2000
 #define MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS    1600
 #define MISSION_M2_REVERSE_BRAKE_SPEED_CPS           900
 #define MISSION_M2_BRAKE_STOP_THRESHOLD_CPS          250
 #define MISSION_M2_REVERSE_BRAKE_MAX_TIME_MS         180U
+
+/* 任务4/5/6独立速度斜坡参数，实车调速只需修改本区域。 */
+#define MISSION_DYNAMIC_START_SPEED_CPS               1000
+#define MISSION_DYNAMIC_MAX_SPEED_CPS                 2400
+#define MISSION_DYNAMIC_CURVE_SPEED_CPS               1900
+#define MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS           1000
+#define MISSION_DYNAMIC_ACCEL_RATE_CPS_PER_S           1000.0f
+#define MISSION_DYNAMIC_DECEL_RATE_CPS_PER_S           1200.0f
+#define MISSION_M4_PASS_B_DISTANCE_MM                  120
+#define MISSION_H56_DECEL_START_DISTANCE_MM            5200
+#define MISSION_H56_PASS_A_DISTANCE_MM                 120
+#define MISSION_DYNAMIC_STOP_THRESHOLD_CPS             80
 
 static Mission_Info_t s_mission;
 static uint32_t s_state_enter_ms;
@@ -43,6 +55,11 @@ static uint8_t s_m3_sample_tracking_valid;
 static uint8_t s_m2_finish_approach_applied;
 static uint8_t s_m2_brake_active;
 static uint32_t s_m2_brake_start_ms;
+static float s_dynamic_speed_cps;
+static uint32_t s_dynamic_speed_last_ms;
+static int32_t s_dynamic_start_distance_mm;
+static int32_t s_dynamic_brake_start_distance_mm;
+static uint8_t s_dynamic_stop_requested;
 
 static int16_t Mission_Abs16(int16_t value)
 {
@@ -70,6 +87,116 @@ static void Mission_StopVehicleSafely(void)
 static int32_t Mission_Abs32(int32_t value)
 {
     return (value < 0) ? -value : value;
+}
+
+static int32_t Mission_GetEncoderDistanceMm(void)
+{
+    return (Drv_Encoder_GetLeftTotalMm() +
+            Drv_Encoder_GetRightTotalMm()) / 2;
+}
+
+static int16_t Mission_MinSpeed(int16_t first, int16_t second)
+{
+    return (first < second) ? first : second;
+}
+
+static void Mission_ApplyDynamicSpeed(void)
+{
+    int16_t current_speed_cps;
+
+    current_speed_cps = (int16_t)(s_dynamic_speed_cps + 0.5f);
+    (void)LineFollow_SetSpeedProfile(
+        current_speed_cps,
+        Mission_MinSpeed(current_speed_cps,
+                         MISSION_DYNAMIC_CURVE_SPEED_CPS),
+        Mission_MinSpeed(current_speed_cps,
+                         MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS));
+    s_mission.dynamic_speed_cps = current_speed_cps;
+}
+
+static void Mission_ResetDynamicSpeed(void)
+{
+    s_dynamic_speed_cps = (float)MISSION_DYNAMIC_START_SPEED_CPS;
+    s_dynamic_speed_last_ms = BSP_GetTickMs();
+    s_dynamic_start_distance_mm = Mission_GetEncoderDistanceMm();
+    s_dynamic_brake_start_distance_mm = s_dynamic_start_distance_mm;
+    s_dynamic_stop_requested = 0U;
+    s_mission.dynamic_start_distance_mm = s_dynamic_start_distance_mm;
+    s_mission.dynamic_brake_start_distance_mm =
+        s_dynamic_brake_start_distance_mm;
+    Mission_ApplyDynamicSpeed();
+}
+
+static void Mission_UpdateDynamicSpeed(int16_t target_speed_cps)
+{
+    uint32_t now_ms;
+    uint32_t dt_ms;
+    float step_cps;
+
+    now_ms = BSP_GetTickMs();
+    dt_ms = (uint32_t)(now_ms - s_dynamic_speed_last_ms);
+    s_dynamic_speed_last_ms = now_ms;
+
+    if (s_dynamic_speed_cps < (float)target_speed_cps) {
+        step_cps = MISSION_DYNAMIC_ACCEL_RATE_CPS_PER_S *
+                   ((float)dt_ms / 1000.0f);
+        s_dynamic_speed_cps += step_cps;
+        if (s_dynamic_speed_cps > (float)target_speed_cps) {
+            s_dynamic_speed_cps = (float)target_speed_cps;
+        }
+    } else if (s_dynamic_speed_cps > (float)target_speed_cps) {
+        step_cps = MISSION_DYNAMIC_DECEL_RATE_CPS_PER_S *
+                   ((float)dt_ms / 1000.0f);
+        s_dynamic_speed_cps -= step_cps;
+        if (s_dynamic_speed_cps < (float)target_speed_cps) {
+            s_dynamic_speed_cps = (float)target_speed_cps;
+        }
+    }
+
+    Mission_ApplyDynamicSpeed();
+}
+
+static uint8_t Mission_DynamicSpeedAtMinimum(void)
+{
+    return (s_dynamic_speed_cps <=
+            (float)MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS) ? 1U : 0U;
+}
+
+static uint8_t Mission_IsVehicleStopped(void)
+{
+    return ((Mission_Abs32(Drv_Encoder_GetLeftSpeedCps()) <=
+             MISSION_DYNAMIC_STOP_THRESHOLD_CPS) &&
+            (Mission_Abs32(Drv_Encoder_GetRightSpeedCps()) <=
+             MISSION_DYNAMIC_STOP_THRESHOLD_CPS)) ? 1U : 0U;
+}
+
+static void Mission_RecordBrakeStartDistance(void)
+{
+    s_dynamic_brake_start_distance_mm = Mission_GetEncoderDistanceMm();
+    s_mission.dynamic_brake_start_distance_mm =
+        s_dynamic_brake_start_distance_mm;
+}
+
+static void Mission_CloseScore(void)
+{
+    if (s_mission.score_closed != 0U) {
+        return;
+    }
+
+    s_mission.score_elapsed_ms =
+        (uint32_t)(BSP_GetTickMs() - s_mission.start_ms);
+    s_mission.score_closed = 1U;
+}
+
+static void Mission_RequestDynamicStop(void)
+{
+    if (s_dynamic_stop_requested != 0U) {
+        return;
+    }
+
+    LineFollow_StopPreserveRoute();
+    Chassis_EmergencyStop();
+    s_dynamic_stop_requested = 1U;
 }
 
 static void Mission_ClearMode2BrakeState(void)
@@ -262,8 +389,18 @@ static void Mission_ResetRuntime(void)
     s_mission.ball_settled = 0U;
     s_mission.start_ms = 0U;
     s_mission.elapsed_ms = 0U;
+    s_mission.score_elapsed_ms = 0U;
+    s_mission.score_closed = 0U;
     s_mission.route_events = 0U;
     s_mission.fault_code = MISSION_FAULT_NONE;
+    s_dynamic_speed_cps = (float)MISSION_DYNAMIC_START_SPEED_CPS;
+    s_dynamic_speed_last_ms = 0U;
+    s_dynamic_start_distance_mm = 0;
+    s_dynamic_brake_start_distance_mm = 0;
+    s_dynamic_stop_requested = 0U;
+    s_mission.dynamic_speed_cps = MISSION_DYNAMIC_START_SPEED_CPS;
+    s_mission.dynamic_start_distance_mm = 0;
+    s_mission.dynamic_brake_start_distance_mm = 0;
     Mission_ClearMode2BrakeState();
     Mission_ClearMode3PlusConfirm();
     Mission_UpdateLimits();
@@ -291,10 +428,10 @@ static void Mission_EnterFault(Mission_Result_t result,
 static void Mission_Finish(Mission_Result_t result)
 {
     /*
-     * Do not apply a common emergency stop on normal completion.
-     * MODE2 has already stopped at the finish event.
-     * MODE3 is stationary.
-     * MODE4/5/6 keep their existing Route/BRAKE stop path.
+     * 正常完成时不统一追加急停。
+     * 任务2已完成主动制动，任务3全程静止，
+     * 任务4/5/6也已在各自BRAKE子状态确认停车。
+     * 各任务在进入FINISH前均已完成本任务要求的停车流程。
      */
     Mission_EnterState(MISSION_STATE_FINISH, result, MISSION_FAULT_NONE);
 
@@ -351,7 +488,8 @@ static void Mission_UpdateBallSnapshot(void)
                   s_mission.active_ball_target_mm_x10);
     s_mission.current_ball_error_mm_x10 = error_x10;
 
-    if (s_mission.running != 0U) {
+    if ((s_mission.running != 0U) &&
+        (s_mission.score_closed == 0U)) {
         abs_error_x10 = Mission_Abs16(error_x10);
         if (abs_error_x10 > s_mission.max_ball_error_mm_x10) {
             s_mission.max_ball_error_mm_x10 = abs_error_x10;
@@ -453,6 +591,8 @@ static void Mission_StartRunning(Mission_SubState_t substate)
     Mission_ResetRouteEvents();
     s_mission.start_ms = now_ms;
     s_mission.elapsed_ms = 0U;
+    s_mission.score_elapsed_ms = 0U;
+    s_mission.score_closed = 0U;
     s_mission.max_ball_error_mm_x10 = 0;
     Mission_ClearMode3PlusConfirm();
     Mission_SetSubstate(substate);
@@ -483,7 +623,9 @@ static void Mission_CheckRunningFaults(uint8_t need_route,
         if ((LineFollow_GetState() != LINE_FOLLOW_RUN) &&
             ((s_mission.substate == MISSION_SUB_M2_WAIT_LEAVE_A) ||
              (s_mission.substate == MISSION_SUB_M2_RUNNING_LAP) ||
+             (s_mission.substate == MISSION_SUB_M4_LEAVE_A) ||
              (s_mission.substate == MISSION_SUB_M4_RUNNING_TO_B) ||
+             (s_mission.substate == MISSION_SUB_M4_PASS_B_CONFIRM) ||
              (s_mission.substate == MISSION_SUB_M5_RUNNING_LAP) ||
              (s_mission.substate == MISSION_SUB_M6_RUNNING_LAP))) {
             Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
@@ -515,7 +657,7 @@ static void Mission_CheckRunningFaults(uint8_t need_route,
 
 static Mission_Result_t Mission_ResultByScore(void)
 {
-    if (s_mission.elapsed_ms > s_mission.score_limit_ms) {
+    if (s_mission.score_elapsed_ms > s_mission.score_limit_ms) {
         return MISSION_RESULT_TIME_FAIL;
     }
     if (((s_mission.mode == MISSION_MODE_4_LINE_TO_B_WITH_BALL_O) ||
@@ -746,24 +888,56 @@ static void Mission_HandleMode3(void)
 
 static void Mission_HandleMode4(void)
 {
+    int32_t current_distance_mm;
+
     switch ((Mission_SubState_t)s_mission.substate) {
     case MISSION_SUB_M4_START:
         Mission_SetBallTarget(MISSION_TARGET_O_MM_X10, 1U);
-        if (Mission_StartLineFollow() != 0U) {
-            Mission_SetSubstate(MISSION_SUB_M4_RUNNING_TO_B);
+        Mission_ResetDynamicSpeed();
+        if (LineFollow_Start() == BSP_OK) {
+            Mission_SetSubstate(MISSION_SUB_M4_LEAVE_A);
         } else {
             Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
                                MISSION_FAULT_ROUTE);
         }
         break;
+
+    case MISSION_SUB_M4_LEAVE_A:
+        Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MAX_SPEED_CPS);
+        if ((s_mission.route_events & ROUTE_EVENT_LEFT_A) != 0U) {
+            Mission_SetSubstate(MISSION_SUB_M4_RUNNING_TO_B);
+        }
+        break;
+
     case MISSION_SUB_M4_RUNNING_TO_B:
+        Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MAX_SPEED_CPS);
         if ((s_mission.route_events & ROUTE_EVENT_PASSED_B) != 0U) {
+            Mission_CloseScore();
+            Mission_RecordBrakeStartDistance();
+            Mission_SetSubstate(MISSION_SUB_M4_PASS_B_CONFIRM);
+        }
+        break;
+
+    case MISSION_SUB_M4_PASS_B_CONFIRM:
+        Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS);
+        current_distance_mm = Mission_GetEncoderDistanceMm();
+        if ((current_distance_mm - s_dynamic_brake_start_distance_mm) >=
+            MISSION_M4_PASS_B_DISTANCE_MM) {
             Mission_SetSubstate(MISSION_SUB_M4_BRAKE);
         }
         break;
+
     case MISSION_SUB_M4_BRAKE:
-        Mission_SetSubstate(MISSION_SUB_M4_DONE);
+        Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS);
+        if (Mission_DynamicSpeedAtMinimum() != 0U) {
+            Mission_RequestDynamicStop();
+        }
+        if ((s_dynamic_stop_requested != 0U) &&
+            (Mission_IsVehicleStopped() != 0U)) {
+            Mission_SetSubstate(MISSION_SUB_M4_DONE);
+        }
         break;
+
     case MISSION_SUB_M4_DONE:
         Mission_Finish(Mission_ResultByScore());
         break;
@@ -778,6 +952,8 @@ static void Mission_HandleMode5(uint8_t custom)
 {
     Mission_SubState_t substate;
     int16_t target;
+    int32_t current_distance_mm;
+    int32_t relative_distance_mm;
 
     substate = (Mission_SubState_t)s_mission.substate;
     target = (custom != 0U) ?
@@ -787,7 +963,8 @@ static void Mission_HandleMode5(uint8_t custom)
     if ((substate == MISSION_SUB_M5_START) ||
         (substate == MISSION_SUB_M6_START)) {
         Mission_SetBallTarget(target, 1U);
-        if (Mission_StartLineFollow() != 0U) {
+        Mission_ResetDynamicSpeed();
+        if (LineFollow_Start() == BSP_OK) {
             Mission_SetSubstate((custom != 0U) ?
                 MISSION_SUB_M6_RUNNING_LAP :
                 MISSION_SUB_M5_RUNNING_LAP);
@@ -800,7 +977,20 @@ static void Mission_HandleMode5(uint8_t custom)
 
     if ((substate == MISSION_SUB_M5_RUNNING_LAP) ||
         (substate == MISSION_SUB_M6_RUNNING_LAP)) {
+        current_distance_mm = Mission_GetEncoderDistanceMm();
+        relative_distance_mm =
+            current_distance_mm - s_dynamic_start_distance_mm;
+        if (relative_distance_mm >=
+            MISSION_H56_DECEL_START_DISTANCE_MM) {
+            Mission_UpdateDynamicSpeed(
+                MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS);
+        } else {
+            Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MAX_SPEED_CPS);
+        }
+
         if ((s_mission.route_events & ROUTE_EVENT_LAP_COMPLETE) != 0U) {
+            Mission_CloseScore();
+            Mission_RecordBrakeStartDistance();
             Mission_SetSubstate((custom != 0U) ?
                 MISSION_SUB_M6_BRAKE :
                 MISSION_SUB_M5_BRAKE);
@@ -810,9 +1000,19 @@ static void Mission_HandleMode5(uint8_t custom)
 
     if ((substate == MISSION_SUB_M5_BRAKE) ||
         (substate == MISSION_SUB_M6_BRAKE)) {
-        Mission_SetSubstate((custom != 0U) ?
-            MISSION_SUB_M6_DONE :
-            MISSION_SUB_M5_DONE);
+        Mission_UpdateDynamicSpeed(MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS);
+        current_distance_mm = Mission_GetEncoderDistanceMm();
+        if (((current_distance_mm - s_dynamic_brake_start_distance_mm) >=
+             MISSION_H56_PASS_A_DISTANCE_MM) &&
+            (Mission_DynamicSpeedAtMinimum() != 0U)) {
+            Mission_RequestDynamicStop();
+        }
+        if ((s_dynamic_stop_requested != 0U) &&
+            (Mission_IsVehicleStopped() != 0U)) {
+            Mission_SetSubstate((custom != 0U) ?
+                MISSION_SUB_M6_DONE :
+                MISSION_SUB_M5_DONE);
+        }
         return;
     }
 
@@ -845,6 +1045,9 @@ static void Mission_HandleRunning(void)
     if (s_mission.start_ms != 0U) {
         s_mission.elapsed_ms =
             (uint32_t)(BSP_GetTickMs() - s_mission.start_ms);
+        if (s_mission.score_closed == 0U) {
+            s_mission.score_elapsed_ms = s_mission.elapsed_ms;
+        }
     }
     s_mission.route_events = RouteManager_GetEvents();
     need_route = (s_mission.mode == MISSION_MODE_3_BALL_TRANSFER) ?

@@ -69,7 +69,9 @@ typedef enum {
     MISSION_SUB_M3_WAIT_MINUS_50,
     MISSION_SUB_M3_DONE,
     MISSION_SUB_M4_START,
+    MISSION_SUB_M4_LEAVE_A,
     MISSION_SUB_M4_RUNNING_TO_B,
+    MISSION_SUB_M4_PASS_B_CONFIRM,
     MISSION_SUB_M4_BRAKE,
     MISSION_SUB_M4_DONE,
     MISSION_SUB_M5_START,
@@ -107,12 +109,17 @@ typedef struct {
 
     uint32_t start_ms;
     uint32_t elapsed_ms;
+    uint32_t score_elapsed_ms;
+    uint8_t score_closed;
     uint32_t score_limit_ms;
     uint32_t safety_timeout_ms;
     uint32_t route_events;
 
     uint16_t fault_code;
     uint8_t vehicle_feedforward_enabled;
+    int16_t dynamic_speed_cps;
+    int32_t dynamic_start_distance_mm;
+    int32_t dynamic_brake_start_distance_mm;
 } Mission_Info_t;
 
 typedef Mission_Info_t TaskFSM_Info_t;

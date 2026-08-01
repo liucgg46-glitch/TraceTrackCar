@@ -17,6 +17,11 @@ extern "C" {
 #define H2_START_LINE_MIN_SPAN                    3U
 #define H2_MIN_FINISH_TIME_MS                     10000U
 
+/* B点检测参数需结合实车直线修正量和稳定入弯量继续标定。 */
+#define H4_B_ARM_DISTANCE_MM                      1200
+#define H4_B_TURN_THRESHOLD_CPS                   500
+#define H4_B_CURVE_CONFIRM_COUNT                  4U
+
 typedef enum {
     H_OVAL_ROUTE_IDLE = 0,
     H_OVAL_ROUTE_LEAVING_A,
@@ -47,6 +52,9 @@ typedef struct {
     uint8_t finish_armed;
     uint8_t finish_candidate;
     uint8_t arrived;
+    uint8_t b_armed;
+    uint8_t passed_b;
+    uint8_t b_curve_confirm_count;
     uint8_t gray_mask;
     uint8_t black_count;
     uint8_t black_span;
@@ -57,6 +65,7 @@ typedef struct {
     uint32_t running_ms;
     uint32_t state_elapsed_ms;
     int32_t encoder_distance_mm;
+    int32_t relative_distance_mm;
     uint32_t transition_count;
 } HOvalRoute_Info_t;
 
