@@ -41,6 +41,10 @@ void LineFollow_StopPreserveRoute(void);
 BSP_Status_t LineFollow_SetSpeedProfile(int16_t base_speed_cps,
                                         int16_t cross_speed_cps,
                                         int16_t min_track_speed_cps);
+/* 通过APP适配层切换循迹PD、滤波和转向参数。 */
+BSP_Status_t LineFollow_SetControlProfile(
+    const LineTrack_ControlProfile_t *profile);
+void LineFollow_ResetControlProfile(void);
 void LineFollow_Update(void);
 LineFollow_State_t LineFollow_GetState(void);
 BSP_Status_t LineFollow_GetInfo(LineFollow_Info_t *info);

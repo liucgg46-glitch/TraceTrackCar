@@ -13,8 +13,8 @@ extern "C" {
  * 3200 count/s约为451 mm/s，弯道最低2300 count/s约为324 mm/s，
  * 按理论6142 mm赛道估算整圈约16.4 s，实际值仍需上板校准。
  */
-#define H2_RUN_SPEED_CPS                         2500
-#define H2_CURVE_SPEED_CPS                       2500
+#define H2_RUN_SPEED_CPS                         3000
+#define H2_CURVE_SPEED_CPS                       3000
 #define H2_BRAKE_TIME_MS                         1200U
 #define H2_STOP_SPEED_THRESHOLD_CPS              80
 #define H2_STOP_SETTLE_MS                        200U

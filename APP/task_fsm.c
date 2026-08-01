@@ -29,17 +29,28 @@
 /* 任务2终点接近与主动反向制动参数。 */
 #define MISSION_M2_FINISH_APPROACH_SPEED_CPS        2000
 #define MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS    1600
+#define MISSION_M2_SECOND_CURVE_ARM_DISTANCE_MM     4800
+#define MISSION_M2_SECOND_CURVE_TURN_THRESHOLD_CPS   500
+#define MISSION_M2_SECOND_CURVE_CONFIRM_COUNT          4U
 #define MISSION_M2_REVERSE_BRAKE_SPEED_CPS           900
 #define MISSION_M2_BRAKE_STOP_THRESHOLD_CPS          250
 #define MISSION_M2_REVERSE_BRAKE_MAX_TIME_MS         180U
 
-/* 任务4/5/6独立速度斜坡参数，实车调速只需修改本区域。 */
+/* 任务4/5/6独立循迹与速度斜坡参数，实车调速只需修改本区域。 */
 #define MISSION_DYNAMIC_START_SPEED_CPS               1000
-#define MISSION_DYNAMIC_MAX_SPEED_CPS                 2400
-#define MISSION_DYNAMIC_CURVE_SPEED_CPS               1900
-#define MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS           1000
-#define MISSION_DYNAMIC_ACCEL_RATE_CPS_PER_S           1000.0f
-#define MISSION_DYNAMIC_DECEL_RATE_CPS_PER_S           1200.0f
+#define MISSION_DYNAMIC_MAX_SPEED_CPS                 2000
+#define MISSION_DYNAMIC_CURVE_SPEED_CPS               2000
+#define MISSION_DYNAMIC_MIN_TRACK_SPEED_CPS           2000
+#define MISSION_DYNAMIC_ACCEL_RATE_CPS_PER_S            700.0f
+#define MISSION_DYNAMIC_DECEL_RATE_CPS_PER_S            800.0f
+#define MISSION_H456_LINE_TURN_MAX_CPS                1200
+#define MISSION_H456_LINE_KP                          0.30f
+#define MISSION_H456_LINE_KD                          0.03f
+#define MISSION_H456_LINE_ERROR_DEADBAND               100
+#define MISSION_H456_LINE_ERROR_FILTER_NUM              1U
+#define MISSION_H456_LINE_ERROR_FILTER_DEN              3U
+#define MISSION_H456_LINE_SPEED_FULL_ERROR              250
+#define MISSION_H456_LINE_SPEED_MIN_ERROR              1800
 #define MISSION_M4_PASS_B_DISTANCE_MM                  120
 #define MISSION_H56_DECEL_START_DISTANCE_MM            5200
 #define MISSION_H56_PASS_A_DISTANCE_MM                 120
@@ -53,6 +64,7 @@ static uint8_t s_m3_plus_confirm_count;
 static uint32_t s_m3_last_processed_sample_ms;
 static uint8_t s_m3_sample_tracking_valid;
 static uint8_t s_m2_finish_approach_applied;
+static uint8_t s_m2_second_curve_confirm_count;
 static uint8_t s_m2_brake_active;
 static uint32_t s_m2_brake_start_ms;
 static float s_dynamic_speed_cps;
@@ -82,8 +94,10 @@ static void Mission_StopVehicleSafely(void)
     LineFollow_StopPreserveRoute();
     Motion_Stop();
     Chassis_EmergencyStop();
-}
-
+}
+
+
+
 static int32_t Mission_Abs32(int32_t value)
 {
     return (value < 0) ? -value : value;
@@ -98,6 +112,22 @@ static int32_t Mission_GetEncoderDistanceMm(void)
 static int16_t Mission_MinSpeed(int16_t first, int16_t second)
 {
     return (first < second) ? first : second;
+}
+
+static uint8_t Mission_ApplyH456LineProfile(void)
+{
+    LineTrack_ControlProfile_t profile;
+
+    profile.turn_max_cps = MISSION_H456_LINE_TURN_MAX_CPS;
+    profile.kp = MISSION_H456_LINE_KP;
+    profile.kd = MISSION_H456_LINE_KD;
+    profile.error_deadband = MISSION_H456_LINE_ERROR_DEADBAND;
+    profile.error_filter_num = MISSION_H456_LINE_ERROR_FILTER_NUM;
+    profile.error_filter_den = MISSION_H456_LINE_ERROR_FILTER_DEN;
+    profile.speed_full_error = MISSION_H456_LINE_SPEED_FULL_ERROR;
+    profile.speed_min_error = MISSION_H456_LINE_SPEED_MIN_ERROR;
+
+    return (LineFollow_SetControlProfile(&profile) == BSP_OK) ? 1U : 0U;
 }
 
 static void Mission_ApplyDynamicSpeed(void)
@@ -202,6 +232,7 @@ static void Mission_RequestDynamicStop(void)
 static void Mission_ClearMode2BrakeState(void)
 {
     s_m2_finish_approach_applied = 0U;
+    s_m2_second_curve_confirm_count = 0U;
     s_m2_brake_active = 0U;
     s_m2_brake_start_ms = 0U;
 }
@@ -216,11 +247,29 @@ static void Mission_Mode2UpdateFinishApproach(void)
     if (HRoute_GetH2Info(&route) != PROJECT_OK) {
         return;
     }
-    if (route.finish_armed == 0U) {
+    if ((route.finish_armed == 0U) ||
+        (route.relative_distance_mm <
+         MISSION_M2_SECOND_CURVE_ARM_DISTANCE_MM)) {
+        s_m2_second_curve_confirm_count = 0U;
         return;
     }
 
-    /* Only MODE2 changes to this lower finish-approach speed. */
+    if (Mission_Abs32((int32_t)route.turn_output) <
+        MISSION_M2_SECOND_CURVE_TURN_THRESHOLD_CPS) {
+        s_m2_second_curve_confirm_count = 0U;
+        return;
+    }
+
+    if (s_m2_second_curve_confirm_count <
+        MISSION_M2_SECOND_CURVE_CONFIRM_COUNT) {
+        s_m2_second_curve_confirm_count++;
+    }
+    if (s_m2_second_curve_confirm_count <
+        MISSION_M2_SECOND_CURVE_CONFIRM_COUNT) {
+        return;
+    }
+
+    /* 仅任务2在确认进入第二个半圆后切换到较低的终点接近速度。 */
     if (LineFollow_SetSpeedProfile(
             MISSION_M2_FINISH_APPROACH_SPEED_CPS,
             MISSION_M2_FINISH_APPROACH_MIN_SPEED_CPS,
@@ -427,7 +476,8 @@ static void Mission_EnterFault(Mission_Result_t result,
 
 static void Mission_Finish(Mission_Result_t result)
 {
-    /*
+    /*
+
      * 正常完成时不统一追加急停。
      * 任务2已完成主动制动，任务3全程静止，
      * 任务4/5/6也已在各自BRAKE子状态确认停车。
@@ -574,6 +624,8 @@ static uint8_t Mission_StartLineFollow(void)
 {
     BSP_Status_t status;
 
+    /* 任务2始终恢复control_config.h中的原循迹参数。 */
+    LineFollow_ResetControlProfile();
     if (LineFollow_SetSpeedProfile(H2_RUN_SPEED_CPS,
                                    H2_CURVE_SPEED_CPS,
                                    H2_CURVE_SPEED_CPS) != BSP_OK) {
@@ -893,6 +945,11 @@ static void Mission_HandleMode4(void)
     switch ((Mission_SubState_t)s_mission.substate) {
     case MISSION_SUB_M4_START:
         Mission_SetBallTarget(MISSION_TARGET_O_MM_X10, 1U);
+        if (Mission_ApplyH456LineProfile() == 0U) {
+            Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
+                               MISSION_FAULT_INTERNAL);
+            break;
+        }
         Mission_ResetDynamicSpeed();
         if (LineFollow_Start() == BSP_OK) {
             Mission_SetSubstate(MISSION_SUB_M4_LEAVE_A);
@@ -963,6 +1020,11 @@ static void Mission_HandleMode5(uint8_t custom)
     if ((substate == MISSION_SUB_M5_START) ||
         (substate == MISSION_SUB_M6_START)) {
         Mission_SetBallTarget(target, 1U);
+        if (Mission_ApplyH456LineProfile() == 0U) {
+            Mission_EnterFault(MISSION_RESULT_ROUTE_FAULT,
+                               MISSION_FAULT_INTERNAL);
+            return;
+        }
         Mission_ResetDynamicSpeed();
         if (LineFollow_Start() == BSP_OK) {
             Mission_SetSubstate((custom != 0U) ?

@@ -289,15 +289,8 @@ static void LineTrack_LoadDefaultConfig(void)
     s_cfg.base_speed_cps = CONTROL_LINE_BASE_SPEED_CPS;
     s_cfg.cross_speed_cps = CONTROL_LINE_CROSS_SPEED_CPS;
     s_cfg.min_track_speed_cps = CONTROL_LINE_MIN_TRACK_SPEED_CPS;
-    s_cfg.turn_max_cps = CONTROL_LINE_TURN_MAX_CPS;
+    LineTrack_ResetControlProfile();
     s_cfg.search_turn_cps = CONTROL_LINE_SEARCH_TURN_CPS;
-    s_cfg.kp = CONTROL_LINE_KP;
-    s_cfg.kd = CONTROL_LINE_KD;
-    s_cfg.error_deadband = CONTROL_LINE_ERROR_DEADBAND;
-    s_cfg.error_filter_num = CONTROL_LINE_ERROR_FILTER_NUM;
-    s_cfg.error_filter_den = CONTROL_LINE_ERROR_FILTER_DEN;
-    s_cfg.speed_full_error = CONTROL_LINE_SPEED_FULL_ERROR;
-    s_cfg.speed_min_error = CONTROL_LINE_SPEED_MIN_ERROR;
     s_cfg.lost_confirm_samples = CONTROL_LINE_LOST_CONFIRM_SAMPLES;
     s_cfg.reacquire_confirm_samples =
         CONTROL_LINE_REACQUIRE_CONFIRM_SAMPLES;
@@ -309,6 +302,18 @@ static void LineTrack_LoadDefaultConfig(void)
     s_cfg.search_phase_step_ms = CONTROL_LINE_SEARCH_PHASE_STEP_MS;
     s_cfg.search_phase_max_ms = CONTROL_LINE_SEARCH_PHASE_MAX_MS;
     s_cfg.search_timeout_ms = CONTROL_LINE_SEARCH_TIMEOUT_MS;
+}
+
+void LineTrack_ResetControlProfile(void)
+{
+    s_cfg.turn_max_cps = CONTROL_LINE_TURN_MAX_CPS;
+    s_cfg.kp = CONTROL_LINE_KP;
+    s_cfg.kd = CONTROL_LINE_KD;
+    s_cfg.error_deadband = CONTROL_LINE_ERROR_DEADBAND;
+    s_cfg.error_filter_num = CONTROL_LINE_ERROR_FILTER_NUM;
+    s_cfg.error_filter_den = CONTROL_LINE_ERROR_FILTER_DEN;
+    s_cfg.speed_full_error = CONTROL_LINE_SPEED_FULL_ERROR;
+    s_cfg.speed_min_error = CONTROL_LINE_SPEED_MIN_ERROR;
 }
 
 void LineTrack_Init(void)
@@ -354,6 +359,34 @@ Project_Status_t LineTrack_SetSpeedProfile(int16_t base_speed_cps,
     return PROJECT_OK;
 }
 
+Project_Status_t LineTrack_SetControlProfile(
+    const LineTrack_ControlProfile_t *profile)
+{
+    if ((profile == 0) ||
+        (profile->turn_max_cps < 0) ||
+        (profile->turn_max_cps > CONTROL_CHASSIS_TARGET_MAX_CPS) ||
+        (profile->kp < 0.0f) ||
+        (profile->kd < 0.0f) ||
+        (profile->error_deadband < 0) ||
+        (profile->error_filter_num == 0U) ||
+        (profile->error_filter_den == 0U) ||
+        (profile->error_filter_num > profile->error_filter_den) ||
+        (profile->speed_full_error < 0) ||
+        (profile->speed_min_error <= profile->speed_full_error)) {
+        return PROJECT_PARAM;
+    }
+
+    s_cfg.turn_max_cps = profile->turn_max_cps;
+    s_cfg.kp = profile->kp;
+    s_cfg.kd = profile->kd;
+    s_cfg.error_deadband = profile->error_deadband;
+    s_cfg.error_filter_num = profile->error_filter_num;
+    s_cfg.error_filter_den = profile->error_filter_den;
+    s_cfg.speed_full_error = profile->speed_full_error;
+    s_cfg.speed_min_error = profile->speed_min_error;
+    return PROJECT_OK;
+}
+
 Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
 {
     if (info == 0) return PROJECT_PARAM;
@@ -371,6 +404,14 @@ Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info)
     info->search_direction = s_search_direction;
     info->lost_ms = (s_lost_samples == 0U) ? 0U :
                     (uint32_t)(s_now_ms - s_lost_start_ms);
+    info->control_profile.turn_max_cps = s_cfg.turn_max_cps;
+    info->control_profile.kp = s_cfg.kp;
+    info->control_profile.kd = s_cfg.kd;
+    info->control_profile.error_deadband = s_cfg.error_deadband;
+    info->control_profile.error_filter_num = s_cfg.error_filter_num;
+    info->control_profile.error_filter_den = s_cfg.error_filter_den;
+    info->control_profile.speed_full_error = s_cfg.speed_full_error;
+    info->control_profile.speed_min_error = s_cfg.speed_min_error;
 
     return PROJECT_OK;
 }

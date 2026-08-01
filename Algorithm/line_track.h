@@ -49,6 +49,17 @@ typedef struct {
 } LineTrack_Output_t;
 
 typedef struct {
+    int16_t turn_max_cps;
+    float kp;
+    float kd;
+    int16_t error_deadband;
+    uint16_t error_filter_num;
+    uint16_t error_filter_den;
+    int16_t speed_full_error;
+    int16_t speed_min_error;
+} LineTrack_ControlProfile_t;
+
+typedef struct {
     LineTrack_Mode_t mode;
     int16_t raw_error;
     int16_t filtered_error;      /* 数字量位置误差经过一阶滤波和死区后的值 */
@@ -61,17 +72,22 @@ typedef struct {
     uint16_t search_phase;       /* 当前扫描阶段，0为沿最后线路方向起扫 */
     int8_t search_direction;
     uint32_t lost_ms;
+    LineTrack_ControlProfile_t control_profile;
 } LineTrack_Info_t;
 
 void LineTrack_Init(void);
 void LineTrack_Reset(void);
 /*
  * 运行时速度方案只修改纯算法目标，不接触底盘。
- * 用于不同正式任务复用同一套循迹算法和PID参数。
+ * 不同正式任务可继续通过控制参数方案切换PD、滤波和转向约束。
  */
 Project_Status_t LineTrack_SetSpeedProfile(int16_t base_speed_cps,
                                            int16_t cross_speed_cps,
                                            int16_t min_track_speed_cps);
+/* 任务切换时设置PD、滤波、转向限幅和按误差减速区间。 */
+Project_Status_t LineTrack_SetControlProfile(
+    const LineTrack_ControlProfile_t *profile);
+void LineTrack_ResetControlProfile(void);
 Project_Status_t LineTrack_GetInfo(LineTrack_Info_t *info);
 void LineTrack_Compute(const LineDetect_Result_t *line,
                        LineTrack_Output_t *out,

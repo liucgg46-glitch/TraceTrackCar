@@ -139,6 +139,18 @@ BSP_Status_t LineFollow_SetSpeedProfile(int16_t base_speed_cps,
            BSP_OK : BSP_PARAM;
 }
 
+BSP_Status_t LineFollow_SetControlProfile(
+    const LineTrack_ControlProfile_t *profile)
+{
+    return (LineTrack_SetControlProfile(profile) == PROJECT_OK) ?
+           BSP_OK : BSP_PARAM;
+}
+
+void LineFollow_ResetControlProfile(void)
+{
+    LineTrack_ResetControlProfile();
+}
+
 void LineFollow_Update(void)
 {
     const LineDetect_Result_t *res;

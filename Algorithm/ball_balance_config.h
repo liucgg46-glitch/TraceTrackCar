@@ -38,7 +38,7 @@
  * TARGET_ACCEL_MAX控制目标速度变化快慢。
  */
 //#define BALL_BALANCE_POSITION_KP                        1.95f     /* 保留给兼容和对比调参，当前制动距离外环不使用 */
-#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  90.0f     /* 制动距离速度曲线使用的等效减速度 */
+#define BALL_BALANCE_BRAKE_ACCEL_MM_S2                  85.0f     /* 制动距离速度曲线使用的等效减速度 */
 #define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           85.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             800.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
@@ -68,7 +68,7 @@
  */
 #define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         8.0f     /* 进入到点状态允许的最大位置误差 */
 #define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          10.0f     /* 超过该位置误差后退出到点状态 */
-#define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             15.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
+#define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             10.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
 #define BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S      10.0f     /* 进入到点状态允许的最大舵机命令速度 */
 #define BALL_BALANCE_TARGET_LOCK_TIME_MS                100U     /* 满足到点条件所需的连续保持时间 */
 #define BALL_BALANCE_TARGET_CHANGE_EPSILON_MM           0.05f    /* 判定目标位置发生变化的最小差值 */
