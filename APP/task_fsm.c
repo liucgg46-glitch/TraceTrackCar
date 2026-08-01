@@ -45,7 +45,7 @@
 #define MISSION_DYNAMIC_DECEL_RATE_CPS_PER_S            800.0f
 #define MISSION_H456_LINE_TURN_MAX_CPS                1200
 #define MISSION_H456_LINE_KP                          0.30f
-#define MISSION_H456_LINE_KD                          0.03f
+#define MISSION_H456_LINE_KD                          0.04f
 #define MISSION_H456_LINE_ERROR_DEADBAND               100
 #define MISSION_H456_LINE_ERROR_FILTER_NUM              1U
 #define MISSION_H456_LINE_ERROR_FILTER_DEN              3U

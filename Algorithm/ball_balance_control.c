@@ -10,6 +10,7 @@ static float s_filtered_velocity_mm_s;
 static float s_velocity_integral_angle_deg;
 static float s_hold_servo_angle_deg;
 static float s_tracked_target_position_mm;
+static float s_last_nonzero_target_direction;
 static uint8_t s_target_tracking_valid;
 static uint8_t s_hold_active;
 static uint8_t s_lock_tracking;
@@ -221,17 +222,20 @@ static void BallBalance_Control_UpdateHold(
     }
 }
 
-static void BallBalance_Control_UpdateTargetVelocity(
+static uint8_t BallBalance_Control_UpdateTargetVelocity(
     BallBalance_ControlOutput_t *result,
-    float dt_s
+    float dt_s,
+    uint8_t target_changed
 )
 {
     float raw_target_velocity_mm_s;
+    float raw_target_direction;
     float abs_error_mm;
     float remaining_distance_mm;
     float target_speed_mm_s;
     float final_approach_speed_mm_s;
     float maximum_step_mm_s;
+    uint8_t direction_reversed = 0U;
 
     abs_error_mm = BallBalance_Control_AbsF(
         result->position_error_mm
@@ -267,6 +271,23 @@ static void BallBalance_Control_UpdateTargetVelocity(
         BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S
     );
 
+    raw_target_direction =
+        BallBalance_Control_SignF(raw_target_velocity_mm_s);
+    if (raw_target_direction != 0.0f) {
+        if ((target_changed == 0U) &&
+            (s_last_nonzero_target_direction != 0.0f) &&
+            (raw_target_direction !=
+             s_last_nonzero_target_direction)) {
+            /*
+             * 钢球越过目标后立即卸掉旧方向的速度命令，避免加速度限幅让旧命令
+             * 在过零后继续维持数个周期。舵机角仍由运动轨迹负责平滑切换。
+             */
+            s_target_velocity_mm_s = 0.0f;
+            direction_reversed = 1U;
+        }
+        s_last_nonzero_target_direction = raw_target_direction;
+    }
+
     maximum_step_mm_s =
         BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2 * dt_s;
     s_target_velocity_mm_s = BallBalance_Control_MoveToward(
@@ -275,6 +296,7 @@ static void BallBalance_Control_UpdateTargetVelocity(
         maximum_step_mm_s
     );
     result->target_velocity_mm_s = s_target_velocity_mm_s;
+    return direction_reversed;
 }
 
 static void BallBalance_Control_UpdateVelocityPi(
@@ -327,6 +349,19 @@ static void BallBalance_Control_UpdateVelocityPi(
         (BallBalance_Control_AbsF(integral_delta_angle_deg) <
          BallBalance_Control_AbsF(stiction_delta_angle_deg))) {
         integral_delta_angle_deg = stiction_delta_angle_deg;
+    }
+
+    /*
+     * 钢球已经超过目标速度时，立即卸掉同方向的驱动积分，让比例项提前制动。
+     * 只清除仍在推球的积分；已经用于反向制动的积分保持不变。
+     */
+    if ((target_direction != 0.0f) &&
+        (velocity_along_target_mm_s >=
+         (target_speed_abs_mm_s +
+          BALL_BALANCE_STICTION_VELOCITY_MARGIN_MM_S)) &&
+        (BallBalance_Control_SignF(
+             s_velocity_integral_angle_deg) == target_direction)) {
+        s_velocity_integral_angle_deg = 0.0f;
     }
 
     candidate_integral_angle_deg =
@@ -390,6 +425,7 @@ void BallBalance_Control_Reset(void)
     s_velocity_integral_angle_deg = 0.0f;
     s_hold_servo_angle_deg = BALL_BALANCE_LEVEL_ANGLE_DEG;
     s_tracked_target_position_mm = 0.0f;
+    s_last_nonzero_target_direction = 0.0f;
     s_target_tracking_valid = 0U;
     BallBalance_Control_ClearHoldTracking();
 
@@ -413,6 +449,7 @@ Project_Status_t BallBalance_Control_Update(
     float requested_angle;
     float limited_angle;
     uint8_t target_changed;
+    uint8_t direction_reversed;
 
     if ((input == 0) || (output == 0) || (input->dt_s <= 0.0f)) {
         return PROJECT_PARAM;
@@ -453,10 +490,15 @@ Project_Status_t BallBalance_Control_Update(
              s_filtered_velocity_mm_s);
         result.filtered_velocity_mm_s = s_filtered_velocity_mm_s;
 
-        BallBalance_Control_UpdateTargetVelocity(
+        direction_reversed = BallBalance_Control_UpdateTargetVelocity(
             &result,
-            input->dt_s
+            input->dt_s,
+            target_changed
         );
+        if (direction_reversed != 0U) {
+            /* 过零时清除旧方向积分，避免钢球已过目标后舵机仍继续推球。 */
+            s_velocity_integral_angle_deg = 0.0f;
+        }
         BallBalance_Control_UpdateHold(
             input,
             &result,

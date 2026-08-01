@@ -111,6 +111,40 @@ static void TestCascadeControl(void)
               fabsf(previous_integral) - 1.0f);
 
     BallBalance_Control_Reset();
+    input.target_position_mm = 0.0f;
+    input.estimated_position_mm = 50.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    for (index = 0U; index < 20U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("approach accumulates integral in original direction",
+              output.velocity_integral_angle_deg < 0.0f);
+    input.estimated_position_mm = -5.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("target crossing immediately reverses target velocity",
+              output.target_velocity_mm_s > 0.0f);
+    CheckTrue("target crossing unloads old velocity integral",
+              output.velocity_integral_angle_deg >= 0.0f);
+
+    BallBalance_Control_Reset();
+    input.target_position_mm = 50.0f;
+    input.estimated_position_mm = 0.0f;
+    input.estimated_velocity_mm_s = 0.0f;
+    for (index = 0U; index < 20U; index++) {
+        input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+        (void)BallBalance_Control_Update(&input, &output);
+    }
+    CheckTrue("low-speed approach accumulates drive integral",
+              output.velocity_integral_angle_deg > 0.0f);
+    input.estimated_velocity_mm_s = 1000.0f;
+    input.now_ms += BALL_BALANCE_CONTROL_PERIOD_MS;
+    (void)BallBalance_Control_Update(&input, &output);
+    CheckTrue("overspeed unloads drive integral before crossing",
+              output.velocity_integral_angle_deg <= 0.0f);
+
+    BallBalance_Control_Reset();
     input.equilibrium_angle_deg = 179.5f;
     input.target_position_mm = -200.0f;
     input.estimated_position_mm = 0.0f;

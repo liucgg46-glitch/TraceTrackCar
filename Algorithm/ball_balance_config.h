@@ -42,10 +42,10 @@
 #define BALL_BALANCE_TARGET_VELOCITY_MAX_MM_S           70.0f    /* 外环目标速度绝对限幅 */
 #define BALL_BALANCE_TARGET_ACCEL_MAX_MM_S2             800.0f   /* 外环目标速度最大变化率 */
 #define BALL_BALANCE_POSITION_DEADBAND_MM               3.0f     /* 位置误差不超过该值时目标速度置零 */
-#define BALL_BALANCE_FINAL_APPROACH_KP_S                 2.0f     /* 近目标区剩余距离到目标速度的线性增益 */
+#define BALL_BALANCE_FINAL_APPROACH_KP_S                 1.2f     /* 近目标区剩余距离到目标速度的线性增益 */
 #define BALL_BALANCE_VELOCITY_KP                        0.66f    /* 速度PI比例角增益 */
 #define BALL_BALANCE_VELOCITY_KI                        1.05f   /* 速度PI积分角增益 */
-#define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.050f   /* 钢球速度反馈的低通滤波时间常数 */
+#define BALL_BALANCE_VELOCITY_FILTER_TIME_S             0.035f   /* 钢球速度反馈的低通滤波时间常数 */
 
 /*
  * 静摩擦追速补偿：目标速度已经给出、但实际速度明显没跟上时，
@@ -54,7 +54,7 @@
  */
 #define BALL_BALANCE_STICTION_TARGET_MIN_SPEED_MM_S     8.0f     /* 目标速度超过该值才启用静止追速爬坡 */
 #define BALL_BALANCE_STICTION_VELOCITY_MARGIN_MM_S      3.0f     /* 实际速度距离目标速度至少差该值时继续爬坡 */
-#define BALL_BALANCE_STICTION_RAMP_DEG_S                17.0f    /* 静止追速时积分角的最小连续爬坡速度 */
+#define BALL_BALANCE_STICTION_RAMP_DEG_S                8.0f     /* 静止追速时积分角的最小连续爬坡速度 */
 
 /*
  * 舵机客观存在的全行程边界。滚球业务层最终也只使用该绝对安全范围。
@@ -67,8 +67,8 @@
 /*
  * 到点保持在满足条件后记录当前实际舵机命令角，并冻结该角度直到退出条件成立。
  */
-#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         8.0f     /* 进入到点状态允许的最大位置误差 */
-#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          10.0f     /* 超过该位置误差后退出到点状态 */
+#define BALL_BALANCE_TARGET_LOCK_ENTER_ERROR_MM         6.0f     /* 进入到点状态允许的最大位置误差 */
+#define BALL_BALANCE_TARGET_LOCK_EXIT_ERROR_MM          8.0f     /* 超过该位置误差后退出到点状态 */
 #define BALL_BALANCE_TARGET_LOCK_SPEED_MM_S             10.0f     /* 进入到点状态允许的最大钢球速度和目标速度 */
 #define BALL_BALANCE_TARGET_LOCK_SERVO_SPEED_DEG_S      10.0f     /* 进入到点状态允许的最大舵机命令速度 */
 #define BALL_BALANCE_TARGET_LOCK_TIME_MS                100U     /* 满足到点条件所需的连续保持时间 */
